@@ -1,0 +1,29 @@
+# BulkRNAPipe main Snakefile
+include: 'rules/common.smk'
+include: 'rules/qc.smk'
+include: 'rules/trim.smk'
+include: 'rules/align.smk'
+include: 'rules/quantify.smk'
+include: 'rules/deseq2.smk'
+
+# Define the pipeline working directory
+workdir: config['User']['output_dir']
+
+rule BulkRNAPipe_output:
+    input:
+        # ── Raw QC ────────────────────────────────────────────────────────────
+        "QC/raw/multiqc/multiqc_report.html" if QC_RAW else [],
+        # ── Trimming ──────────────────────────────────────────────────────────
+        expand("trim/{sample}/{sample}_R1_val_1.fq.gz", sample=SAMPLES) if TRIM and PAIRED else [],
+        expand("trim/{sample}/{sample}_trimmed.fq.gz", sample=SAMPLES) if TRIM and not PAIRED else [],
+        # ── Post-trim QC ──────────────────────────────────────────────────────
+        "QC/trimmed/multiqc/multiqc_report.html" if QC_TRIMMED else [],
+        # ── Alignment ─────────────────────────────────────────────────────────
+        expand("align/{sample}/{sample}.Aligned.sortedByCoord.out.bam.bai", sample=SAMPLES) if ALIGN else [],
+        "QC/align/multiqc/multiqc_report.html" if ALIGN else [],
+        # ── Quantification ────────────────────────────────────────────────────
+        "quantify/counts.txt" if QUANTIFY else [],
+        # ── Differential expression ───────────────────────────────────────────
+        expand("deseq2/{contrast}/results.csv", contrast=CONTRASTS) if DESEQ2 else [],
+    default_target: True
+    localrule: True

@@ -1,0 +1,14 @@
+name: deseq2
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - r-base=4.4.2
+  - bioconductor-deseq2=1.46.0
+  - bioconductor-edger=4.4.0
+  - r-ggplot2=3.5.1
+  - r-ggrepel=0.9.6
+  - r-optparse=1.7.5
+  - r-dplyr=1.1.4
+  - r-tibble=3.2.1

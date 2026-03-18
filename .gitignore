@@ -1,0 +1,30 @@
+# Python / conda build artefacts
+__pycache__/
+*.pyc
+*.pyo
+.snakemake/
+*.egg-info/
+
+# Snakemake working-directory outputs (created at run-time inside output_dir)
+logs/
+benchmark/
+align/
+trim/
+QC/
+quantify/
+deseq2/
+
+# R artefacts
+.Rhistory
+.RData
+.Rproj.user/
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
