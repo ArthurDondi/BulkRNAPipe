@@ -6,16 +6,21 @@
 # Usage:
 #   snakemake --profile profile/slurm ...
 #
-# Adjust slurm_partition, mem_mb, and runtime to match your cluster.
+# The Snakemake orchestrator itself is submitted via sbatch to mediumq in
+# run_BulkRNAPipe_slurm.sh. This profile controls the per-rule Slurm jobs.
+#
+# Default partition is tinyq (≤ 2 h). Rules that exceed 2 h override
+# slurm_partition and slurm_extra in their own resources block.
 
 executor: slurm
 
 # Default resources applied to every rule unless overridden in the rule itself
 default-resources:
-  slurm_partition: "cpu"        # Change to your cluster's partition name
-  mem_mb: 16000                 # 16 GB RAM per job
-  runtime: 240                  # Wall-clock limit in minutes (4 h)
-  cpus_per_task: 4              # Default CPUs per Slurm task
+  slurm_partition: "tinyq"          # ≤ 2 h jobs
+  slurm_extra: "--qos=tinyq"        # qos must match the partition
+  mem_mb: 16000                     # 16 GB RAM per job
+  runtime: 120                      # Wall-clock limit in minutes (2 h = tinyq max)
+  cpus_per_task: 4                  # Default CPUs per Slurm task
   tasks: 1
 
 # Allow one automatic retry on failure (useful for transient I/O errors)

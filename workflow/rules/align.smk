@@ -18,6 +18,8 @@ rule STARindex:
         mem_mb        = 64000,
         runtime       = 240,
         cpus_per_task = 16,
+        slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
+        slurm_extra   = "--qos=mediumq",
     conda:
         "../envs/star.yaml"
     log:
@@ -53,9 +55,11 @@ if PAIRED:
             extra   = config['STAR'].get('align_extra', ''),
         threads: 8
         resources:
-            mem_mb        = 32000,
-            runtime       = 180,
-            cpus_per_task = 8,
+            mem_mb          = 32000,
+            runtime         = 180,
+            cpus_per_task   = 8,
+            slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
+            slurm_extra     = "--qos=mediumq",
         conda:
             "../envs/star.yaml"
         log:
@@ -91,9 +95,11 @@ else:
             extra  = config['STAR'].get('align_extra', ''),
         threads: 8
         resources:
-            mem_mb        = 32000,
-            runtime       = 180,
-            cpus_per_task = 8,
+            mem_mb          = 32000,
+            runtime         = 180,
+            cpus_per_task   = 8,
+            slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
+            slurm_extra     = "--qos=mediumq",
         conda:
             "../envs/star.yaml"
         log:
