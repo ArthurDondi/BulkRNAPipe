@@ -10,10 +10,10 @@
 
 snakemake \
     -s workflow/Snakefile \
-    --configfile config/config.yaml \
+    --configfile config/config_epicode.yaml \
     --cores 8 \
     --use-conda \
     --conda-frontend conda \
     --resources mem_mb=64000 \
     --rerun-triggers mtime params \
-    -p
+    -p -n

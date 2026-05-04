@@ -1,0 +1,164 @@
+# BulkRNAPipe configuration file
+#
+# Copy this file and edit it for your experiment before running the pipeline.
+# Point --configfile to your copy when calling snakemake.
+
+# ─── User paths ──────────────────────────────────────────────────────────────
+User:
+  # Directory that contains your raw FASTQ files (or SRA accessions – see below)
+  input_dir: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/data/Epicode.bulkRNA
+  # All pipeline outputs will be written here
+  output_dir: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/projects/epicode/analysis/BulkRNA
+
+# ─── Reference genome ────────────────────────────────────────────────────────
+Reference:
+  # Path to the genome FASTA (used to build the STAR index)
+  genome_fasta: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/hg38.fa.gz
+  # Path to the gene annotation GTF (used for STAR index and featureCounts)
+  gtf: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38
+  # Directory where the STAR index will be stored (created automatically)
+  star_index: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/star_index
+  # Genome name for reporting purposes (e.g. hg38, mm10, GRCh38)
+  genome: hg38
+
+# ─── Pipeline modules to enable ──────────────────────────────────────────────
+Run:
+  # Run FastQC + MultiQC on raw reads
+  QC_raw: True
+  # Run adapter and quality trimming with Trim Galore
+  trim: True
+  # Run FastQC + MultiQC on trimmed reads
+  QC_trimmed: True
+  # Align reads with STAR
+  align: True
+  # Quantify reads with featureCounts (Subread)
+  quantify: True
+  # Perform differential expression analysis with DESeq2
+  deseq2: True
+
+# ─── Sequencing library ───────────────────────────────────────────────────────
+Library:
+  # True = paired-end reads, False = single-end reads
+  paired_end: True
+  # Expected read length (used to compute sjdbOverhang = read_length - 1 for STAR)
+  read_length: 150
+  # Strand specificity for featureCounts:
+  #   0 = unstranded, 1 = stranded, 2 = reversely stranded (dUTP/TruSeq)
+  strandedness: 2
+
+# ─── Samples ─────────────────────────────────────────────────────────────────
+# Each entry key is the sample name used throughout the pipeline.
+# condition: label used for grouping in DESeq2
+# R1 / R2: absolute paths to gzipped FASTQ files
+#   For single-end data, omit R2 (or leave it as an empty string "").
+#   For SRA data, leave R1/R2 blank and add an "sra" field with the SRR accession.
+samples:
+  NoATRX_Ctrl_1:
+    condition: NoATRX_Ctrl
+    R1: /path/to/20260203-SK-N-SH-p53-R1-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-R1-RNAbulk_R2_001.fastq.gz
+  NoATRX_Ctrl_2:
+    condition: NoATRX_Ctrl
+    R1: /path/to/20260203-SK-N-SH-p53-R2-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-R2-RNAbulk_R2_001.fastq.gz
+  NoATRX_Ctrl_3:
+    condition: NoATRX_Ctrl
+    R1: /path/to/20260203-SK-N-SH-p53-R3-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-R3-RNAbulk_R2_001.fastq.gz
+
+  ATRX_NoVector_1:
+    condition: ATRX_NoVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R2_001.fastq.gz
+  ATRX_NoVector_2:
+    condition: ATRX_NoVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R2_001.fastq.gz
+  ATRX_NoVector_3:
+    condition: ATRX_NoVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R2_001.fastq.gz
+
+  ATRX_FL_1:
+    condition: ATRX_FL
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R2_001.fastq.gz
+  ATRX_FL_2:
+    condition: ATRX_FL
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R2_001.fastq.gz
+  ATRX_FL_3:
+    condition: ATRX_FL
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R2_001.fastq.gz
+
+  ATRX_IFF_1:
+    condition: ATRX_IFF
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R2_001.fastq.gz
+  ATRX_IFF_2:
+    condition: ATRX_IFF
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R2_001.fastq.gz
+  ATRX_IFF_3:
+    condition: ATRX_IFF
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R2_001.fastq.gz
+
+  ATRX_EmptyVector_1:
+    condition: ATRX_EmptyVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R2_001.fastq.gz
+  ATRX_EmptyVector_2:
+    condition: ATRX_EmptyVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R2_001.fastq.gz
+  ATRX_EmptyVector_3:
+    condition: ATRX_EmptyVector
+    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R1_001.fastq.gz
+    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R2_001.fastq.gz
+    
+
+# ─── DESeq2 contrasts ────────────────────────────────────────────────────────
+# List the pairwise comparisons DESeq2 should perform.
+# Each entry: [name, numerator_condition, denominator_condition]
+DESeq2:
+DESeq2:
+  contrasts:
+    # Each contrast: [name_for_output, numerator, denominator(reference)]
+    # Compare untransfected control vs. E6 alone (ATRX_NoVector)
+    - [NoATRX_Ctrl_vs_ATRX_NoVector, ATRX_NoVector, NoATRX_Ctrl]
+    # Compare E6 alone vs. empty vector control
+    - [ATRX_NoVector_vs_ATRX_EmptyVector, ATRX_EmptyVector, ATRX_NoVector]
+    # Compare empty vector vs. ATRX full-length
+    - [ATRX_EmptyVector_vs_ATRX_FL, ATRX_FL, ATRX_EmptyVector]
+    # Compare empty vector vs. ATRX in-frame fusion
+    - [ATRX_EmptyVector_vs_ATRX_IFF, ATRX_IFF, ATRX_EmptyVector]
+    # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
+    - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
+    
+  # Adjusted p-value threshold for volcano plots and result tables
+  padj_threshold: 0.05
+  # Absolute log2 fold-change threshold for volcano plots
+  lfc_threshold: 1.0
+
+# ─── Tool parameters ─────────────────────────────────────────────────────────
+TrimGalore:
+  # Minimum read length to keep after trimming
+  min_length: 20
+  # Phred quality score threshold
+  quality: 20
+  # Extra arguments forwarded to Trim Galore (e.g. "--illumina" to force adapter)
+  extra: ""
+
+STAR:
+  # Extra arguments forwarded to STAR genome generate
+  index_extra: ""
+  # Extra arguments forwarded to STAR aligner
+  align_extra: ""
+
+featureCounts:
+  # Minimum mapping quality for a read to be counted
+  min_mq: 10
+  # Extra arguments forwarded to featureCounts
+  extra: ""
