@@ -24,26 +24,6 @@ per-rule conda environments, and a dedicated SLURM profile.
 | Quantification | featureCounts (Subread) | Gene-level counts |
 | Differential expression | DESeq2 | Volcano plot + MA plot + results table |
 
-### Why STAR + featureCounts instead of kallisto?
-
-The GPU branch of kallisto (`pachterlab/kallisto@gpu`) was considered but **not
-used** for the following reasons:
-
-1. **Experimental**: The `gpu` branch is a development branch and not a stable
-   production release.  STAR 2.7 is the community standard used by ENCODE, GTEx,
-   and nf-core/rnaseq.
-2. **Scope**: GPU-accelerated kallisto is primarily targeted at single-cell
-   datasets (via `kb-python`); standard bulk RNA-seq gains little from it.
-3. **Splice-awareness**: STAR performs full spliced alignment, which is required
-   for accurate quantification of alternatively spliced transcripts and for
-   downstream QC metrics (junction reads, mapping rate per region, etc.).
-4. **Portability**: GPU availability cannot be guaranteed on all HPC partitions.
-
-> **Note:** If ultra-fast pseudo-alignment is preferred (e.g. for rapid
-> exploration), the standard `kallisto` or `salmon` tools can be used as a
-> drop-in quantification step alongside or instead of STAR + featureCounts.
-> The current pipeline uses STAR as the gold standard.
-
 ## Repository structure
 
 ```
