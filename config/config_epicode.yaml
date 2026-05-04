@@ -49,74 +49,74 @@ Library:
 # ─── Samples ─────────────────────────────────────────────────────────────────
 # Each entry key is the sample name used throughout the pipeline.
 # condition: label used for grouping in DESeq2
-# R1 / R2: absolute paths to gzipped FASTQ files
+# R1 / R2: FASTQ file names relative to input_dir (just the filename, no path)
 #   For single-end data, omit R2 (or leave it as an empty string "").
 #   For SRA data, leave R1/R2 blank and add an "sra" field with the SRR accession.
 samples:
   NoATRX_Ctrl_1:
     condition: NoATRX_Ctrl
-    R1: /path/to/20260203-SK-N-SH-p53-R1-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-R1-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-R1-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-R1-RNAbulk_R2_001.fastq.gz
   NoATRX_Ctrl_2:
     condition: NoATRX_Ctrl
-    R1: /path/to/20260203-SK-N-SH-p53-R2-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-R2-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-R2-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-R2-RNAbulk_R2_001.fastq.gz
   NoATRX_Ctrl_3:
     condition: NoATRX_Ctrl
-    R1: /path/to/20260203-SK-N-SH-p53-R3-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-R3-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-R3-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-R3-RNAbulk_R2_001.fastq.gz
 
   ATRX_NoVector_1:
     condition: ATRX_NoVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R2_001.fastq.gz
   ATRX_NoVector_2:
     condition: ATRX_NoVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R2_001.fastq.gz
   ATRX_NoVector_3:
     condition: ATRX_NoVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R2_001.fastq.gz
 
   ATRX_FL_1:
     condition: ATRX_FL
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1011-R1-RNAbulk_R2_001.fastq.gz
   ATRX_FL_2:
     condition: ATRX_FL
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1011-R2-RNAbulk_R2_001.fastq.gz
   ATRX_FL_3:
     condition: ATRX_FL
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1011-R3-RNAbulk_R2_001.fastq.gz
 
   ATRX_IFF_1:
     condition: ATRX_IFF
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1744-R1-RNAbulk_R2_001.fastq.gz
   ATRX_IFF_2:
     condition: ATRX_IFF
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1744-R2-RNAbulk_R2_001.fastq.gz
   ATRX_IFF_3:
     condition: ATRX_IFF
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R2_001.fastq.gz
 
   ATRX_EmptyVector_1:
     condition: ATRX_EmptyVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R2_001.fastq.gz
   ATRX_EmptyVector_2:
     condition: ATRX_EmptyVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R2_001.fastq.gz
   ATRX_EmptyVector_3:
     condition: ATRX_EmptyVector
-    R1: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R1_001.fastq.gz
-    R2: /path/to/20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R2_001.fastq.gz
+    R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R1_001.fastq.gz
+    R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R2_001.fastq.gz
     
 
 # ─── DESeq2 contrasts ────────────────────────────────────────────────────────
