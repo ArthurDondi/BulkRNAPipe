@@ -59,7 +59,7 @@ BulkRNAPipe/
 
 ```bash
 # Create a conda environment with Snakemake
-conda create -n BulkRNAPipe -c conda-forge -c bioconda snakemake=8 python=3.13 -y
+conda create -n BulkRNAPipe -c conda-forge -c bioconda snakemake=8 python=3.12 -y
 conda activate BulkRNAPipe
 
 # Install the SLURM executor plugin (required for cluster runs only)
