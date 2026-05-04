@@ -49,26 +49,26 @@ Library:
 # ─── Samples ─────────────────────────────────────────────────────────────────
 # Each entry key is the sample name used throughout the pipeline.
 # condition: label used for grouping in DESeq2
-# R1 / R2: absolute paths to gzipped FASTQ files
+# R1 / R2: FASTQ file names relative to input_dir (just the filename, no path)
 #   For single-end data, omit R2 (or leave it as an empty string "").
 #   For SRA data, leave R1/R2 blank and add an "sra" field with the SRR accession.
 samples:
   ctrl_1:
     condition: control
-    R1: /path/to/ctrl_1_R1.fastq.gz
-    R2: /path/to/ctrl_1_R2.fastq.gz
+    R1: ctrl_1_R1.fastq.gz
+    R2: ctrl_1_R2.fastq.gz
   ctrl_2:
     condition: control
-    R1: /path/to/ctrl_2_R1.fastq.gz
-    R2: /path/to/ctrl_2_R2.fastq.gz
+    R1: ctrl_2_R1.fastq.gz
+    R2: ctrl_2_R2.fastq.gz
   treat_1:
     condition: treatment
-    R1: /path/to/treat_1_R1.fastq.gz
-    R2: /path/to/treat_1_R2.fastq.gz
+    R1: treat_1_R1.fastq.gz
+    R2: treat_1_R2.fastq.gz
   treat_2:
     condition: treatment
-    R1: /path/to/treat_2_R1.fastq.gz
-    R2: /path/to/treat_2_R2.fastq.gz
+    R1: treat_2_R1.fastq.gz
+    R2: treat_2_R2.fastq.gz
 
 # ─── DESeq2 contrasts ────────────────────────────────────────────────────────
 # List the pairwise comparisons DESeq2 should perform.
