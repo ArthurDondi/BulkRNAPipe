@@ -1,0 +1,2 @@
+# Place your raw FASTQ files (or symlinks) here.
+# This directory is referenced by the input_dir field in your config file.
