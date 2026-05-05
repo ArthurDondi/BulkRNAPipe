@@ -113,6 +113,41 @@ Key fields to update:
 | `Library.strandedness` | 0 = unstranded, 1 = stranded, 2 = reverse-stranded |
 | `samples` | Sample names, paths to R1/R2 FASTQs, and conditions |
 | `DESeq2.contrasts` | Pairwise comparisons to run |
+| `DESeq2.combine_conditions` | *(Optional)* Merge existing conditions into a new label for DESeq2 |
+
+#### Combining conditions for DESeq2
+
+You can pool samples from two or more existing conditions into a single new
+condition label — without averaging counts — using `DESeq2.combine_conditions`.
+This is useful when you want to use a merged control group as the reference for
+multiple contrasts.
+
+```yaml
+DESeq2:
+  combine_conditions:
+    ATRX_VectorControl:   # new combined condition name (must not clash with existing ones)
+      - ATRX_NoVector     # existing condition labels to merge
+      - ATRX_EmptyVector
+
+  contrasts:
+    # Contrast against the combined reference
+    - [ATRX_VectorControl_vs_ATRX_FL,  ATRX_FL,  ATRX_VectorControl]
+    - [ATRX_VectorControl_vs_ATRX_IFF, ATRX_IFF, ATRX_VectorControl]
+```
+
+**How it works**: Snakemake replaces each sample's original condition label with
+the combined name before passing the `sample:condition` mapping to DESeq2.
+Individual samples (replicates) are **not merged or averaged** — they remain
+separate columns in the count matrix and DESeq2 estimates dispersion from all
+replicates as usual.
+
+**Validation** (errors at pipeline startup):
+- The combined name must not collide with any existing condition label.
+- Every listed source condition must exist in at least one sample.
+- A source condition may appear in multiple combined groups, as long as those groups are not both used as numerator/denominator in the same contrast (that would make the remapping ambiguous for that contrast).
+
+Omit `combine_conditions` (or set it to `{}`) to use conditions exactly as
+defined in `samples`, which is the default behaviour.
 
 ### 2. Dry run
 

@@ -18,9 +18,14 @@ rule DESeq2:
         lfc_threshold  = config['DESeq2']['lfc_threshold'],
         # Inline the sample → condition mapping as a compact string
         # Format: "sample1:condition1,sample2:condition2,..."
-        sample_conditions = lambda _: ",".join(
-            f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
-        ),
+        # get_contrast_effective_condition() applies only the combine_conditions
+        # groups that are referenced by this specific contrast, allowing the
+        # same source condition to participate in different groups across contrasts.
+        sample_conditions = lambda wildcards: (
+            lambda ce: ",".join(
+                f"{s}:{get_contrast_effective_condition(s, ce)}" for s in SAMPLES
+            )
+        )(next(c for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast)),
     threads: 2
     resources:
         mem_mb        = 8000,
