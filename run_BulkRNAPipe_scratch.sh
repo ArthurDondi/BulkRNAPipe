@@ -27,6 +27,7 @@
 #   conda install -n base -c conda-forge mamba
 # Then change --conda-frontend below from "conda" to "mamba".
 
+# Default path is user-specific; other users should override SMK_CONDA_PREFIX.
 SMK_CONDA_PREFIX="${SMK_CONDA_PREFIX:-/scratch/research/taschnermandl/arthur_d/smk_conda}"
 CONFIGFILE="${CONFIGFILE:-config/config_epicode.yaml}"
 
