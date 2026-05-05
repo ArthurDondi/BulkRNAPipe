@@ -69,37 +69,6 @@ conda config --env --set channel_priority strict
 pip install snakemake-executor-plugin-slurm
 ```
 
-### Conda channel-priority configuration (required)
-
-BulkRNAPipe's environments require **strict channel priority** so that
-`conda-forge` packages are always preferred over `bioconda` and `defaults`.
-Without it, conda may pick an older or incompatible build – for example
-`conda-forge::perl-5.32.1-7` which fails with a missing `man/man3/App::Cpan.3`
-error during installation.
-
-Set strict priority **scoped to the BulkRNAPipe environment only** (does not
-affect other conda environments on the machine):
-
-```bash
-conda activate BulkRNAPipe
-conda config --env --set channel_priority strict
-```
-
-This writes a `.condarc` inside the active environment prefix
-(`$CONDA_PREFIX/.condarc`) and leaves your global conda configuration
-untouched.
-
-> **Tip – use mamba for faster environment resolution.**
-> [mamba](https://github.com/mamba-org/mamba) is a drop-in replacement for
-> conda with a much faster dependency solver.  Install it into your base
-> environment and pass `--conda-frontend mamba` to Snakemake (or update the
-> run scripts):
->
-> ```bash
-> conda install -n base -c conda-forge mamba
-> # then use: snakemake ... --conda-frontend mamba
-> ```
-
 ### Pre-create all pipeline conda environments
 
 You can install every pipeline environment before running any jobs.  This is
