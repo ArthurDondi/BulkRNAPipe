@@ -144,7 +144,7 @@ replicates as usual.
 **Validation** (errors at pipeline startup):
 - The combined name must not collide with any existing condition label.
 - Every listed source condition must exist in at least one sample.
-- Each source condition may appear in at most one combined group.
+- A source condition may appear in multiple combined groups, as long as those groups are not both used as numerator/denominator in the same contrast (that would make the remapping ambiguous for that contrast).
 
 Omit `combine_conditions` (or set it to `{}`) to use conditions exactly as
 defined in `samples`, which is the default behaviour.

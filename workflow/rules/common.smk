@@ -38,18 +38,9 @@ for _combined_name in _combine_conditions:
             "an existing sample condition label. Choose a different name."
         )
 
-# Validate: each source condition may appear in at most one combined group,
-# and must actually exist in the sample list.
-_seen_sources = {}
+# Validate: every source condition must actually exist in the sample list.
 for _combined_name, _source_list in _combine_conditions.items():
     for _src in _source_list:
-        if _src in _seen_sources:
-            raise ValueError(
-                f"combine_conditions: condition '{_src}' is listed in both "
-                f"'{_seen_sources[_src]}' and '{_combined_name}'. "
-                "Each source condition may only appear in one combined group."
-            )
-        _seen_sources[_src] = _combined_name
         if _src not in _existing_conditions:
             raise ValueError(
                 f"combine_conditions: source condition '{_src}' (in combined group "
@@ -57,17 +48,46 @@ for _combined_name, _source_list in _combine_conditions.items():
                 "Check your config for typos."
             )
 
-# Build reverse map: original_condition → effective_condition
-_condition_remap = {
-    src: combined
-    for combined, srcs in _combine_conditions.items()
-    for src in srcs
-}
+# Validate: for each contrast, no source condition may map to two different
+# combined groups that are both used in that contrast.  Across different
+# contrasts, the same source condition may appear in multiple groups.
+for _c in config['DESeq2']['contrasts']:
+    _cname, _num, _den = _c[0], _c[1], _c[2]
+    _contrast_src_to_group = {}
+    for _combined_name, _source_list in _combine_conditions.items():
+        if _combined_name not in (_num, _den):
+            continue
+        for _src in _source_list:
+            if _src in _contrast_src_to_group:
+                raise ValueError(
+                    f"Contrast '{_cname}': source condition '{_src}' maps to both "
+                    f"'{_contrast_src_to_group[_src]}' and '{_combined_name}', "
+                    "which are both referenced by this contrast. A source condition "
+                    "cannot appear in two combined groups used in the same contrast."
+                )
+            _contrast_src_to_group[_src] = _combined_name
 
-def get_effective_condition(sample):
-    """Return the DESeq2 condition for *sample*, remapped via combine_conditions if set."""
+def get_contrast_effective_condition(sample, contrast_entry):
+    """Return the DESeq2 condition for *sample* for a specific contrast.
+
+    Only combine_conditions groups that are referenced by the given contrast
+    (as numerator or denominator) are applied.  This allows the same source
+    condition to participate in different combined groups across separate
+    contrasts without conflict.
+
+    Parameters
+    ----------
+    sample : str
+        Sample name (key in config['samples']).
+    contrast_entry : list
+        Three-element list [name, numerator, denominator] for this contrast.
+    """
     orig = config['samples'][sample]['condition']
-    return _condition_remap.get(orig, orig)
+    num, den = contrast_entry[1], contrast_entry[2]
+    for combined_name, source_list in _combine_conditions.items():
+        if combined_name in (num, den) and orig in source_list:
+            return combined_name
+    return orig
 
 # ─── Helper functions ─────────────────────────────────────────────────────────
 
