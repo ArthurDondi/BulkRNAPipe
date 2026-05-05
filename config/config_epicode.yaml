@@ -13,11 +13,11 @@ User:
 # ─── Reference genome ────────────────────────────────────────────────────────
 Reference:
   # Path to the genome FASTA (used to build the STAR index)
-  genome_fasta: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/hg38.fa.gz
+  genome_fasta: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/hg38_plus_vectors.fa
   # Path to the gene annotation GTF (used for STAR index and featureCounts)
-  gtf: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38
+  gtf: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/hg38_plus_vectors.gtf
   # Directory where the STAR index will be stored (created automatically)
-  star_index: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/star_index
+  star_index: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/star_index
   # Genome name for reporting purposes (e.g. hg38, mm10, GRCh38)
   genome: hg38
 
@@ -122,7 +122,6 @@ samples:
 # ─── DESeq2 contrasts ────────────────────────────────────────────────────────
 # List the pairwise comparisons DESeq2 should perform.
 # Each entry: [name, numerator_condition, denominator_condition]
-DESeq2:
 DESeq2:
   contrasts:
     # Each contrast: [name_for_output, numerator, denominator(reference)]
