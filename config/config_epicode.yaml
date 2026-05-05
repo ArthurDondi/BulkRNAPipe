@@ -149,6 +149,8 @@ DESeq2:
   #   - Every source condition must exist in at least one sample.
   #   - A source condition may appear in multiple combined groups, as long as
   #     those groups are not both used in the same contrast.
+  #   - A raw condition used on one side of a contrast must not also be a source
+  #     member of the combined group on the other side.
   combine_conditions:
     ATRX_VectorControl:
       - ATRX_NoVector

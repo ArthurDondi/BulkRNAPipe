@@ -48,11 +48,17 @@ for _combined_name, _source_list in _combine_conditions.items():
                 "Check your config for typos."
             )
 
-# Validate: for each contrast, no source condition may map to two different
-# combined groups that are both used in that contrast.  Across different
-# contrasts, the same source condition may appear in multiple groups.
+# Validate: for each contrast, check two kinds of conflicts:
+#   (a) A source condition belongs to two combined groups that are both used in
+#       this contrast (ambiguous remapping between groups).
+#   (b) One side of the contrast is a raw condition that is also a source member
+#       of the combined group on the other side (e.g. numerator=condA,
+#       denominator=groupB where condA ∈ groupB).  Those samples would be
+#       simultaneously assigned to both sides of the contrast.
+# Across different contrasts the same source condition may appear freely.
 for _c in config['DESeq2']['contrasts']:
     _cname, _num, _den = _c[0], _c[1], _c[2]
+    # (a) conflict between two combined groups
     _contrast_src_to_group = {}
     for _combined_name, _source_list in _combine_conditions.items():
         if _combined_name not in (_num, _den):
@@ -66,6 +72,22 @@ for _c in config['DESeq2']['contrasts']:
                     "cannot appear in two combined groups used in the same contrast."
                 )
             _contrast_src_to_group[_src] = _combined_name
+    # (b) raw condition on one side absorbed by combined group on the other side
+    for _combined_name, _source_list in _combine_conditions.items():
+        # combined group is the denominator; raw condition is the numerator
+        if _combined_name == _den and _num in _source_list:
+            raise ValueError(
+                f"Contrast '{_cname}': numerator '{_num}' is a raw condition that "
+                f"is also a source member of the denominator group '{_den}'. "
+                "Samples with that condition would be counted on both sides."
+            )
+        # combined group is the numerator; raw condition is the denominator
+        if _combined_name == _num and _den in _source_list:
+            raise ValueError(
+                f"Contrast '{_cname}': denominator '{_den}' is a raw condition that "
+                f"is also a source member of the numerator group '{_num}'. "
+                "Samples with that condition would be counted on both sides."
+            )
 
 def get_contrast_effective_condition(sample, contrast_entry):
     """Return the DESeq2 condition for *sample* for a specific contrast.

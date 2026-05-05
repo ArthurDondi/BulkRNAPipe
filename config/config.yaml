@@ -99,7 +99,10 @@ DESeq2:
   #   - Every source condition must exist in at least one sample.
   #   - A source condition may appear in multiple combined groups, as long as
   #     those groups are not both used as numerator/denominator in the same
-  #     contrast (that would make the remapping ambiguous).
+  #     contrast (ambiguous remapping).
+  #   - A raw condition used as one side of a contrast must not also be a source
+  #     member of the combined group on the other side (samples would fall on
+  #     both sides simultaneously).
   #
   # Omit (or leave as {}) to run the pipeline without any condition merging.
   combine_conditions: {}
