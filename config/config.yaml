@@ -76,6 +76,37 @@ samples:
 DESeq2:
   contrasts:
     - [treatment_vs_control, treatment, control]
+
+  # ─── Combined / derived conditions (optional) ──────────────────────────────
+  # Merge two or more existing condition labels into one new label for DESeq2
+  # grouping.  Samples are NOT averaged; they remain separate replicates —
+  # only their condition label is changed before DESeq2 sees the data.
+  #
+  # Example: pool a "no-vector" and an "empty-vector" control group together
+  # and run contrasts against the combined reference:
+  #
+  #   combine_conditions:
+  #     vector_control:          # new combined condition name
+  #       - no_vector            # existing condition label
+  #       - empty_vector         # existing condition label
+  #
+  # Then add contrasts that reference the combined name as numerator or
+  # denominator, e.g.:
+  #   - [treatment_vs_vector_control, treatment, vector_control]
+  #
+  # Rules enforced at startup:
+  #   - The combined name must not collide with any existing condition label.
+  #   - Every source condition must exist in at least one sample.
+  #   - A source condition may appear in multiple combined groups, as long as
+  #     those groups are not both used as numerator/denominator in the same
+  #     contrast (ambiguous remapping).
+  #   - A raw condition used as one side of a contrast must not also be a source
+  #     member of the combined group on the other side (samples would fall on
+  #     both sides simultaneously).
+  #
+  # Omit (or leave as {}) to run the pipeline without any condition merging.
+  combine_conditions: {}
+
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots

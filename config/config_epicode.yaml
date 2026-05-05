@@ -135,7 +135,27 @@ DESeq2:
     - [ATRX_EmptyVector_vs_ATRX_IFF, ATRX_IFF, ATRX_EmptyVector]
     # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
     - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
-    
+    # Combined vector-control contrasts (ATRX_VectorControl = NoVector + EmptyVector merged)
+    - [ATRX_VectorControl_vs_ATRX_FL, ATRX_FL, ATRX_VectorControl]
+    - [ATRX_VectorControl_vs_ATRX_IFF, ATRX_IFF, ATRX_VectorControl]
+
+  # ─── Combined / derived conditions ─────────────────────────────────────────
+  # Optional: merge two or more existing condition labels into one new label
+  # for DESeq2 grouping.  Samples are NOT averaged; they remain separate
+  # replicates — only their condition label is changed.
+  #
+  # Rules:
+  #   - The combined name must not collide with any existing condition label.
+  #   - Every source condition must exist in at least one sample.
+  #   - A source condition may appear in multiple combined groups, as long as
+  #     those groups are not both used in the same contrast.
+  #   - A raw condition used on one side of a contrast must not also be a source
+  #     member of the combined group on the other side.
+  combine_conditions:
+    ATRX_VectorControl:
+      - ATRX_NoVector
+      - ATRX_EmptyVector
+
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
