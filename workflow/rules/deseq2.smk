@@ -18,8 +18,9 @@ rule DESeq2:
         lfc_threshold  = config['DESeq2']['lfc_threshold'],
         # Inline the sample → condition mapping as a compact string
         # Format: "sample1:condition1,sample2:condition2,..."
+        # get_effective_condition() applies combine_conditions remapping if configured.
         sample_conditions = lambda _: ",".join(
-            f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
+            f"{s}:{get_effective_condition(s)}" for s in SAMPLES
         ),
     threads: 2
     resources:

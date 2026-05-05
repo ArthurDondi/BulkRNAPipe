@@ -23,6 +23,52 @@ STAR_INDEX = config['Reference']['star_index']
 SAMPLES   = list(config['samples'].keys())
 CONTRASTS = [c[0] for c in config['DESeq2']['contrasts']]
 
+# ─── Combined / derived conditions ───────────────────────────────────────────
+# Read the optional combine_conditions mapping from config.
+_combine_conditions = config['DESeq2'].get('combine_conditions') or {}
+
+# Collect all condition labels present in the sample list.
+_existing_conditions = {config['samples'][s]['condition'] for s in SAMPLES}
+
+# Validate: combined name must not collide with any existing condition label.
+for _combined_name in _combine_conditions:
+    if _combined_name in _existing_conditions:
+        raise ValueError(
+            f"combine_conditions: combined name '{_combined_name}' collides with "
+            "an existing sample condition label. Choose a different name."
+        )
+
+# Validate: each source condition may appear in at most one combined group,
+# and must actually exist in the sample list.
+_seen_sources = {}
+for _combined_name, _source_list in _combine_conditions.items():
+    for _src in _source_list:
+        if _src in _seen_sources:
+            raise ValueError(
+                f"combine_conditions: condition '{_src}' is listed in both "
+                f"'{_seen_sources[_src]}' and '{_combined_name}'. "
+                "Each source condition may only appear in one combined group."
+            )
+        _seen_sources[_src] = _combined_name
+        if _src not in _existing_conditions:
+            raise ValueError(
+                f"combine_conditions: source condition '{_src}' (in combined group "
+                f"'{_combined_name}') does not match any sample's condition. "
+                "Check your config for typos."
+            )
+
+# Build reverse map: original_condition → effective_condition
+_condition_remap = {
+    src: combined
+    for combined, srcs in _combine_conditions.items()
+    for src in srcs
+}
+
+def get_effective_condition(sample):
+    """Return the DESeq2 condition for *sample*, remapped via combine_conditions if set."""
+    orig = config['samples'][sample]['condition']
+    return _condition_remap.get(orig, orig)
+
 # ─── Helper functions ─────────────────────────────────────────────────────────
 
 def get_raw_fastq_r1(wildcards):
