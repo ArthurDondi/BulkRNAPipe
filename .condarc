@@ -1,0 +1,21 @@
+# BulkRNAPipe recommended conda configuration
+#
+# Copy this file to your home directory or activate it for this project:
+#
+#   cp .condarc ~/.condarc          # global (applies to all environments)
+#   conda config --env --set channel_priority strict   # per-env alternative
+#
+# Strict channel priority ensures packages are resolved from the highest-
+# priority channel that provides them (conda-forge > bioconda).  Without
+# this, conda can mix packages from incompatible channels, leading to
+# broken environments and installation errors such as:
+#
+#   [Errno 2] No such file or directory: '.../man/man3/App::Cpan.3'
+#   (conda-forge::perl-5.32.1-7 failing to create its man-page directory)
+
+channel_priority: strict
+
+channels:
+  - conda-forge
+  - bioconda
+  - nodefaults

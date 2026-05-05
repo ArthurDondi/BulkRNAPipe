@@ -66,6 +66,57 @@ conda activate BulkRNAPipe
 pip install snakemake-executor-plugin-slurm
 ```
 
+### Conda channel-priority configuration (required)
+
+BulkRNAPipe's environments require **strict channel priority** so that
+`conda-forge` packages are always preferred over `bioconda` and `defaults`.
+Without it, conda may pick an older or incompatible build – for example
+`conda-forge::perl-5.32.1-7` which fails with a missing `man/man3/App::Cpan.3`
+error during installation.
+
+Configure strict priority globally (once per machine) by running:
+
+```bash
+conda config --set channel_priority strict
+```
+
+Alternatively, copy the provided `.condarc` file to your home directory:
+
+```bash
+cp .condarc ~/.condarc
+```
+
+> **Tip – use mamba for faster environment resolution.**
+> [mamba](https://github.com/mamba-org/mamba) is a drop-in replacement for
+> conda with a much faster dependency solver.  Install it into your base
+> environment and pass `--conda-frontend mamba` to Snakemake (or update the
+> run scripts):
+>
+> ```bash
+> conda install -n base -c conda-forge mamba
+> # then use: snakemake ... --conda-frontend mamba
+> ```
+
+### Pre-create all pipeline conda environments
+
+You can install every pipeline environment before running any jobs.  This is
+useful to catch environment-creation errors early without needing real input
+files:
+
+```bash
+snakemake \
+    -s workflow/Snakefile \
+    --configfile config/config.yaml \
+    --use-conda \
+    --conda-frontend conda \
+    --conda-create-envs-only \
+    --cores 1
+```
+
+A minimal `config/config.yaml` that satisfies parse-time config access is
+sufficient – input files are not required for environment creation.
+
+
 ## Quick start
 
 ### 1. Configure your experiment
