@@ -18,10 +18,11 @@
 snakemake \
     -s workflow/Snakefile \
     --configfile config/config_epicode.yaml \
-    --cores 8 \
+    --cores 1 \
     --use-conda \
     --conda-frontend conda \
+    --conda-prefix /scratch/research/taschnermandl/arthur_d/smk_conda \
     --resources mem_mb=64000 \
     --rerun-triggers mtime params \
-    -p -n \
+    -p --conda-create-envs-only \
     "$@"
