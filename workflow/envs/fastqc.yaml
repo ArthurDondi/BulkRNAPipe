@@ -7,4 +7,4 @@ dependencies:
   - fastqc=0.12.1
   - multiqc=1.25.2
   - python=3.12
-  - perl>=5.34.0   # pin away from conda-forge perl-5.32.1-7 which fails on man/man3 creation
+  - perl>=5.26      # pin away from conda-forge perl-5.32.1-7 which fails on man/man3 creation
