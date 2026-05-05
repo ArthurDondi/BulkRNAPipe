@@ -14,7 +14,7 @@ rule BulkRNAPipe_output:
         # ── Raw QC ────────────────────────────────────────────────────────────
         "QC/raw/multiqc/multiqc_report.html" if QC_RAW else [],
         # ── Trimming ──────────────────────────────────────────────────────────
-        expand("trim/{sample}/{sample}_R1_val_1.fq.gz", sample=SAMPLES) if TRIM and PAIRED else [],
+        expand("trim/{sample}/{sample}_val_1.fq.gz", sample=SAMPLES) if TRIM and PAIRED else [],
         expand("trim/{sample}/{sample}_trimmed.fq.gz", sample=SAMPLES) if TRIM and not PAIRED else [],
         # ── Post-trim QC ──────────────────────────────────────────────────────
         "QC/trimmed/multiqc/multiqc_report.html" if QC_TRIMMED else [],
