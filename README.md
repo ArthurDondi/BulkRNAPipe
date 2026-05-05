@@ -62,9 +62,32 @@ BulkRNAPipe/
 conda create -n BulkRNAPipe -c conda-forge -c bioconda snakemake=8 python=3.12 -y
 conda activate BulkRNAPipe
 
+# Scope strict channel priority to this environment only (required)
+conda config --env --set channel_priority strict
+
 # Install the SLURM executor plugin (required for cluster runs only)
 pip install snakemake-executor-plugin-slurm
 ```
+
+### Pre-create all pipeline conda environments
+
+You can install every pipeline environment before running any jobs.  This is
+useful to catch environment-creation errors early without needing real input
+files:
+
+```bash
+snakemake \
+    -s workflow/Snakefile \
+    --configfile config/config.yaml \
+    --use-conda \
+    --conda-frontend conda \
+    --conda-create-envs-only \
+    --cores 1
+```
+
+A minimal `config/config.yaml` that satisfies parse-time config access is
+sufficient – input files are not required for environment creation.
+
 
 ## Quick start
 

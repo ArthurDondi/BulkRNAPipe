@@ -2,10 +2,11 @@ name: trimgalore
 channels:
   - conda-forge
   - bioconda
-  - defaults
+  - nodefaults
 dependencies:
   - trim-galore=0.6.10
   - cutadapt=4.9
   - fastqc=0.12.1
   - pigz=2.8
   - python=3.12
+  - perl>=5.34.0   # pin away from conda-forge perl-5.32.1-7 which fails on man/man3 creation
