@@ -8,7 +8,7 @@ User:
   # Directory that contains your raw FASTQ files (or SRA accessions – see below)
   input_dir: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/data/Epicode.bulkRNA
   # All pipeline outputs will be written here
-  output_dir: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/projects/epicode/analysis/BulkRNA
+  output_dir: /scratch/research/taschnermandl/arthur_d/epicode/BulkRNA
 
 # ─── Reference genome ────────────────────────────────────────────────────────
 Reference:
