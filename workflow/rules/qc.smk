@@ -99,13 +99,13 @@ rule MultiQC_raw:
 if PAIRED:
     rule FastQC_trimmed:
         input:
-            r1 = "trim/{sample}/{sample}_R1_val_1.fq.gz",
-            r2 = "trim/{sample}/{sample}_R2_val_2.fq.gz",
+            r1 = "trim/{sample}/{sample}_val_1.fq.gz",
+            r2 = "trim/{sample}/{sample}_val_2.fq.gz",
         output:
-            html_r1 = "QC/trimmed/fastqc/{sample}/{sample}_R1_val_1_fastqc.html",
-            html_r2 = "QC/trimmed/fastqc/{sample}/{sample}_R2_val_2_fastqc.html",
-            zip_r1  = "QC/trimmed/fastqc/{sample}/{sample}_R1_val_1_fastqc.zip",
-            zip_r2  = "QC/trimmed/fastqc/{sample}/{sample}_R2_val_2_fastqc.zip",
+            html_r1 = "QC/trimmed/fastqc/{sample}/{sample}_val_1_fastqc.html",
+            html_r2 = "QC/trimmed/fastqc/{sample}/{sample}_val_2_fastqc.html",
+            zip_r1  = "QC/trimmed/fastqc/{sample}/{sample}_val_1_fastqc.zip",
+            zip_r2  = "QC/trimmed/fastqc/{sample}/{sample}_val_2_fastqc.zip",
         params:
             outdir = "QC/trimmed/fastqc/{sample}",
         threads: 2
@@ -156,9 +156,9 @@ else:
 
 rule MultiQC_trimmed:
     input:
-        expand("QC/trimmed/fastqc/{sample}/{sample}_R1_val_1_fastqc.zip", sample=SAMPLES) if PAIRED else
+        expand("QC/trimmed/fastqc/{sample}/{sample}_val_1_fastqc.zip", sample=SAMPLES) if PAIRED else
         expand("QC/trimmed/fastqc/{sample}/{sample}_trimmed_fastqc.zip", sample=SAMPLES),
-        expand("trim/{sample}/{sample}_R1_val_1.fq.gz", sample=SAMPLES) if PAIRED else
+        expand("trim/{sample}/{sample}_val_1.fq.gz", sample=SAMPLES) if PAIRED else
         expand("trim/{sample}/{sample}_trimmed.fq.gz", sample=SAMPLES),
     output:
         report = "QC/trimmed/multiqc/multiqc_report.html",

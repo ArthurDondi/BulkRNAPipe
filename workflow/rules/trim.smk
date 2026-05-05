@@ -6,8 +6,8 @@ if PAIRED:
             r1 = get_raw_fastq_r1,
             r2 = get_raw_fastq_r2,
         output:
-            r1 = "trim/{sample}/{sample}_R1_val_1.fq.gz",
-            r2 = "trim/{sample}/{sample}_R2_val_2.fq.gz",
+            r1 = "trim/{sample}/{sample}_val_1.fq.gz",
+            r2 = "trim/{sample}/{sample}_val_2.fq.gz",
         params:
             outdir     = "trim/{sample}",
             min_length = config['TrimGalore']['min_length'],
