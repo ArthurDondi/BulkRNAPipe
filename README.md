@@ -62,6 +62,9 @@ BulkRNAPipe/
 conda create -n BulkRNAPipe -c conda-forge -c bioconda snakemake=8 python=3.12 -y
 conda activate BulkRNAPipe
 
+# Scope strict channel priority to this environment only (required)
+conda config --env --set channel_priority strict
+
 # Install the SLURM executor plugin (required for cluster runs only)
 pip install snakemake-executor-plugin-slurm
 ```
@@ -74,17 +77,17 @@ Without it, conda may pick an older or incompatible build – for example
 `conda-forge::perl-5.32.1-7` which fails with a missing `man/man3/App::Cpan.3`
 error during installation.
 
-Configure strict priority globally (once per machine) by running:
+Set strict priority **scoped to the BulkRNAPipe environment only** (does not
+affect other conda environments on the machine):
 
 ```bash
-conda config --set channel_priority strict
+conda activate BulkRNAPipe
+conda config --env --set channel_priority strict
 ```
 
-Alternatively, copy the provided `.condarc` file to your home directory:
-
-```bash
-cp .condarc ~/.condarc
-```
+This writes a `.condarc` inside the active environment prefix
+(`$CONDA_PREFIX/.condarc`) and leaves your global conda configuration
+untouched.
 
 > **Tip – use mamba for faster environment resolution.**
 > [mamba](https://github.com/mamba-org/mamba) is a drop-in replacement for
