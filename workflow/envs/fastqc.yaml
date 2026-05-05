@@ -7,4 +7,9 @@ dependencies:
   - fastqc=0.12.1
   - multiqc=1.25.2
   - python=3.12
-  - perl>=5.26      # pin away from conda-forge perl-5.32.1-7 which fails on man/man3 creation
+  # Pin perl to bioconda's build (pl5321* prefix).  conda-forge builds of perl
+  # (e.g. perl-5.32.1-7_hd590300_perl5) install man-page files whose names
+  # contain colons (App::Cpan.3), which fails on NFS/CIFS/isilon filesystems
+  # that disallow ':' in filenames.  Bioconda's perl build does not ship these
+  # man pages and installs cleanly on all tested filesystems.
+  - perl=5.32.1=pl5321*

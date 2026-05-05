@@ -188,3 +188,73 @@ output_dir/
 ├── logs/                                     # Per-rule log files
 └── benchmark/                                # Per-rule benchmark files
 ```
+
+## Troubleshooting
+
+### Conda environment creation fails: `No such file or directory: .../man/man3/App::Cpan.3`
+
+**Symptom:**
+
+```
+CreateCondaEnvironmentException:
+...
+ERROR conda.core.link:_execute(1033): An error occurred while installing package
+'conda-forge::perl-5.32.1-7_hd590300_perl5'.
+[Errno 2] No such file or directory: '.../.snakemake/conda/.../man/man3/App::Cpan.3'
+```
+
+**Root cause:**  
+`conda-forge`'s `perl-5.32.1` build ships man-page files whose names contain
+colons (`App::Cpan.3`, `Module::Build.3`, etc.).  Filesystems that disallow
+`:` in file names — including **Isilon/OneFS**, **CIFS/SMB mounts**, and some
+**NFS** configurations — return `ENOENT` when conda tries to create those
+files, causing the entire environment installation to roll back.
+
+> **Note:** This is a known package bug in specific conda-forge perl builds.
+> `workflow/envs/fastqc.yaml` pins `perl=5.32.1=pl5321*` (bioconda build) which
+> does **not** install man pages and works on all tested filesystems.
+
+**Fix A — move the conda env cache to a local filesystem (recommended for NFS):**
+
+```bash
+export CONDA_ENVS_PREFIX=/tmp/snakemake_conda   # any path on a local disk
+# or use $TMPDIR if it points to local scratch on your HPC:
+# export CONDA_ENVS_PREFIX=$TMPDIR/snakemake_conda
+
+bash run_BulkRNAPipe.sh --conda-create-envs-only
+```
+
+Both `run_BulkRNAPipe.sh` and `run_BulkRNAPipe_slurm.sh` honour the
+`CONDA_ENVS_PREFIX` environment variable and pass it as `--conda-prefix` to
+Snakemake.  Set it in your `.bashrc` / `.bash_profile` to make the change
+permanent.
+
+**Fix B — delete the broken partial environment and retry:**
+
+```bash
+# Remove the broken .snakemake/conda directory from inside your project folder
+rm -rf .snakemake/conda
+bash run_BulkRNAPipe.sh --conda-create-envs-only
+```
+
+**Fix C — enable strict channel priority (conda-forge recommendation):**
+
+```bash
+conda config --env --set channel_priority strict
+```
+
+With strict priority the solver picks one consistent set of builds per
+channel, reducing the chance of picking a problematic conda-forge perl build.
+
+---
+
+### "Your conda installation is not configured to use strict channel priorities"
+
+Run once per environment:
+
+```bash
+conda config --env --set channel_priority strict
+```
+
+This warning is printed by Snakemake but does not abort the run.  It is a
+best-practice recommendation from the conda-forge team.
