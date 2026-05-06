@@ -25,5 +25,7 @@ rule BulkRNAPipe_output:
         "quantify/counts.txt" if QUANTIFY else [],
         # ── Differential expression ───────────────────────────────────────────
         expand("deseq2/{contrast}/results.csv", contrast=CONTRASTS) if DESEQ2 else [],
+        # ── PCA ───────────────────────────────────────────────────────────────
+        "deseq2/pca.pdf" if DESEQ2 else [],
     default_target: True
     localrule: True
