@@ -35,6 +35,10 @@ Run:
   quantify: True
   # Perform differential expression analysis with DESeq2
   deseq2: True
+  # Run GSEA (fgsea) enrichment analysis per contrast
+  gsea: False
+  # Run GO enrichment analysis (clusterProfiler) per contrast
+  go: False
 
 # ─── Sequencing library ───────────────────────────────────────────────────────
 Library:
@@ -111,6 +115,68 @@ DESeq2:
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
+
+# ─── GSEA parameters ─────────────────────────────────────────────────────────
+# Requires Run.gsea: True
+GSEA:
+  # MSigDB collections to fetch via msigdbr.
+  # Each entry can be:
+  #   - "H"              (Hallmark)
+  #   - "C2:CP:REACTOME" (Reactome curated pathways)
+  #   - "C5:GO:BP"       (GO Biological Process)
+  # Format: "CATEGORY" or "CATEGORY:SUBCATEGORY"
+  collections:
+    - H
+    - C2:CP:REACTOME
+    - C5:GO:BP
+  # Minimum gene set size (genes in the ranked list)
+  min_size: 15
+  # Maximum gene set size
+  max_size: 500
+  # nPermSimple: passed to fgseaMultilevel as the number of permutations used for
+  # the simple (Monte-Carlo) estimate that seeds the multilevel algorithm.
+  # Higher values improve precision at the cost of speed.
+  nperm: 1000
+  # Ranking metric: "stat" (DESeq2 Wald stat, recommended) or "log2FoldChange"
+  rank_metric: stat
+  # Optional additional GMT files to merge with msigdbr gene sets.
+  # Paths can be absolute or relative to the pipeline working directory.
+  # The auto-generated HOX GMT is always included automatically.
+  # Leave empty ([]) to use only msigdbr + HOX sets.
+  custom_gmt_files: []
+
+# ─── GO enrichment parameters ────────────────────────────────────────────────
+# Requires Run.go: True
+GO:
+  # Ontologies to test. Any combination of BP, MF, CC.
+  ontology:
+    - BP
+  # Adjusted p-value cutoff for GO results table and plots
+  padj_cutoff: 0.05
+  # Minimum gene set size for GO terms
+  min_gs_size: 10
+  # Maximum gene set size for GO terms
+  max_gs_size: 500
+  # Gene ID type in your results table (SYMBOL is the default for this pipeline)
+  gene_id_type: SYMBOL
+
+# ─── Contrast comparisons (GSEA ΔNES + residual rank) ───────────────────────
+# Requires Run.gsea: True
+# Define pairs of DESeq2 contrasts to compare.
+# Each entry:
+#   name:        label for output directory (gsea_compare/{name}/)
+#   contrast_A:  name of the first contrast (numerator of comparison)
+#   contrast_B:  name of the second contrast (denominator / baseline)
+#   delta_nes:   True to compute ΔNES (NES_A - NES_B) per pathway
+#   residual_rank: True to run fgsea on rank_A - rank_B residuals
+ContrastComparisons: []
+# Example:
+#   ContrastComparisons:
+#     - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
+#       contrast_A: ATRX_IFF_vs_ATRX_FL
+#       contrast_B: ATRX_Ctrl_vs_ATRX_IFF
+#       delta_nes: True
+#       residual_rank: True
 
 # ─── Tool parameters ─────────────────────────────────────────────────────────
 TrimGalore:

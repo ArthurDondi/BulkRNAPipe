@@ -7,6 +7,8 @@ QC_TRIMMED = config['Run']['QC_trimmed']
 ALIGN      = config['Run']['align']
 QUANTIFY   = config['Run']['quantify']
 DESEQ2     = config['Run']['deseq2']
+GSEA       = config['Run'].get('gsea', False)
+GOENRICH   = config['Run'].get('go', False)
 
 # ─── Library properties ───────────────────────────────────────────────────────
 PAIRED      = config['Library']['paired_end']
@@ -148,3 +150,29 @@ def get_star_input(wildcards):
 def get_bam_files(_):
     """Return all sorted BAM files for featureCounts."""
     return expand("align/{sample}/{sample}.Aligned.sortedByCoord.out.bam", sample=SAMPLES)
+
+# ─── GSEA / GO derived variables ─────────────────────────────────────────────
+
+# Flatten collection identifiers to safe filesystem names, e.g.
+# "C2:CP:REACTOME" → "C2_CP_REACTOME"
+def _collection_to_slug(col):
+    return col.replace(":", "_")
+
+GSEA_COLLECTIONS = [
+    _collection_to_slug(c)
+    for c in config.get('GSEA', {}).get('collections', [])
+] if GSEA else []
+
+# Contrast comparison pairs
+_contrast_comparisons = config.get('ContrastComparisons') or []
+CONTRAST_COMPARISONS  = [cc['name'] for cc in _contrast_comparisons]
+
+def get_comparison_cfg(name):
+    """Return the ContrastComparisons config block for *name*."""
+    for cc in _contrast_comparisons:
+        if cc['name'] == name:
+            return cc
+    raise ValueError(f"No ContrastComparisons entry named '{name}'")
+
+# GO ontologies (BP / MF / CC)
+GO_ONTOLOGIES = config.get('GO', {}).get('ontology', ['BP']) if GOENRICH else []

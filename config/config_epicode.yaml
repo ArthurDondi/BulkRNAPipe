@@ -35,6 +35,10 @@ Run:
   quantify: True
   # Perform differential expression analysis with DESeq2
   deseq2: True
+  # Run GSEA (fgsea) enrichment analysis per contrast
+  gsea: True
+  # Run GO enrichment analysis (clusterProfiler) per contrast
+  go: True
 
 # ─── Sequencing library ───────────────────────────────────────────────────────
 Library:
@@ -160,6 +164,36 @@ DESeq2:
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
+
+# ─── GSEA parameters ─────────────────────────────────────────────────────────
+GSEA:
+  collections:
+    - H
+    - C2:CP:REACTOME
+    - C5:GO:BP
+  min_size: 15
+  max_size: 500
+  nperm: 1000
+  rank_metric: stat
+  custom_gmt_files: []
+
+# ─── GO enrichment parameters ────────────────────────────────────────────────
+GO:
+  ontology:
+    - BP
+  padj_cutoff: 0.05
+  min_gs_size: 10
+  max_gs_size: 500
+  gene_id_type: SYMBOL
+
+# ─── Contrast comparisons ────────────────────────────────────────────────────
+# "Normalise" IFF-vs-FL by subtracting the IFF-vs-Ctrl baseline.
+ContrastComparisons:
+  - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
+    contrast_A: ATRX_IFF_vs_ATRX_FL
+    contrast_B: ATRX_Ctrl_vs_ATRX_IFF
+    delta_nes: True
+    residual_rank: True
 
 # ─── Tool parameters ─────────────────────────────────────────────────────────
 TrimGalore:
