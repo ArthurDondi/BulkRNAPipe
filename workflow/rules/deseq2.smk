@@ -1,5 +1,41 @@
 ### Rules for differential expression analysis with DESeq2
 
+rule PCA:
+    """PCA plot (PC1 vs PC2, % variance explained) across all samples."""
+    input:
+        counts = "quantify/counts.txt",
+    output:
+        pca_plot = "deseq2/pca.pdf",
+    params:
+        script  = f"{workflow.basedir}/scripts/pca.R",
+        outdir  = "deseq2",
+        # Use raw conditions (no contrast-specific remapping) so all samples
+        # are represented with their original condition labels.
+        samples = lambda wildcards: ",".join(
+            f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 30,
+        cpus_per_task = 1,
+    conda:
+        "../envs/deseq2.yaml"
+    log:
+        "logs/PCA/pca.log"
+    benchmark:
+        "benchmark/PCA/pca.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --counts   {input.counts} \
+            --outdir   {params.outdir} \
+            --samples  {params.samples}
+        """
+
+
 rule DESeq2:
     input:
         counts = "quantify/counts.txt",
