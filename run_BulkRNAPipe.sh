@@ -24,5 +24,5 @@ snakemake \
     --conda-prefix /scratch/research/taschnermandl/arthur_d/smk_conda \
     --resources mem_mb=64000 \
     --rerun-triggers mtime params \
-    -p -n \
-    "$@" 
+    -p \
+    "$@"
