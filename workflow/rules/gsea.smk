@@ -52,6 +52,13 @@ rule GSEA:
         script           = f"{workflow.basedir}/scripts/gsea.R",
         outdir           = "gsea/{contrast}",
         collection       = "{collection}",
+        contrast_name    = "{contrast}",
+        numerator        = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator      = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
         rank_metric      = config.get('GSEA', {}).get('rank_metric', 'stat'),
         min_size         = config.get('GSEA', {}).get('min_size', 15),
         max_size         = config.get('GSEA', {}).get('max_size', 500),
@@ -79,6 +86,9 @@ rule GSEA:
             --hox_gmt        {input.hox_gmt} \
             --outdir         {params.outdir} \
             --collection     {params.collection} \
+            --contrast_name  "{params.contrast_name}" \
+            --numerator      "{params.numerator}" \
+            --denominator    "{params.denominator}" \
             --rank_metric    {params.rank_metric} \
             --min_size       {params.min_size} \
             --max_size       {params.max_size} \

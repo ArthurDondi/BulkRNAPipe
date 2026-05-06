@@ -43,6 +43,26 @@ rule CompareContrasts:
         outdir           = "gsea_compare/{comparison}",
         contrast_a       = lambda wildcards: get_comparison_cfg(wildcards.comparison)['contrast_A'],
         contrast_b       = lambda wildcards: get_comparison_cfg(wildcards.comparison)['contrast_B'],
+        numerator_a      = lambda wildcards: next(
+            (c[1] for c in config['DESeq2']['contrasts']
+             if c[0] == get_comparison_cfg(wildcards.comparison)['contrast_A']),
+            ""
+        ),
+        denominator_a    = lambda wildcards: next(
+            (c[2] for c in config['DESeq2']['contrasts']
+             if c[0] == get_comparison_cfg(wildcards.comparison)['contrast_A']),
+            ""
+        ),
+        numerator_b      = lambda wildcards: next(
+            (c[1] for c in config['DESeq2']['contrasts']
+             if c[0] == get_comparison_cfg(wildcards.comparison)['contrast_B']),
+            ""
+        ),
+        denominator_b    = lambda wildcards: next(
+            (c[2] for c in config['DESeq2']['contrasts']
+             if c[0] == get_comparison_cfg(wildcards.comparison)['contrast_B']),
+            ""
+        ),
         do_delta_nes     = lambda wildcards: str(get_comparison_cfg(wildcards.comparison).get('delta_nes', True)).upper(),
         do_residual_rank = lambda wildcards: str(get_comparison_cfg(wildcards.comparison).get('residual_rank', True)).upper(),
         gsea_dir_a       = lambda wildcards: "gsea/{c}".format(
@@ -83,6 +103,10 @@ rule CompareContrasts:
             --outdir         {params.outdir} \
             --contrast_a     "{params.contrast_a}" \
             --contrast_b     "{params.contrast_b}" \
+            --numerator_a    "{params.numerator_a}" \
+            --denominator_a  "{params.denominator_a}" \
+            --numerator_b    "{params.numerator_b}" \
+            --denominator_b  "{params.denominator_b}" \
             --collections    "{params.collections}" \
             --rank_metric    {params.rank_metric} \
             --min_size       {params.min_size} \

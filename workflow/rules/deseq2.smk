@@ -40,14 +40,16 @@ rule DESeq2:
     input:
         counts = "quantify/counts.txt",
     output:
-        results = "deseq2/{contrast}/results.csv",
-        norm_counts = "deseq2/{contrast}/normalized_counts.csv",
-        volcano     = "deseq2/{contrast}/volcano.pdf",
-        ma_plot     = "deseq2/{contrast}/ma_plot.pdf",
+        results       = "deseq2/{contrast}/results.csv",
+        norm_counts   = "deseq2/{contrast}/normalized_counts.csv",
+        volcano       = "deseq2/{contrast}/volcano.pdf",
+        ma_plot       = "deseq2/{contrast}/ma_plot.pdf",
+        contrast_info = "deseq2/{contrast}/contrast_info.yaml",
     params:
-        script       = f"{workflow.basedir}/scripts/deseq2.R",
-        outdir       = "deseq2/{contrast}",
-        contrast     = lambda wildcards: next(
+        script         = f"{workflow.basedir}/scripts/deseq2.R",
+        outdir         = "deseq2/{contrast}",
+        contrast_name  = "{contrast}",
+        contrast       = lambda wildcards: next(
             c for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
         ),
         padj_threshold = config['DESeq2']['padj_threshold'],
@@ -78,10 +80,11 @@ rule DESeq2:
         exec > {log} 2>&1
         mkdir -p {params.outdir}
         Rscript {params.script} \
-            --counts       {input.counts} \
-            --outdir       {params.outdir} \
-            --contrast     "{params.contrast[1]} {params.contrast[2]}" \
-            --samples      {params.sample_conditions} \
-            --padj         {params.padj_threshold} \
-            --lfc          {params.lfc_threshold}
+            --counts         {input.counts} \
+            --outdir         {params.outdir} \
+            --contrast_name  "{params.contrast_name}" \
+            --contrast       "{params.contrast[1]} {params.contrast[2]}" \
+            --samples        {params.sample_conditions} \
+            --padj           {params.padj_threshold} \
+            --lfc            {params.lfc_threshold}
         """

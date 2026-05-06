@@ -99,7 +99,15 @@ option_list <- list(
   make_option("--nperm",        type = "integer",   default = 1000L),
   make_option("--delta_nes",    type = "character", default = "TRUE"),
   make_option("--residual_rank",type = "character", default = "TRUE"),
-  make_option("--custom_gmts",  type = "character", default = "")
+  make_option("--custom_gmts",  type = "character", default = ""),
+  make_option("--numerator_a",  type = "character", default = "",
+              help = "Numerator condition of contrast A"),
+  make_option("--denominator_a",type = "character", default = "",
+              help = "Denominator condition of contrast A"),
+  make_option("--numerator_b",  type = "character", default = "",
+              help = "Numerator condition of contrast B"),
+  make_option("--denominator_b",type = "character", default = "",
+              help = "Denominator condition of contrast B")
 )
 
 args <- parse_args(OptionParser(option_list = option_list))
@@ -153,8 +161,14 @@ if (do_delta_nes) {
     dt_b <- fread(csv_b)[, .(pathway, NES_B = NES, padj_B = padj, size_B = size)]
 
     merged <- merge(dt_a, dt_b, by = "pathway", all = TRUE)
-    merged[, delta_NES := NES_A - NES_B]
+    merged[, delta_NES  := NES_A - NES_B]
     merged[, collection := coll_slug]
+    merged[, contrast_A := args$contrast_a]
+    merged[, contrast_B := args$contrast_b]
+    merged[, direction_note := paste0(
+      "\u0394NES = NES_A \u2212 NES_B  |  ",
+      "\u0394NES > 0: more enriched in A (", args$contrast_a, ") than B (", args$contrast_b, ")"
+    )]
 
     # Per-collection CSV
     out_coll_csv <- file.path(args$outdir, paste0("delta_nes_", coll_slug, ".csv"))
@@ -180,18 +194,30 @@ if (do_delta_nes) {
     top_plot <- head(summary_dt[!is.na(delta_NES)][order(-abs(delta_NES))], 40)
     if (nrow(top_plot) > 0) {
       top_plot[, label := str_trunc(pathway, 55)]
+      # Build descriptive subtitle
+      a_detail <- if (nchar(args$numerator_a) > 0)
+        paste0(" (", args$numerator_a, " / ", args$denominator_a, ")") else ""
+      b_detail <- if (nchar(args$numerator_b) > 0)
+        paste0(" (", args$numerator_b, " / ", args$denominator_b, ")") else ""
+      plot_subtitle <- paste0(
+        "\u0394NES = NES_A \u2212 NES_B  |  \u0394NES > 0: more enriched in A than B\n",
+        "A: ", args$contrast_a, a_detail, "\n",
+        "B: ", args$contrast_b, b_detail
+      )
       p <- ggplot(top_plot,
                   aes(x = delta_NES, y = reorder(label, delta_NES),
                       fill = collection)) +
         geom_col() +
         geom_vline(xintercept = 0, colour = "grey30", linetype = "dashed") +
         labs(
-          title = sprintf("ΔNES: %s − %s", args$contrast_a, args$contrast_b),
-          x = "ΔNES (NES_A − NES_B)",
-          y = NULL,
-          fill = "Collection"
+          title    = sprintf("\u0394NES: %s \u2212 %s", args$contrast_a, args$contrast_b),
+          subtitle = plot_subtitle,
+          x        = "\u0394NES (NES_A \u2212 NES_B)",
+          y        = NULL,
+          fill     = "Collection"
         ) +
-        theme_bw(base_size = 11)
+        theme_bw(base_size = 11) +
+        theme(plot.subtitle = element_text(size = 9, colour = "grey30"))
       out_plot <- file.path(args$outdir, "delta_nes_barplot.pdf")
       ggsave(out_plot, plot = p,
              width  = 10,
@@ -239,6 +265,13 @@ if (do_residual) {
     dt <- as.data.table(res_fgsea)
     dt[, leadingEdge := sapply(leadingEdge, paste, collapse = ";")]
     dt <- dt[order(padj, -abs(NES))]
+    dt[, contrast_A    := args$contrast_a]
+    dt[, contrast_B    := args$contrast_b]
+    dt[, rank_metric   := args$rank_metric]
+    dt[, direction_note := paste0(
+      "residual_rank = rank_A \u2212 rank_B  |  ",
+      "NES > 0: genes more enriched in A (", args$contrast_a, ") than B (", args$contrast_b, ")"
+    )]
 
     out_csv <- file.path(resid_dir, paste0("residual_rank_", coll_slug, ".csv"))
     fwrite(dt, out_csv)

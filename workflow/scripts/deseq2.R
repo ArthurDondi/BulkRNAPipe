@@ -25,10 +25,12 @@ option_list <- list(
               help = "Numerator and denominator conditions space-separated (e.g. 'treatment control')"),
   make_option("--samples",  type = "character",
               help = "Comma-separated sample:condition pairs"),
-  make_option("--padj",     type = "double",    default = 0.05,
+  make_option("--padj",          type = "double",    default = 0.05,
               help = "Adjusted p-value threshold [default %default]"),
-  make_option("--lfc",      type = "double",    default = 1.0,
-              help = "Log2 fold-change threshold [default %default]")
+  make_option("--lfc",           type = "double",    default = 1.0,
+              help = "Log2 fold-change threshold [default %default]"),
+  make_option("--contrast_name", type = "character", default = "",
+              help = "Human-readable name for this contrast (used in metadata file)")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list), positional_arguments = TRUE)
@@ -45,9 +47,13 @@ if (is.null(args$contrast) && length(opt$args) >= 2) {
   contrast_den <- vals[2]
 }
 
-outdir    <- args$outdir
-padj_thr  <- args$padj
-lfc_thr   <- args$lfc
+outdir        <- args$outdir
+padj_thr      <- args$padj
+lfc_thr       <- args$lfc
+contrast_name <- if (!is.null(args$contrast_name) && nchar(trimws(args$contrast_name)) > 0)
+                   trimws(args$contrast_name)
+                 else
+                   paste0(contrast_num, "_vs_", contrast_den)
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
@@ -115,8 +121,11 @@ write.csv(norm_counts, file.path(outdir, "normalized_counts.csv"),
           row.names = FALSE, quote = FALSE)
 
 # ─── MA plot ─────────────────────────────────────────────────────────────────
-pdf(file.path(outdir, "ma_plot.pdf"), width = 6, height = 5)
-plotMA(res, alpha = padj_thr, main = paste(contrast_num, "vs", contrast_den))
+pdf(file.path(outdir, "ma_plot.pdf"), width = 6, height = 5.5)
+plotMA(res, alpha = padj_thr,
+       main = paste("MA plot:", contrast_num, "vs", contrast_den),
+       sub  = paste0("log2FC > 0: higher in ", contrast_num,
+                     ";  log2FC < 0: higher in ", contrast_den))
 dev.off()
 
 # ─── Volcano plot ────────────────────────────────────────────────────────────
@@ -144,14 +153,29 @@ p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
   geom_hline(yintercept = -log10(padj_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
   labs(
-    title  = paste("Volcano:", contrast_num, "vs", contrast_den),
-    x      = expression(log[2]~"fold change"),
-    y      = expression(-log[10]~"adjusted p-value"),
-    colour = NULL
+    title    = paste("Volcano:", contrast_num, "vs", contrast_den),
+    subtitle = paste0("log2FC > 0: higher in ", contrast_num,
+                      "   \u2502   log2FC < 0: higher in ", contrast_den),
+    x        = paste0("log2FC (", contrast_num, " / ", contrast_den, ")"),
+    y        = expression(-log[10]~"adjusted p-value"),
+    colour   = NULL
   ) +
   theme_bw(base_size = 12) +
-  theme(legend.position = "bottom")
+  theme(legend.position = "bottom",
+        plot.subtitle   = element_text(size = 9, colour = "grey30"))
 
 ggsave(file.path(outdir, "volcano.pdf"), plot = p, width = 7, height = 6)
+
+# ─── Contrast metadata file ───────────────────────────────────────────────────
+writeLines(
+  c(
+    paste0("contrast_name: \"", contrast_name, "\""),
+    paste0("numerator: \"",     contrast_num,  "\""),
+    paste0("denominator: \"",   contrast_den,  "\""),
+    paste0("direction_note: \"log2FC > 0 is higher in ", contrast_num,
+           "; log2FC < 0 is higher in ", contrast_den, "\"")
+  ),
+  file.path(outdir, "contrast_info.yaml")
+)
 
 message("DESeq2 analysis complete. Results written to: ", outdir)
