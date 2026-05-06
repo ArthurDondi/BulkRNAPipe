@@ -44,7 +44,7 @@ rule DESeq2:
         Rscript {params.script} \
             --counts       {input.counts} \
             --outdir       {params.outdir} \
-            --contrast     {params.contrast[1]} {params.contrast[2]} \
+            --contrast     "{params.contrast[1]} {params.contrast[2]}" \
             --samples      {params.sample_conditions} \
             --padj         {params.padj_threshold} \
             --lfc          {params.lfc_threshold}
