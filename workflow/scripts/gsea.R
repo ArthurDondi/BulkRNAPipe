@@ -9,7 +9,8 @@
 #   --rank_metric  : "stat" (default) or "log2FoldChange"
 #   --min_size     : minimum gene-set size
 #   --max_size     : maximum gene-set size
-#   --nperm        : number of permutations (fgseaSimple fallback; default 1000)
+#   --nperm        : nPermSimple for fgseaMultilevel (simple Monte-Carlo estimate used
+#                    to seed the multilevel algorithm; default 1000)
 #   --custom_gmts  : comma-separated paths to additional GMT files (optional)
 
 suppressPackageStartupMessages({

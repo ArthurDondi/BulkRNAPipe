@@ -16,7 +16,8 @@
 #   --contrast_b     : name label for contrast B
 #   --collections    : comma-separated collection slugs
 #   --rank_metric    : "stat" or "log2FoldChange"
-#   --min_size / --max_size / --nperm : fgsea parameters
+#   --min_size / --max_size / --nperm : fgsea parameters (nperm = nPermSimple for
+#                                       fgseaMultilevel's simple Monte-Carlo seed)
 #   --delta_nes      : TRUE/FALSE — compute ΔNES
 #   --residual_rank  : TRUE/FALSE — run fgsea on residual ranks
 #   --custom_gmts    : comma-separated paths to extra GMT files
