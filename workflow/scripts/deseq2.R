@@ -21,8 +21,8 @@ suppressPackageStartupMessages({
 option_list <- list(
   make_option("--counts",   type = "character", help = "featureCounts output file"),
   make_option("--outdir",   type = "character", help = "Output directory"),
-  make_option("--contrast", type = "character", nargs = 2,
-              help = "Numerator and denominator conditions (e.g. treatment control)"),
+  make_option("--contrast", type = "character",
+              help = "Numerator and denominator conditions space-separated (e.g. 'treatment control')"),
   make_option("--samples",  type = "character",
               help = "Comma-separated sample:condition pairs"),
   make_option("--padj",     type = "double",    default = 0.05,
