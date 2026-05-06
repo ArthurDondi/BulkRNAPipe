@@ -23,6 +23,9 @@ per-rule conda environments, and a dedicated SLURM profile.
 | Alignment QC | MultiQC | Aggregates STAR `Log.final.out` files |
 | Quantification | featureCounts (Subread) | Gene-level counts |
 | Differential expression | DESeq2 | Volcano plot + MA plot + results table |
+| GSEA | fgsea (fgseaMultilevel) | Per contrast; msigdbr + HOX + custom GMTs |
+| GO enrichment | clusterProfiler enrichGO | Per contrast; gene symbols auto-mapped to Entrez |
+| Contrast comparison | ΔNES + residual-rank fgsea | For configured contrast pairs |
 
 ## Repository structure
 
@@ -42,15 +45,24 @@ BulkRNAPipe/
 │   │   ├── trim.smk                # Trim Galore
 │   │   ├── align.smk               # STAR genome index + alignment
 │   │   ├── quantify.smk            # featureCounts
-│   │   └── deseq2.smk              # DESeq2
+│   │   ├── deseq2.smk              # DESeq2
+│   │   ├── gsea.smk                # GSEA (fgsea)
+│   │   ├── go.smk                  # GO enrichment (clusterProfiler)
+│   │   └── compare_contrasts.smk   # ΔNES + residual-rank contrast comparisons
 │   ├── envs/
 │   │   ├── fastqc.yaml
 │   │   ├── trimgalore.yaml
 │   │   ├── star.yaml
 │   │   ├── subread.yaml
-│   │   └── deseq2.yaml
+│   │   ├── deseq2.yaml
+│   │   └── gsea.yaml               # fgsea + msigdbr + clusterProfiler
 │   └── scripts/
-│       └── deseq2.R                # DESeq2 differential expression script
+│       ├── deseq2.R                # DESeq2 differential expression
+│       ├── pca.R                   # PCA plot
+│       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
+│       ├── gsea.R                  # fgsea enrichment per contrast
+│       ├── go.R                    # GO enrichment per contrast
+│       └── gsea_compare.R          # ΔNES + residual-rank comparison
 ├── run_BulkRNAPipe.sh              # Local (non-SLURM) run script
 └── run_BulkRNAPipe_slurm.sh        # SLURM cluster run script
 ```
@@ -220,6 +232,142 @@ output_dir/
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
 │   ├── volcano.pdf                           # Volcano plot
 │   └── ma_plot.pdf                           # MA plot
+├── resources/generated_gmts/
+│   └── hox.gmt                              # Auto-generated HOX gene sets
+├── gsea/{contrast}/
+│   ├── {collection}_results.csv             # fgsea results per collection
+│   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+├── go/{contrast}/
+│   ├── go_{ont}_results.csv                 # GO enrichment results per ontology
+│   └── go_{ont}_dotplot.pdf                 # GO dotplot
+├── gsea_compare/{comparison}/
+│   ├── delta_nes_{collection}.csv           # Per-collection ΔNES table
+│   ├── delta_nes_summary.csv                # ΔNES summary across all collections
+│   ├── delta_nes_barplot.pdf                # ΔNES bar plot
+│   └── residual_rank/
+│       └── residual_rank_{collection}.csv   # Residual-rank fgsea per collection
 ├── logs/                                     # Per-rule log files
 └── benchmark/                                # Per-rule benchmark files
 ```
+
+## GSEA / GO enrichment modules
+
+### Enabling GSEA and GO
+
+Set the following toggles in your config YAML:
+
+```yaml
+Run:
+  gsea: True   # fgsea enrichment per contrast
+  go:   True   # GO enrichment per contrast
+```
+
+Both modules require `Run.deseq2: True` (they read the DESeq2 results files).
+
+### Configuring gene-set collections
+
+```yaml
+GSEA:
+  # MSigDB collections via msigdbr — no manual download needed.
+  # Format: "CATEGORY" or "CATEGORY:SUBCATEGORY"
+  collections:
+    - H              # Hallmark
+    - C2:CP:REACTOME # Reactome curated pathways
+    - C5:GO:BP       # GO Biological Process
+
+  min_size: 15       # Minimum genes in a set (after intersection with data)
+  max_size: 500      # Maximum genes in a set
+  nperm: 1000        # Permutations (fgseaSimple fallback; fgseaMultilevel is default)
+
+  # Preferred ranking metric: "stat" (DESeq2 Wald statistic, recommended)
+  # or "log2FoldChange" (fallback if stat is unavailable)
+  rank_metric: stat
+
+  # Optional: add your own .gmt files (paths relative to output_dir or absolute)
+  custom_gmt_files: []
+```
+
+#### HOX gene sets (generated automatically)
+
+The pipeline automatically creates `resources/generated_gmts/hox.gmt` from the
+gene universe in your DESeq2 results.  It contains two gene sets:
+
+| Set | Pattern | Description |
+|-----|---------|-------------|
+| `HOX_ALL`   | `^HOX[ABCD][0-9]+$` | All HOX cluster genes (A/B/C/D) |
+| `HOXB_ONLY` | `^HOXB[0-9]+$`      | HOXB cluster genes only          |
+
+These sets are merged with the msigdbr canonical sets and any custom GMTs before
+fgsea runs.
+
+#### Adding custom GMT files
+
+Drop any `.gmt` file into your working directory (or specify an absolute path)
+and add it to `GSEA.custom_gmt_files`:
+
+```yaml
+GSEA:
+  custom_gmt_files:
+    - resources/genesets/neuroblastoma_states.gmt
+    - /path/to/mycn_targets.gmt
+```
+
+Gene sets in custom GMTs are merged with the canonical msigdbr sets.  On name
+collision, the custom set takes precedence.
+
+### GO enrichment
+
+```yaml
+GO:
+  ontology:
+    - BP     # Biological Process (recommended)
+    # - MF   # Molecular Function (optional)
+    # - CC   # Cellular Component (optional)
+  padj_cutoff: 0.05
+  min_gs_size: 10
+  max_gs_size: 500
+  gene_id_type: SYMBOL   # gene symbols (pipeline default)
+```
+
+Gene symbols are automatically mapped to Entrez IDs via `org.Hs.eg.db`.
+
+### Contrast comparisons (ΔNES and residual-rank GSEA)
+
+The `ContrastComparisons` config section lets you "normalise" one contrast
+against another.
+
+```yaml
+ContrastComparisons:
+  - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
+    contrast_A: ATRX_IFF_vs_ATRX_FL        # numerator contrast
+    contrast_B: ATRX_Ctrl_vs_ATRX_IFF      # baseline contrast
+    delta_nes: True                          # compute ΔNES
+    residual_rank: True                      # run fgsea on residual ranks
+```
+
+You can add as many comparison entries as needed.  Outputs appear under
+`gsea_compare/{name}/`.
+
+#### Interpreting ΔNES
+
+**ΔNES = NES_A − NES_B** measures how much more (or less) a pathway is enriched
+in contrast A relative to contrast B.
+
+- **High positive ΔNES**: pathway is uniquely enriched in contrast A beyond what
+  is already present in contrast B. Example: a high ΔNES for `HOXB_ONLY` in
+  `ATRX_IFF_vs_ATRX_FL` means the HOXB upregulation is specific to the IFF
+  condition and is not simply a general ATRX-depletion effect.
+- **High negative ΔNES**: pathway is more enriched in contrast B; the signal in
+  contrast A is partially explained by the baseline contrast.
+- **Near zero ΔNES**: pathway is equally enriched in both contrasts.
+
+#### Interpreting residual-rank GSEA
+
+Residual ranks are computed as **rank_A − rank_B** (using the same metric,
+preferably the DESeq2 Wald `stat`).  fgsea is then run on these residuals.
+
+- Pathways with positive NES in the residual analysis are enriched among genes
+  that move *more* in contrast A than in contrast B.
+- This is a gene-level "subtraction" that highlights programs unique to the
+  numerator contrast.
+

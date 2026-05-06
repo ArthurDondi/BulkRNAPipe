@@ -5,6 +5,9 @@ include: 'rules/trim.smk'
 include: 'rules/align.smk'
 include: 'rules/quantify.smk'
 include: 'rules/deseq2.smk'
+include: 'rules/gsea.smk'
+include: 'rules/go.smk'
+include: 'rules/compare_contrasts.smk'
 
 # Define the pipeline working directory
 workdir: config['User']['output_dir']
@@ -27,5 +30,14 @@ rule BulkRNAPipe_output:
         expand("deseq2/{contrast}/results.csv", contrast=CONTRASTS) if DESEQ2 else [],
         # ── PCA ───────────────────────────────────────────────────────────────
         "deseq2/pca.pdf" if DESEQ2 else [],
+        # ── GSEA ─────────────────────────────────────────────────────────────
+        expand("gsea/{contrast}/{collection}_results.csv",
+               contrast=CONTRASTS, collection=GSEA_COLLECTIONS) if GSEA else [],
+        # ── GO enrichment ─────────────────────────────────────────────────────
+        expand("go/{contrast}/go_{ont}_results.csv",
+               contrast=CONTRASTS, ont=[o.lower() for o in GO_ONTOLOGIES]) if GOENRICH else [],
+        # ── Contrast comparisons ──────────────────────────────────────────────
+        expand("gsea_compare/{comparison}/delta_nes_summary.csv",
+               comparison=CONTRAST_COMPARISONS) if GSEA and CONTRAST_COMPARISONS else [],
     default_target: True
     localrule: True
