@@ -36,6 +36,10 @@ suppressPackageStartupMessages({
 # ── Helpers ───────────────────────────────────────────────────────────────────
 `%||%` <- function(a, b) if (!is.null(a)) a else b
 
+# Unicode display constants used in labels and subtitles
+DELTA <- "\u0394"   # Δ
+MINUS <- "\u2212"   # − (proper minus sign)
+
 parse_collection_slug <- function(slug) {
   parts <- str_split(slug, "_", n = 2)[[1]]
   if (length(parts) == 1) {
@@ -166,8 +170,8 @@ if (do_delta_nes) {
     merged[, contrast_A := args$contrast_a]
     merged[, contrast_B := args$contrast_b]
     merged[, direction_note := paste0(
-      "\u0394NES = NES_A \u2212 NES_B  |  ",
-      "\u0394NES > 0: more enriched in A (", args$contrast_a, ") than B (", args$contrast_b, ")"
+      DELTA, "NES = NES_A ", MINUS, " NES_B  |  ",
+      DELTA, "NES > 0: more enriched in A (", args$contrast_a, ") than B (", args$contrast_b, ")"
     )]
 
     # Per-collection CSV
@@ -200,7 +204,8 @@ if (do_delta_nes) {
       b_detail <- if (nchar(args$numerator_b) > 0)
         paste0(" (", args$numerator_b, " / ", args$denominator_b, ")") else ""
       plot_subtitle <- paste0(
-        "\u0394NES = NES_A \u2212 NES_B  |  \u0394NES > 0: more enriched in A than B\n",
+        DELTA, "NES = NES_A ", MINUS, " NES_B  |  ",
+        DELTA, "NES > 0: more enriched in A than B\n",
         "A: ", args$contrast_a, a_detail, "\n",
         "B: ", args$contrast_b, b_detail
       )
@@ -210,9 +215,9 @@ if (do_delta_nes) {
         geom_col() +
         geom_vline(xintercept = 0, colour = "grey30", linetype = "dashed") +
         labs(
-          title    = sprintf("\u0394NES: %s \u2212 %s", args$contrast_a, args$contrast_b),
+          title    = paste0(DELTA, "NES: ", args$contrast_a, " ", MINUS, " ", args$contrast_b),
           subtitle = plot_subtitle,
-          x        = "\u0394NES (NES_A \u2212 NES_B)",
+          x        = paste0(DELTA, "NES (NES_A ", MINUS, " NES_B)"),
           y        = NULL,
           fill     = "Collection"
         ) +
@@ -269,7 +274,7 @@ if (do_residual) {
     dt[, contrast_B    := args$contrast_b]
     dt[, rank_metric   := args$rank_metric]
     dt[, direction_note := paste0(
-      "residual_rank = rank_A \u2212 rank_B  |  ",
+      "residual_rank = rank_A ", MINUS, " rank_B  |  ",
       "NES > 0: genes more enriched in A (", args$contrast_a, ") than B (", args$contrast_b, ")"
     )]
 

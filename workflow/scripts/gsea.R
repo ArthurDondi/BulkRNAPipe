@@ -172,8 +172,8 @@ if (nrow(top_paths) == 0) {
   top_paths[, pathway_label := str_trunc(pathway, 55)]
 
   # Direction labels that name the conditions
-  lbl_up   <- paste0("Enriched in ", args$numerator,   " (NES \u003e 0)")
-  lbl_down <- paste0("Enriched in ", args$denominator, " (NES \u003c 0)")
+  lbl_up   <- paste0("Enriched in ", args$numerator,   " (NES > 0)")
+  lbl_down <- paste0("Enriched in ", args$denominator, " (NES < 0)")
   top_paths[, direction := factor(
     ifelse(NES > 0, lbl_up, lbl_down),
     levels = c(lbl_up, lbl_down)
