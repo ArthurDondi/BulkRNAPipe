@@ -39,7 +39,13 @@ option_list <- list(
   make_option("--max_size",    type = "integer",   default = 500L),
   make_option("--nperm",       type = "integer",   default = 1000L),
   make_option("--custom_gmts", type = "character", default = "",
-              help = "Comma-separated paths to extra GMT files")
+              help = "Comma-separated paths to extra GMT files"),
+  make_option("--contrast_name", type = "character", default = "",
+              help = "Name of this contrast (e.g. ATRX_IFF_vs_ATRX_FL)"),
+  make_option("--numerator",     type = "character", default = "",
+              help = "Numerator condition of the DESeq2 contrast"),
+  make_option("--denominator",   type = "character", default = "",
+              help = "Denominator condition of the DESeq2 contrast")
 )
 
 args <- parse_args(OptionParser(option_list = option_list))
@@ -135,6 +141,14 @@ fgsea_dt <- as.data.table(fgsea_res)
 fgsea_dt[, leadingEdge := sapply(leadingEdge, paste, collapse = ";")]
 fgsea_dt <- fgsea_dt[order(padj, -abs(NES))]
 
+# Annotate with contrast / directionality metadata
+fgsea_dt[, contrast_name  := args$contrast_name]
+fgsea_dt[, numerator      := args$numerator]
+fgsea_dt[, denominator    := args$denominator]
+fgsea_dt[, rank_metric    := rank_col]
+fgsea_dt[, direction_note := paste0("NES > 0: enriched in ", args$numerator,
+                                    "; NES < 0: enriched in ", args$denominator)]
+
 # Save results
 out_csv <- file.path(args$outdir, paste0(args$collection, "_results.csv"))
 write.csv(fgsea_dt, out_csv, row.names = FALSE, quote = FALSE)
@@ -156,25 +170,46 @@ if (nrow(top_paths) == 0) {
   dev.off()
 } else {
   top_paths[, pathway_label := str_trunc(pathway, 55)]
-  top_paths[, direction := ifelse(NES > 0, "Up", "Down")]
+
+  # Direction labels that name the conditions
+  lbl_up   <- paste0("Enriched in ", args$numerator,   " (NES > 0)")
+  lbl_down <- paste0("Enriched in ", args$denominator, " (NES < 0)")
+  top_paths[, direction := factor(
+    ifelse(NES > 0, lbl_up, lbl_down),
+    levels = c(lbl_up, lbl_down)
+  )]
+
+  # Sort so the most-enriched pathway in each direction appears at the top of
+  # its panel.  Use |NES| as the ordering key so that within each panel the
+  # highest absolute enrichment is topmost.
+  top_paths[, plot_order := abs(NES)]
 
   p <- ggplot(top_paths,
-              aes(x = NES, y = reorder(pathway_label, NES),
+              aes(x = NES, y = reorder(pathway_label, plot_order),
                   size = size, colour = padj)) +
     geom_point() +
+    facet_wrap(~ direction, ncol = 1, scales = "free_y") +
     scale_colour_gradient(low = "#E41A1C", high = "grey70", limits = c(0, 0.25),
                           oob = scales::squish, name = "padj") +
     scale_size_continuous(name = "Gene set size", range = c(2, 8)) +
-    labs(title = paste("GSEA:", args$collection),
-         x = "Normalised enrichment score (NES)",
-         y = NULL) +
+    labs(
+      title    = paste("GSEA:", args$collection),
+      subtitle = paste0("Ranking metric: ", rank_col, " from DESeq2 (",
+                        args$numerator, " vs ", args$denominator, ")"),
+      x = "Normalised enrichment score (NES)",
+      y = NULL
+    ) +
     theme_bw(base_size = 11) +
+    theme(strip.text       = element_text(face = "bold", size = 10),
+          plot.subtitle    = element_text(size = 9, colour = "grey30")) +
     geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40")
 
+  n_up   <- nrow(top_up)
+  n_down <- nrow(top_down)
   out_pdf <- file.path(args$outdir, paste0(args$collection, "_dotplot.pdf"))
   ggsave(out_pdf, plot = p,
          width  = 9,
-         height = max(4, nrow(top_paths) * 0.35 + 2))
+         height = max(5, (n_up + n_down) * 0.35 + 3.5))
   message("Dotplot written to: ", out_pdf)
 }
 

@@ -230,8 +230,9 @@ output_dir/
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
-│   ├── volcano.pdf                           # Volcano plot
-│   └── ma_plot.pdf                           # MA plot
+│   ├── volcano.pdf                           # Volcano plot (direction-annotated)
+│   ├── ma_plot.pdf                           # MA plot (direction-annotated)
+│   └── contrast_info.yaml                    # Contrast name, numerator, denominator, direction note
 ├── resources/generated_gmts/
 │   └── hox.gmt                              # Auto-generated HOX gene sets
 ├── gsea/{contrast}/
@@ -370,4 +371,71 @@ preferably the DESeq2 Wald `stat`).  fgsea is then run on these residuals.
   that move *more* in contrast A than in contrast B.
 - This is a gene-level "subtraction" that highlights programs unique to the
   numerator contrast.
+
+---
+
+## Interpreting directionality
+
+### DESeq2 log2FoldChange
+
+Contrasts are defined as `[name, numerator, denominator]` in `DESeq2.contrasts`.
+The **log2FoldChange (log2FC)** in every results table is always in the
+numerator-over-denominator direction:
+
+| log2FC | Meaning |
+|--------|---------|
+| **> 0** | Gene is **higher** in the **numerator** condition |
+| **< 0** | Gene is **higher** in the **denominator** condition |
+
+Both the volcano plot x-axis label and the MA plot subtitle state this
+explicitly (e.g., `log2FC (treatment / control)`).  A YAML metadata file
+`deseq2/{contrast}/contrast_info.yaml` is also written per contrast,
+containing `contrast_name`, `numerator`, `denominator`, and a
+`direction_note`.
+
+### GSEA Normalised Enrichment Score (NES)
+
+GSEA ranks genes by the DESeq2 Wald statistic (preferred) or log2FC,
+so the ranked list inherits the same numerator-over-denominator orientation.
+
+| NES | Meaning |
+|-----|---------|
+| **> 0** | Pathway is **enriched in the numerator** condition |
+| **< 0** | Pathway is **enriched in the denominator** condition |
+
+The GSEA dotplots are **faceted into two panels**:
+
+- *Enriched in \<numerator\> (NES > 0)*
+- *Enriched in \<denominator\> (NES < 0)*
+
+The plot subtitle states the ranking metric and the contrast direction.
+Each results CSV includes `numerator`, `denominator`, `rank_metric`, and
+`direction_note` columns for unambiguous downstream interpretation.
+
+### ΔNES (compare-GSEA)
+
+**ΔNES = NES_A − NES_B** where A and B are two contrast-specific GSEA runs.
+
+| ΔNES | Meaning |
+|------|---------|
+| **> 0** | Pathway more enriched in contrast A than contrast B |
+| **< 0** | Pathway more enriched in contrast B than contrast A |
+| **≈ 0** | Pathway equally enriched in both contrasts |
+
+The ΔNES barplot subtitle and per-collection CSV files include the full
+definition and the numerator/denominator of each contrast so that the
+directionality is unambiguous.
+
+### Residual-rank GSEA (compare-GSEA)
+
+**residual_rank = rank_A − rank_B** (gene-level subtraction of ranked
+statistics).  fgsea is run on these residuals.
+
+| Residual NES | Meaning |
+|--------------|---------|
+| **> 0** | Pathway enriched among genes that move *more* in A than B |
+| **< 0** | Pathway enriched among genes that move *more* in B than A |
+
+The residual-rank CSV files include `contrast_A`, `contrast_B`, and a
+`direction_note` column with the full definition.
 
