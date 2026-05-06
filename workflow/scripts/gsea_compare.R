@@ -120,6 +120,16 @@ if (nchar(trimws(args$custom_gmts)) > 0) {
 res_a <- read.csv(args$results_a, stringsAsFactors = FALSE)
 res_b <- read.csv(args$results_b, stringsAsFactors = FALSE)
 
+# ── Pre-load gene-set pathways for all collections ────────────────────────────
+# Load pathways once per collection and cache them; used by both ΔNES and
+# residual-rank sections to avoid redundant msigdbr downloads.
+message("Loading gene-set pathways for collections: ", paste(collections, collapse = ", "))
+pathways_cache <- setNames(
+  lapply(collections, load_pathways_for_collection,
+         hox_gmt = args$hox_gmt, custom_gmt_paths = custom_gmt_paths),
+  collections
+)
+
 # ── ΔNES analysis ────────────────────────────────────────────────────────────
 if (do_delta_nes) {
   message("Computing ΔNES across collections...")
@@ -151,6 +161,10 @@ if (do_delta_nes) {
     message(sprintf("  %s: %d pathways → %s", coll_slug, nrow(merged), out_coll_csv))
 
     delta_rows <- c(delta_rows, list(merged))
+  }
+
+  if (length(delta_rows) == 0) {
+    message("WARNING: No collections could be compared (missing GSEA CSVs). Writing empty summary.")
   }
 
   # Summary across all collections
@@ -210,7 +224,7 @@ if (do_residual) {
   ranks_resid <- sort(ranks_a[common_genes] - ranks_b[common_genes], decreasing = TRUE)
 
   for (coll_slug in collections) {
-    pathways <- load_pathways_for_collection(coll_slug, args$hox_gmt, custom_gmt_paths)
+    pathways <- pathways_cache[[coll_slug]]
 
     set.seed(42)
     res_fgsea <- fgseaMultilevel(

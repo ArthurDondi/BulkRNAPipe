@@ -133,7 +133,9 @@ GSEA:
   min_size: 15
   # Maximum gene set size
   max_size: 500
-  # Number of permutations for fgseaSimple (ignored when using fgseaMultilevel)
+  # nPermSimple: passed to fgseaMultilevel as the number of permutations used for
+  # the simple (Monte-Carlo) estimate that seeds the multilevel algorithm.
+  # Higher values improve precision at the cost of speed.
   nperm: 1000
   # Ranking metric: "stat" (DESeq2 Wald stat, recommended) or "log2FoldChange"
   rank_metric: stat
