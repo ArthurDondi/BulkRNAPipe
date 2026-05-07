@@ -9,10 +9,10 @@ dependencies:
   - r-msigdbr=7.5.1
   - r-data.table=1.16.4
   - r-dplyr=1.1.4
-  - r-ggplot2=3.5.1
+  - r-ggplot2
   - r-optparse=1.7.5
   - r-tibble=3.2.1
   - r-stringr=1.5.1
   - bioconductor-clusterprofiler=4.14.0
   - bioconductor-org.hs.eg.db=3.20.0
-  - bioconductor-enrichplot=1.26.0
+  - bioconductor-enrichplot>=1.26.0
