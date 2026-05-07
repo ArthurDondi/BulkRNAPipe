@@ -65,8 +65,11 @@ if (!(gene_id_type %in% allowed_gene_id)) {
 }
 
 prefix <- paste0("go_", tolower(ont), "_", dir_label)
+# Conservative sanity threshold: if fewer than ~20% of background IDs map,
+# enrichment is likely dominated by identifier mismatch rather than biology.
 MIN_MAPPING_RATE <- 0.20
 MIN_MAPPED_SIG_GENES <- 5
+# Keep term labels compact for PDF readability.
 MAX_DESCRIPTION_LENGTH <- 55
 out_csv_raw <- file.path(args$outdir, paste0(prefix, "_results.csv"))
 out_csv_simplified <- file.path(args$outdir, paste0(prefix, "_results_simplified.csv"))
@@ -169,8 +172,8 @@ message(sprintf(
 
 if (length(sig_genes) == 0) {
   warning("No significant genes for direction '", dir_label, "'.")
-  write.csv(data.frame(gene_id = character()), out_unmapped_universe, row.names = FALSE, quote = FALSE)
-  write.csv(data.frame(gene_id = character()), out_unmapped_sig, row.names = FALSE, quote = FALSE)
+  write_empty_csv(out_unmapped_universe)
+  write_empty_csv(out_unmapped_sig)
   write_empty_outputs(paste0("No significant ", dir_label, " genes"))
   quit(status = 0)
 }
@@ -206,6 +209,13 @@ map_to_entrez <- function(ids, keytype) {
   )
 }
 
+compute_mapping_rate <- function(input_n, mapped_n) {
+  if (input_n > 0) {
+    return(mapped_n / input_n)
+  }
+  0
+}
+
 sig_map <- map_to_entrez(sig_genes, gene_id_type)
 universe_map <- map_to_entrez(universe_genes, gene_id_type)
 
@@ -216,8 +226,8 @@ sig_in_universe <- intersect(sig_entrez, universe_entrez)
 write.csv(data.frame(gene_id = universe_map$unmapped), out_unmapped_universe, row.names = FALSE, quote = FALSE)
 write.csv(data.frame(gene_id = sig_map$unmapped), out_unmapped_sig, row.names = FALSE, quote = FALSE)
 
-mapped_universe_rate <- if (universe_map$input_n > 0) length(universe_entrez) / universe_map$input_n else 0
-mapped_sig_rate <- if (sig_map$input_n > 0) length(sig_entrez) / sig_map$input_n else 0
+mapped_universe_rate <- compute_mapping_rate(universe_map$input_n, length(universe_entrez))
+mapped_sig_rate <- compute_mapping_rate(sig_map$input_n, length(sig_entrez))
 
 message(sprintf("Mapping diagnostics | universe_input=%d | universe_mapped=%d (%.1f%%)",
                 universe_map$input_n, length(universe_entrez), 100 * mapped_universe_rate))
