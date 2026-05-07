@@ -39,7 +39,7 @@ option_list <- list(
   make_option("--padj_thr",    type = "double",   default = 0.05,
               help = "DESeq2 padj threshold [default %default]"),
   make_option("--lfc_thr",     type = "double",   default = 1.0,
-              help = "DESeq2 log2FC threshold [default %default]"),
+              help = "DESeq2 absolute log2FC threshold applied directionally [default %default]"),
   make_option("--gene_id_type", type = "character", default = "SYMBOL",
               help = "Input gene ID type: SYMBOL, ENSEMBL, ENTREZID [default %default]")
 )
@@ -65,6 +65,9 @@ if (!(gene_id_type %in% allowed_gene_id)) {
 }
 
 prefix <- paste0("go_", tolower(ont), "_", dir_label)
+MIN_MAPPING_RATE <- 0.20
+MIN_MAPPED_SIG_GENES <- 5
+MAX_DESCRIPTION_LENGTH <- 55
 out_csv_raw <- file.path(args$outdir, paste0(prefix, "_results.csv"))
 out_csv_simplified <- file.path(args$outdir, paste0(prefix, "_results_simplified.csv"))
 out_pdf_raw <- file.path(args$outdir, paste0(prefix, "_dotplot.pdf"))
@@ -82,10 +85,14 @@ write_empty_csv <- function(path) {
 }
 
 write_message_pdf <- function(path, text_label) {
-  pdf(path, width = 8, height = 1.5)
-  plot.new()
-  text(0.5, 0.5, text_label)
-  dev.off()
+  tryCatch({
+    pdf(path, width = 8, height = 1.5)
+    on.exit(dev.off(), add = TRUE)
+    plot.new()
+    text(0.5, 0.5, text_label)
+  }, error = function(e) {
+    warning("Failed to write PDF '", path, "': ", conditionMessage(e))
+  })
 }
 
 write_empty_outputs <- function(reason) {
@@ -109,7 +116,7 @@ make_dotplot <- function(df, title_text, out_pdf) {
         parts <- strsplit(x, "/")[[1]]
         as.numeric(parts[1]) / as.numeric(parts[2])
       }),
-      Description_short = substr(Description, 1, 55)
+      Description_short = substr(Description, 1, MAX_DESCRIPTION_LENGTH)
     )
 
   p <- ggplot(top_terms,
@@ -220,7 +227,7 @@ message(sprintf("Mapping diagnostics | overlap(mapped_sig_%s, mapped_universe)=%
                 dir_label, length(sig_in_universe)))
 message("Unmapped IDs written to: ", out_unmapped_universe, " and ", out_unmapped_sig)
 
-if (mapped_universe_rate < 0.20 || length(sig_in_universe) < 5) {
+if (mapped_universe_rate < MIN_MAPPING_RATE || length(sig_in_universe) < MIN_MAPPED_SIG_GENES) {
   warning(sprintf(
     "Extremely low mapping detected (universe mapped=%.1f%%, mapped significant overlap=%d). Writing empty GO outputs.",
     100 * mapped_universe_rate, length(sig_in_universe)
