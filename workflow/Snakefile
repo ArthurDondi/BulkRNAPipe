@@ -34,8 +34,10 @@ rule BulkRNAPipe_output:
         expand("gsea/{contrast}/{collection}_results.csv",
                contrast=CONTRASTS, collection=GSEA_COLLECTIONS) if GSEA else [],
         # ── GO enrichment ─────────────────────────────────────────────────────
-        expand("go/{contrast}/go_{ont}_results.csv",
-               contrast=CONTRASTS, ont=[o.lower() for o in GO_ONTOLOGIES]) if GOENRICH else [],
+        expand("go/{contrast}/go_{ont}_{dir}_results.csv",
+               contrast=CONTRASTS,
+               ont=[o.lower() for o in GO_ONTOLOGIES],
+               dir=["up", "down"]) if GOENRICH else [],
         # ── Contrast comparisons ──────────────────────────────────────────────
         expand("gsea_compare/{comparison}/delta_nes_summary.csv",
                comparison=CONTRAST_COMPARISONS) if GSEA and CONTRAST_COMPARISONS else [],

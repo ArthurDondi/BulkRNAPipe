@@ -239,8 +239,12 @@ output_dir/
 │   ├── {collection}_results.csv             # fgsea results per collection
 │   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 ├── go/{contrast}/
-│   ├── go_{ont}_results.csv                 # GO enrichment results per ontology
-│   └── go_{ont}_dotplot.pdf                 # GO dotplot
+│   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
+│   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
+│   ├── go_{ont}_{dir}_dotplot.pdf           # Raw GO dotplot
+│   ├── go_{ont}_{dir}_dotplot_simplified.pdf# Simplified GO dotplot
+│   ├── go_{ont}_{dir}_unmapped_universe.csv # Input IDs not mapped in universe
+│   └── go_{ont}_{dir}_unmapped_sig.csv      # Input IDs not mapped in sig set
 ├── gsea_compare/{comparison}/
 │   ├── delta_nes_{collection}.csv           # Per-collection ΔNES table
 │   ├── delta_nes_summary.csv                # ΔNES summary across all collections
@@ -327,10 +331,13 @@ GO:
   padj_cutoff: 0.05
   min_gs_size: 10
   max_gs_size: 500
-  gene_id_type: SYMBOL   # gene symbols (pipeline default)
+  gene_id_type: SYMBOL   # SYMBOL, ENSEMBL, or ENTREZID
 ```
 
-Gene symbols are automatically mapped to Entrez IDs via `org.Hs.eg.db`.
+GO enrichment runs separately for up- and down-regulated genes per contrast.
+For `SYMBOL` and `ENSEMBL`, IDs are mapped to Entrez via `org.Hs.eg.db`; for
+`ENTREZID`, IDs are used as-is. Raw and `simplify()`-reduced result tables are
+written, along with mapping diagnostics and unmapped-ID CSVs.
 
 ### Contrast comparisons (ΔNES and residual-rank GSEA)
 
@@ -438,4 +445,3 @@ statistics).  fgsea is run on these residuals.
 
 The residual-rank CSV files include `contrast_A`, `contrast_B`, and a
 `direction_note` column with the full definition.
-
