@@ -164,6 +164,8 @@ use_proteomics <- nchar(trimws(args$proteomics_xlsx)) > 0 &&
                   nchar(trimws(args$proteomics_comparison_column)) > 0 &&
                   nchar(trimws(args$proteomics_fdr_column)) > 0 &&
                   nchar(trimws(args$proteomics_logfc_column)) > 0
+direction_subtitle <- paste0("log2FC > 0: higher in ", contrast_num,
+                             "   \u2502   log2FC < 0: higher in ", contrast_den)
 
 if (use_proteomics) {
   prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet)
@@ -225,8 +227,8 @@ if (use_proteomics) {
   volcano_subtitle <- paste0(
     "Filtered to significant proteomics genes from ",
     args$proteomics_comparison,
-    " (FDR ≤ ", args$proteomics_fdr_threshold, "); log2FC > 0: higher in ", contrast_num,
-    "   \u2502   log2FC < 0: higher in ", contrast_den
+    " (FDR ≤ ", args$proteomics_fdr_threshold, "); ",
+    direction_subtitle
   )
 } else {
   volcano_df <- volcano_df_base %>%
@@ -239,8 +241,7 @@ if (use_proteomics) {
     )
   volcano_colors <- c("Significant" = "#E41A1C",
                       "Not significant" = "grey60")
-  volcano_subtitle <- paste0("log2FC > 0: higher in ", contrast_num,
-                             "   \u2502   log2FC < 0: higher in ", contrast_den)
+  volcano_subtitle <- direction_subtitle
 }
 
 label_count <- sum(!is.na(volcano_df$label))
