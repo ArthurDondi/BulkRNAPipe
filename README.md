@@ -337,7 +337,9 @@ GO:
 GO enrichment runs separately for up- and down-regulated genes per contrast.
 For `SYMBOL` and `ENSEMBL`, IDs are mapped to Entrez via `org.Hs.eg.db`; for
 `ENTREZID`, IDs are used as-is. Raw and `simplify()`-reduced result tables are
-written, along with mapping diagnostics and unmapped-ID CSVs.
+written, along with mapping diagnostics and unmapped-ID CSVs. If mapping is
+very low (<20% mapped universe or <5 mapped significant genes used for
+enrichment), GO outputs are written as graceful empty files with warnings.
 
 ### Contrast comparisons (ΔNES and residual-rank GSEA)
 

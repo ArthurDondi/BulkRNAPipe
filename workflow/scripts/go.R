@@ -236,12 +236,17 @@ message(sprintf("Mapping diagnostics | significant_input_%s=%d | significant_map
                 dir_label, sig_map$input_n, dir_label, length(sig_entrez), 100 * mapped_sig_rate))
 message(sprintf("Mapping diagnostics | overlap(mapped_sig_%s, mapped_universe)=%d",
                 dir_label, length(sig_in_universe)))
+message(sprintf("Mapping diagnostics | significant_used_for_enrich_%s=%d",
+                dir_label, length(sig_in_universe)))
 message("Unmapped IDs written to: ", out_unmapped_universe, " and ", out_unmapped_sig)
 
 if (mapped_universe_rate < MIN_MAPPING_RATE || length(sig_in_universe) < MIN_MAPPED_SIG_GENES) {
   warning(sprintf(
-    "Extremely low mapping detected (universe mapped=%.1f%%, mapped significant overlap=%d). Writing empty GO outputs.",
-    100 * mapped_universe_rate, length(sig_in_universe)
+    "Extremely low mapping detected (universe mapped=%.1f%%, significant used=%d; thresholds: universe>=%.1f%%, significant_used>=%d). Writing empty GO outputs.",
+    100 * mapped_universe_rate,
+    length(sig_in_universe),
+    100 * MIN_MAPPING_RATE,
+    MIN_MAPPED_SIG_GENES
   ))
   write_empty_outputs("Mapping too low for reliable enrichment")
   quit(status = 0)
