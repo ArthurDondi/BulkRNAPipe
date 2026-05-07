@@ -13,6 +13,8 @@ rule GOEnrichment:
         csv_simplified  = "go/{contrast}/go_{ont}_{dir}_results_simplified.csv",
         dotplot_raw     = "go/{contrast}/go_{ont}_{dir}_dotplot.pdf",
         dotplot_simplified = "go/{contrast}/go_{ont}_{dir}_dotplot_simplified.pdf",
+        unmapped_universe = "go/{contrast}/go_{ont}_{dir}_unmapped_universe.csv",
+        unmapped_sig      = "go/{contrast}/go_{ont}_{dir}_unmapped_sig.csv",
     params:
         script       = f"{workflow.basedir}/scripts/go.R",
         outdir       = "go/{contrast}",
