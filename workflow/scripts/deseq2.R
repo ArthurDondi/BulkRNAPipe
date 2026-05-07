@@ -215,6 +215,9 @@ if (use_proteomics) {
   #   are used as-is.
   wide_format <- nchar(trimws(args$proteomics_comparison_column)) == 0
   if (wide_format) {
+    # logfc_column and fdr_column are suffixes (must include any delimiter,
+    # e.g. "_LOG2FC" and "_adj.P.Val") that are appended to the comparison
+    # name to form the actual Excel column names.
     actual_logfc_col <- paste0(args$proteomics_comparison, args$proteomics_logfc_column)
     actual_fdr_col   <- paste0(args$proteomics_comparison, args$proteomics_fdr_column)
     req_cols <- c(args$proteomics_gene_column, actual_logfc_col, actual_fdr_col)
@@ -228,6 +231,8 @@ if (use_proteomics) {
       actual_logfc_col
     )
   }
+  # Validate that all required columns (including any constructed wide-format
+  # column names) are present in the Excel sheet before proceeding.
   missing_cols <- setdiff(req_cols, colnames(prot_tbl))
   if (length(missing_cols) > 0) {
     stop("Missing proteomics column(s): ", paste(missing_cols, collapse = ", "))
