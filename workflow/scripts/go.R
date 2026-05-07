@@ -242,11 +242,9 @@ message("Unmapped IDs written to: ", out_unmapped_universe, " and ", out_unmappe
 
 if (mapped_universe_rate < MIN_MAPPING_RATE || length(sig_in_universe) < MIN_MAPPED_SIG_GENES) {
   warning(sprintf(
-    "Extremely low mapping detected (universe mapped=%.1f%%, significant used=%d; thresholds: universe>=%.1f%%, significant_used>=%d). Writing empty GO outputs.",
+    "Insufficient ID mapping (universe: %.1f%% mapped, significant genes used: %d). Skipping enrichment and writing empty outputs.",
     100 * mapped_universe_rate,
-    length(sig_in_universe),
-    100 * MIN_MAPPING_RATE,
-    MIN_MAPPED_SIG_GENES
+    length(sig_in_universe)
   ))
   write_empty_outputs("Mapping too low for reliable enrichment")
   quit(status = 0)
