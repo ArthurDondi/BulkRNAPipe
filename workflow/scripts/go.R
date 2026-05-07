@@ -87,6 +87,10 @@ write_empty_csv <- function(path) {
   write.csv(data.frame(), path, row.names = FALSE)
 }
 
+write_unmapped_ids <- function(ids, path) {
+  write.csv(data.frame(gene_id = ids), path, row.names = FALSE, quote = FALSE)
+}
+
 write_message_pdf <- function(path, text_label) {
   tryCatch({
     pdf(path, width = 8, height = 1.5)
@@ -210,10 +214,7 @@ map_to_entrez <- function(ids, keytype) {
 }
 
 compute_mapping_rate <- function(input_n, mapped_n) {
-  if (input_n > 0) {
-    return(mapped_n / input_n)
-  }
-  0
+  if (input_n > 0) mapped_n / input_n else 0
 }
 
 sig_map <- map_to_entrez(sig_genes, gene_id_type)
@@ -223,8 +224,8 @@ sig_entrez <- sig_map$mapped
 universe_entrez <- universe_map$mapped
 sig_in_universe <- intersect(sig_entrez, universe_entrez)
 
-write.csv(data.frame(gene_id = universe_map$unmapped), out_unmapped_universe, row.names = FALSE, quote = FALSE)
-write.csv(data.frame(gene_id = sig_map$unmapped), out_unmapped_sig, row.names = FALSE, quote = FALSE)
+write_unmapped_ids(universe_map$unmapped, out_unmapped_universe)
+write_unmapped_ids(sig_map$unmapped, out_unmapped_sig)
 
 mapped_universe_rate <- compute_mapping_rate(universe_map$input_n, length(universe_entrez))
 mapped_sig_rate <- compute_mapping_rate(sig_map$input_n, length(sig_entrez))
