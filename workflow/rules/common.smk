@@ -9,6 +9,7 @@ QUANTIFY   = config['Run']['quantify']
 DESEQ2     = config['Run']['deseq2']
 GSEA       = config['Run'].get('gsea', False)
 GOENRICH   = config['Run'].get('go', False)
+PROTEOMICS = config.get('Proteomics', {}).get('enabled', False)
 
 # ─── Library properties ───────────────────────────────────────────────────────
 PAIRED      = config['Library']['paired_end']
@@ -176,3 +177,11 @@ def get_comparison_cfg(name):
 
 # GO ontologies (BP / MF / CC)
 GO_ONTOLOGIES = config.get('GO', {}).get('ontology', ['BP']) if GOENRICH else []
+
+# ─── Proteomics limma overlay config ──────────────────────────────────────────
+_proteomics_cfg = config.get('Proteomics', {}) or {}
+
+def get_proteomics_comparison(contrast_name):
+    """Return the mapped proteomics comparison string for a DESeq2 contrast."""
+    mapping = _proteomics_cfg.get('deseq2_to_proteomics_comparison') or {}
+    return mapping.get(contrast_name, "")

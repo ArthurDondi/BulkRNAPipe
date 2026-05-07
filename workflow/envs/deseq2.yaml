@@ -12,3 +12,4 @@ dependencies:
   - r-optparse=1.7.5
   - r-dplyr=1.1.4
   - r-tibble=3.2.1
+  - r-readxl=1.4.5
