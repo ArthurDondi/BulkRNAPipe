@@ -43,6 +43,7 @@ rule DESeq2:
         results       = "deseq2/{contrast}/results.csv",
         norm_counts   = "deseq2/{contrast}/normalized_counts.csv",
         volcano       = "deseq2/{contrast}/volcano.pdf",
+        volcano_proteomics = "deseq2/{contrast}/volcano_proteomics.pdf" if PROTEOMICS else [],
         ma_plot       = "deseq2/{contrast}/ma_plot.pdf",
         contrast_info = "deseq2/{contrast}/contrast_info.yaml",
     params:
