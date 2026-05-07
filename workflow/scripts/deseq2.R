@@ -185,7 +185,7 @@ if (use_proteomics) {
       prot_fdr = suppressWarnings(as.numeric(.data[[args$proteomics_fdr_column]])),
       prot_logfc = suppressWarnings(as.numeric(.data[[args$proteomics_logfc_column]]))
     ) %>%
-    dplyr::filter(!is.na(prot_gene), prot_gene != "", !is.na(prot_fdr), !is.na(prot_logfc)) %>%
+    dplyr::filter(!is.na(prot_gene), trimws(prot_gene) != "", !is.na(prot_fdr), !is.na(prot_logfc)) %>%
     dplyr::filter(prot_fdr <= args$proteomics_fdr_threshold) %>%
     dplyr::arrange(prot_fdr, dplyr::desc(abs(prot_logfc))) %>%
     dplyr::distinct(prot_gene, .keep_all = TRUE) %>%
@@ -201,13 +201,15 @@ if (use_proteomics) {
   volcano_df <- volcano_df_base %>%
     dplyr::inner_join(prot_sig, by = "gene_id") %>%
     dplyr::mutate(
+      concordance_eligible = rna_significant & !is.na(prot_direction),
       significance = dplyr::case_when(
-        rna_significant & !is.na(prot_direction) & rna_direction == prot_direction ~ "Significant same direction",
-        rna_significant & !is.na(prot_direction) & rna_direction != prot_direction ~ "Significant opposite direction",
-        TRUE                                                                        ~ "Not significant"
+        concordance_eligible & rna_direction == prot_direction ~ "Significant same direction",
+        concordance_eligible & rna_direction != prot_direction ~ "Significant opposite direction",
+        TRUE                                                   ~ "Not significant"
       ),
       label = ifelse(rna_significant, gene_id, NA_character_)
-    )
+    ) %>%
+    dplyr::select(-concordance_eligible)
 
   if (nrow(volcano_df) == 0) {
     warning("No overlap between DESeq2 genes and significant proteomics genes for contrast: ",
@@ -244,7 +246,7 @@ if (use_proteomics) {
 p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
                              colour = significance, label = label)) +
   geom_point(alpha = 0.6, size = 1.2) +
-  geom_text_repel(size = 2.5, max.overlaps = nrow(volcano_df), show.legend = FALSE) +
+  geom_text_repel(size = 2.5, max.overlaps = sum(volcano_df$label != "", na.rm = TRUE), show.legend = FALSE) +
   scale_colour_manual(values = volcano_colors) +
   geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
