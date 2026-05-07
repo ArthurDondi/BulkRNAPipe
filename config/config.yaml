@@ -124,7 +124,7 @@ DESeq2:
 #   - red: opposite direction
 Proteomics:
   enabled: False
-  limma_xlsx: /path/to/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx
+  limma_xlsx: /path/to/proteomics_results.xlsx
   sheet: "limma result"
   gene_column: "Gene"
   comparison_column: "Comparison"

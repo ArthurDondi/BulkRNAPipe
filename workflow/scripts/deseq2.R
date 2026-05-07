@@ -216,8 +216,8 @@ if (use_proteomics) {
   }
 
   volcano_colors <- c(
-    "Significant same direction"     = "#1B9E77",
-    "Significant opposite direction" = "#D95F02",
+    "Significant same direction"     = "#33A02C",
+    "Significant opposite direction" = "#E31A1C",
     "Not significant"                = "grey60"
   )
   volcano_subtitle <- paste0(
@@ -244,7 +244,7 @@ if (use_proteomics) {
 p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
                              colour = significance, label = label)) +
   geom_point(alpha = 0.6, size = 1.2) +
-  geom_text_repel(size = 2.5, max.overlaps = Inf, show.legend = FALSE) +
+  geom_text_repel(size = 2.5, max.overlaps = nrow(volcano_df), show.legend = FALSE) +
   scale_colour_manual(values = volcano_colors) +
   geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
