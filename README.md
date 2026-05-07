@@ -126,6 +126,7 @@ Key fields to update:
 | `samples` | Sample names, paths to R1/R2 FASTQs, and conditions |
 | `DESeq2.contrasts` | Pairwise comparisons to run |
 | `DESeq2.combine_conditions` | *(Optional)* Merge existing conditions into a new label for DESeq2 |
+| `Proteomics` | *(Optional)* Filter/colour DESeq2 volcano plots using limma proteomics significance + direction |
 
 #### Combining conditions for DESeq2
 
@@ -230,7 +231,7 @@ output_dir/
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
-│   ├── volcano.pdf                           # Volcano plot (direction-annotated)
+│   ├── volcano.pdf                           # Volcano plot (or proteomics-filtered/colored volcano if Proteomics.enabled=True)
 │   ├── ma_plot.pdf                           # MA plot (direction-annotated)
 │   └── contrast_info.yaml                    # Contrast name, numerator, denominator, direction note
 ├── resources/generated_gmts/
@@ -239,8 +240,12 @@ output_dir/
 │   ├── {collection}_results.csv             # fgsea results per collection
 │   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 ├── go/{contrast}/
-│   ├── go_{ont}_results.csv                 # GO enrichment results per ontology
-│   └── go_{ont}_dotplot.pdf                 # GO dotplot
+│   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
+│   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
+│   ├── go_{ont}_{dir}_dotplot.pdf           # Raw GO dotplot
+│   ├── go_{ont}_{dir}_dotplot_simplified.pdf# Simplified GO dotplot
+│   ├── go_{ont}_{dir}_unmapped_universe.csv # Input IDs not mapped in universe
+│   └── go_{ont}_{dir}_unmapped_sig.csv      # Input IDs not mapped in sig set
 ├── gsea_compare/{comparison}/
 │   ├── delta_nes_{collection}.csv           # Per-collection ΔNES table
 │   ├── delta_nes_summary.csv                # ΔNES summary across all collections
@@ -327,10 +332,15 @@ GO:
   padj_cutoff: 0.05
   min_gs_size: 10
   max_gs_size: 500
-  gene_id_type: SYMBOL   # gene symbols (pipeline default)
+  gene_id_type: SYMBOL   # SYMBOL, ENSEMBL, or ENTREZID
 ```
 
-Gene symbols are automatically mapped to Entrez IDs via `org.Hs.eg.db`.
+GO enrichment runs separately for up- and down-regulated genes per contrast.
+For `SYMBOL` and `ENSEMBL`, IDs are mapped to Entrez via `org.Hs.eg.db`; for
+`ENTREZID`, IDs are used as-is. Raw and `simplify()`-reduced result tables are
+written, along with mapping diagnostics and unmapped-ID CSVs. If mapping is
+very low (<20% mapped universe or <5 mapped significant genes used for
+enrichment), GO outputs are written as graceful empty files with warnings.
 
 ### Contrast comparisons (ΔNES and residual-rank GSEA)
 
@@ -393,6 +403,16 @@ explicitly (e.g., `log2FC (treatment / control)`).  A YAML metadata file
 containing `contrast_name`, `numerator`, `denominator`, and a
 `direction_note`.
 
+### Optional proteomics-integrated volcano plots
+
+If `Proteomics.enabled: True`, each DESeq2 volcano is restricted to genes that are
+significant in the mapped proteomics comparison from the limma Excel sheet
+(`FDR <= Proteomics.fdr_threshold`).  RNA-significant points are all annotated and
+colored by RNA/protein direction agreement:
+
+- **green**: RNA and proteomics change in the same direction
+- **red**: RNA and proteomics change in opposite directions
+
 ### GSEA Normalised Enrichment Score (NES)
 
 GSEA ranks genes by the DESeq2 Wald statistic (preferred) or log2FC,
@@ -438,4 +458,3 @@ statistics).  fgsea is run on these residuals.
 
 The residual-rank CSV files include `contrast_A`, `contrast_B`, and a
 `direction_note` column with the full definition.
-
