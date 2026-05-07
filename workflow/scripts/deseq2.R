@@ -145,6 +145,31 @@ plotMA(res, alpha = padj_thr,
                      ";  log2FC < 0: higher in ", contrast_den))
 dev.off()
 
+# ─── Volcano plot helper ─────────────────────────────────────────────────────
+make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
+                              contrast_num, contrast_den) {
+  label_count <- sum(!is.na(df$label))
+  ggplot(df, aes(x = log2FoldChange, y = -log10(padj),
+                 colour = significance, label = label)) +
+    geom_point(alpha = 0.6, size = 1.2) +
+    geom_text_repel(size = 2.5, max.overlaps = label_count, show.legend = FALSE) +
+    scale_colour_manual(values = colors) +
+    geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
+               colour = "black", linewidth = 0.4) +
+    geom_hline(yintercept = -log10(padj_thr), linetype = "dashed",
+               colour = "black", linewidth = 0.4) +
+    labs(
+      title    = title,
+      subtitle = subtitle,
+      x        = paste0("log2FC (", contrast_num, " / ", contrast_den, ")"),
+      y        = expression(-log[10]~"adjusted p-value"),
+      colour   = NULL
+    ) +
+    theme_bw(base_size = 12) +
+    theme(legend.position = "bottom",
+          plot.subtitle   = element_text(size = 9, colour = "grey30"))
+}
+
 # ─── Volcano plot ────────────────────────────────────────────────────────────
 volcano_df_base <- res_df %>%
   dplyr::filter(!is.na(padj)) %>%
@@ -166,6 +191,17 @@ use_proteomics <- nchar(trimws(args$proteomics_xlsx)) > 0 &&
                   nchar(trimws(args$proteomics_logfc_column)) > 0
 direction_subtitle <- paste0("log2FC > 0: higher in ", contrast_num,
                              "   \u2502   log2FC < 0: higher in ", contrast_den)
+
+# Build the full RNA volcano data frame (used in both modes)
+volcano_df_rna <- volcano_df_base %>%
+  dplyr::mutate(
+    significance = dplyr::case_when(
+      rna_significant ~ "Significant",
+      TRUE            ~ "Not significant"
+    ),
+    label = ifelse(rna_significant, gene_id, NA_character_)
+  )
+rna_colors <- c("Significant" = "#E41A1C", "Not significant" = "grey60")
 
 if (use_proteomics) {
   prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet)
@@ -200,7 +236,7 @@ if (use_proteomics) {
     ) %>%
     dplyr::select(gene_id = prot_gene, prot_direction)
 
-  volcano_df <- volcano_df_base %>%
+  volcano_df_prot <- volcano_df_base %>%
     dplyr::inner_join(prot_sig, by = "gene_id") %>%
     dplyr::mutate(
       concordance_eligible = rna_significant & !is.na(prot_direction),
@@ -213,60 +249,63 @@ if (use_proteomics) {
     ) %>%
     dplyr::select(-concordance_eligible)
 
-  if (nrow(volcano_df) == 0) {
+  if (nrow(volcano_df_prot) == 0) {
     warning("No overlap between DESeq2 genes and significant proteomics genes for contrast: ",
             contrast_name,
             " (proteomics comparison: ", args$proteomics_comparison, ")")
   }
 
-  volcano_colors <- c(
+  prot_colors <- c(
     "Significant same direction"     = "#33A02C",
     "Significant opposite direction" = "#E31A1C",
     "Not significant"                = "grey60"
   )
-  volcano_subtitle <- paste0(
+  prot_subtitle <- paste0(
     "Filtered to significant proteomics genes from ",
     args$proteomics_comparison,
-    " (FDR ≤ ", args$proteomics_fdr_threshold, "); ",
+    " (FDR \u2264 ", args$proteomics_fdr_threshold, "); ",
     direction_subtitle
   )
+
+  # Plot 1: full RNA volcano (saved as volcano.pdf for backwards compatibility)
+  p_rna <- make_volcano_plot(
+    df           = volcano_df_rna,
+    colors       = rna_colors,
+    title        = paste("Volcano (RNA):", contrast_num, "vs", contrast_den),
+    subtitle     = direction_subtitle,
+    lfc_thr      = lfc_thr,
+    padj_thr     = padj_thr,
+    contrast_num = contrast_num,
+    contrast_den = contrast_den
+  )
+  ggsave(file.path(outdir, "volcano.pdf"), plot = p_rna, width = 7, height = 6)
+
+  # Plot 2: proteomics-filtered concordance volcano
+  p_prot <- make_volcano_plot(
+    df           = volcano_df_prot,
+    colors       = prot_colors,
+    title        = paste("Volcano (Proteomics):", contrast_num, "vs", contrast_den),
+    subtitle     = prot_subtitle,
+    lfc_thr      = lfc_thr,
+    padj_thr     = padj_thr,
+    contrast_num = contrast_num,
+    contrast_den = contrast_den
+  )
+  ggsave(file.path(outdir, "volcano_proteomics.pdf"), plot = p_prot, width = 7, height = 6)
+
 } else {
-  volcano_df <- volcano_df_base %>%
-    dplyr::mutate(
-      significance = dplyr::case_when(
-        rna_significant ~ "Significant",
-        TRUE            ~ "Not significant"
-      ),
-      label = ifelse(rna_significant, gene_id, NA_character_)
-    )
-  volcano_colors <- c("Significant" = "#E41A1C",
-                      "Not significant" = "grey60")
-  volcano_subtitle <- direction_subtitle
+  p <- make_volcano_plot(
+    df           = volcano_df_rna,
+    colors       = rna_colors,
+    title        = paste("Volcano:", contrast_num, "vs", contrast_den),
+    subtitle     = direction_subtitle,
+    lfc_thr      = lfc_thr,
+    padj_thr     = padj_thr,
+    contrast_num = contrast_num,
+    contrast_den = contrast_den
+  )
+  ggsave(file.path(outdir, "volcano.pdf"), plot = p, width = 7, height = 6)
 }
-
-label_count <- sum(!is.na(volcano_df$label))
-
-p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
-                             colour = significance, label = label)) +
-  geom_point(alpha = 0.6, size = 1.2) +
-  geom_text_repel(size = 2.5, max.overlaps = label_count, show.legend = FALSE) +
-  scale_colour_manual(values = volcano_colors) +
-  geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
-             colour = "black", linewidth = 0.4) +
-  geom_hline(yintercept = -log10(padj_thr), linetype = "dashed",
-             colour = "black", linewidth = 0.4) +
-  labs(
-    title    = paste("Volcano:", contrast_num, "vs", contrast_den),
-    subtitle = volcano_subtitle,
-    x        = paste0("log2FC (", contrast_num, " / ", contrast_den, ")"),
-    y        = expression(-log[10]~"adjusted p-value"),
-    colour   = NULL
-  ) +
-  theme_bw(base_size = 12) +
-  theme(legend.position = "bottom",
-        plot.subtitle   = element_text(size = 9, colour = "grey30"))
-
-ggsave(file.path(outdir, "volcano.pdf"), plot = p, width = 7, height = 6)
 
 # ─── Contrast metadata file ───────────────────────────────────────────────────
 writeLines(

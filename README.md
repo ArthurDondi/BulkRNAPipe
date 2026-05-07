@@ -231,7 +231,8 @@ output_dir/
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
-│   ├── volcano.pdf                           # Volcano plot (or proteomics-filtered/colored volcano if Proteomics.enabled=True)
+│   ├── volcano.pdf                           # Full RNA volcano plot
+│   ├── volcano_proteomics.pdf                # Optional proteomics-concordance volcano (only when Proteomics.enabled=True)
 │   ├── ma_plot.pdf                           # MA plot (direction-annotated)
 │   └── contrast_info.yaml                    # Contrast name, numerator, denominator, direction note
 ├── resources/generated_gmts/
@@ -405,10 +406,11 @@ containing `contrast_name`, `numerator`, `denominator`, and a
 
 ### Optional proteomics-integrated volcano plots
 
-If `Proteomics.enabled: True`, each DESeq2 volcano is restricted to genes that are
-significant in the mapped proteomics comparison from the limma Excel sheet
-(`FDR <= Proteomics.fdr_threshold`).  RNA-significant points are all annotated and
-colored by RNA/protein direction agreement:
+If `Proteomics.enabled: True`, DESeq2 writes an additional
+`deseq2/{contrast}/volcano_proteomics.pdf` for each contrast, restricted to genes
+that are significant in the mapped proteomics comparison from the limma Excel
+sheet (`FDR <= Proteomics.fdr_threshold`). RNA-significant points are all
+annotated and colored by RNA/protein direction agreement:
 
 - **green**: RNA and proteomics change in the same direction
 - **red**: RNA and proteomics change in opposite directions
