@@ -186,7 +186,6 @@ use_proteomics <- nchar(trimws(args$proteomics_xlsx)) > 0 &&
                   file.exists(args$proteomics_xlsx) &&
                   nchar(trimws(args$proteomics_comparison)) > 0 &&
                   nchar(trimws(args$proteomics_gene_column)) > 0 &&
-                  nchar(trimws(args$proteomics_comparison_column)) > 0 &&
                   nchar(trimws(args$proteomics_fdr_column)) > 0 &&
                   nchar(trimws(args$proteomics_logfc_column)) > 0
 direction_subtitle <- paste0("log2FC > 0: higher in ", contrast_num,
@@ -205,24 +204,57 @@ rna_colors <- c("Significant" = "#E41A1C", "Not significant" = "grey60")
 
 if (use_proteomics) {
   prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet)
-  req_cols <- c(
-    args$proteomics_gene_column,
-    args$proteomics_comparison_column,
-    args$proteomics_fdr_column,
-    args$proteomics_logfc_column
-  )
+
+  # Detect wide vs. long format.
+  # Wide format: comparison_column is empty; logfc_column and fdr_column are
+  #   suffixes that get prepended with the comparison name to form the actual
+  #   column names (e.g. comparison="S1011_vs_control", logfc_column="_LOG2FC"
+  #   → actual column "S1011_vs_control_LOG2FC").
+  # Long format: comparison_column is non-empty; rows are filtered by
+  #   comparison_column == proteomics_comparison and logfc_column / fdr_column
+  #   are used as-is.
+  wide_format <- nchar(trimws(args$proteomics_comparison_column)) == 0
+  if (wide_format) {
+    # logfc_column and fdr_column are suffixes (must include any delimiter,
+    # e.g. "_LOG2FC" and "_adj.P.Val") that are appended to the comparison
+    # name to form the actual Excel column names.
+    actual_logfc_col <- paste0(args$proteomics_comparison, args$proteomics_logfc_column)
+    actual_fdr_col   <- paste0(args$proteomics_comparison, args$proteomics_fdr_column)
+    req_cols <- c(args$proteomics_gene_column, actual_logfc_col, actual_fdr_col)
+  } else {
+    actual_logfc_col <- args$proteomics_logfc_column
+    actual_fdr_col   <- args$proteomics_fdr_column
+    req_cols <- c(
+      args$proteomics_gene_column,
+      args$proteomics_comparison_column,
+      actual_fdr_col,
+      actual_logfc_col
+    )
+  }
+  # Validate that all required columns (including any constructed wide-format
+  # column names) are present in the Excel sheet before proceeding.
   missing_cols <- setdiff(req_cols, colnames(prot_tbl))
   if (length(missing_cols) > 0) {
     stop("Missing proteomics column(s): ", paste(missing_cols, collapse = ", "))
   }
 
-  prot_sig <- prot_tbl %>%
-    dplyr::filter(.data[[args$proteomics_comparison_column]] == args$proteomics_comparison) %>%
-    dplyr::mutate(
-      prot_gene = as.character(.data[[args$proteomics_gene_column]]),
-      prot_fdr = suppressWarnings(as.numeric(.data[[args$proteomics_fdr_column]])),
-      prot_logfc = suppressWarnings(as.numeric(.data[[args$proteomics_logfc_column]]))
-    ) %>%
+  if (wide_format) {
+    prot_sig <- prot_tbl %>%
+      dplyr::mutate(
+        prot_gene  = as.character(.data[[args$proteomics_gene_column]]),
+        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
+        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+      )
+  } else {
+    prot_sig <- prot_tbl %>%
+      dplyr::filter(.data[[args$proteomics_comparison_column]] == args$proteomics_comparison) %>%
+      dplyr::mutate(
+        prot_gene  = as.character(.data[[args$proteomics_gene_column]]),
+        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
+        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+      )
+  }
+  prot_sig <- prot_sig %>%
     dplyr::filter(!is.na(prot_gene), trimws(prot_gene) != "", !is.na(prot_fdr), !is.na(prot_logfc)) %>%
     dplyr::filter(prot_fdr <= args$proteomics_fdr_threshold) %>%
     dplyr::arrange(prot_fdr, dplyr::desc(abs(prot_logfc))) %>%

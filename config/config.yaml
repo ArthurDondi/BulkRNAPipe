@@ -127,16 +127,28 @@ Proteomics:
   limma_xlsx: /path/to/proteomics_results.xlsx
   sheet: "limma result"
   gene_column: "Gene"
-  comparison_column: "Comparison"
-  fdr_column: "FDR"
-  logfc_column: "logFC"
+  # ── Wide-format Excel (one set of columns per comparison) ──────────────────
+  # Leave comparison_column empty ("") to use wide format.  logfc_column and
+  # fdr_column are then treated as *suffixes* that are appended to the
+  # proteomics comparison name to form the actual Excel column names:
+  #   e.g. comparison "S1011_vs_control" + logfc_column "_LOG2FC"
+  #        → reads column "S1011_vs_control_LOG2FC"
+  # ── Long-format Excel (one row per gene × comparison) ─────────────────────
+  # Set comparison_column to the name of the column that holds the comparison
+  # label (e.g. "Comparison"), and set logfc_column / fdr_column to the exact
+  # column names used in that table (e.g. "logFC", "adj.P.Val").
+  comparison_column: ""
+  fdr_column: "_adj.P.Val"
+  logfc_column: "_LOG2FC"
   fdr_threshold: 0.05
-  # Map DESeq2 contrast name -> proteomics comparison value in the sheet
+  # Map each DESeq2 contrast name to the proteomics comparison prefix used in
+  # the Excel column headers (wide format) or as the filter value in the
+  # Comparison column (long format).
   deseq2_to_proteomics_comparison: {}
-  # Example:
+  # Example (wide format, sample codes S1011=ATRX_FL, S1744=ATRX_IFF, etc.):
   # deseq2_to_proteomics_comparison:
-  #   ATRX_IFF_vs_ATRX_FL: "IFF_vs_FL"
-  #   ATRX_Ctrl_vs_ATRX_IFF: "IFF_vs_Ctrl"
+  #   ATRX_FL_vs_NoATRX_Ctrl: "S1011_vs_control"
+  #   ATRX_IFF_vs_NoATRX_Ctrl: "S1744_vs_control"
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 # Requires Run.gsea: True
