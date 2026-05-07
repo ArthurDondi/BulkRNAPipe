@@ -54,6 +54,14 @@ rule DESeq2:
         ),
         padj_threshold = config['DESeq2']['padj_threshold'],
         lfc_threshold  = config['DESeq2']['lfc_threshold'],
+        proteomics_xlsx = lambda wildcards: str(config.get('Proteomics', {}).get('limma_xlsx', "")),
+        proteomics_sheet = lambda wildcards: str(config.get('Proteomics', {}).get('sheet', "limma result")),
+        proteomics_gene_column = lambda wildcards: str(config.get('Proteomics', {}).get('gene_column', "")),
+        proteomics_comparison_column = lambda wildcards: str(config.get('Proteomics', {}).get('comparison_column', "")),
+        proteomics_fdr_column = lambda wildcards: str(config.get('Proteomics', {}).get('fdr_column', "")),
+        proteomics_logfc_column = lambda wildcards: str(config.get('Proteomics', {}).get('logfc_column', "")),
+        proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.05)),
+        proteomics_comparison = lambda wildcards: str(get_proteomics_comparison(wildcards.contrast)),
         # Inline the sample → condition mapping as a compact string
         # Format: "sample1:condition1,sample2:condition2,..."
         # get_contrast_effective_condition() applies only the combine_conditions
@@ -86,5 +94,13 @@ rule DESeq2:
             --contrast       "{params.contrast[1]} {params.contrast[2]}" \
             --samples        {params.sample_conditions} \
             --padj           {params.padj_threshold} \
-            --lfc            {params.lfc_threshold}
+            --lfc            {params.lfc_threshold} \
+            --proteomics_xlsx "{params.proteomics_xlsx}" \
+            --proteomics_sheet "{params.proteomics_sheet}" \
+            --proteomics_gene_column "{params.proteomics_gene_column}" \
+            --proteomics_comparison_column "{params.proteomics_comparison_column}" \
+            --proteomics_fdr_column "{params.proteomics_fdr_column}" \
+            --proteomics_logfc_column "{params.proteomics_logfc_column}" \
+            --proteomics_fdr_threshold {params.proteomics_fdr_threshold} \
+            --proteomics_comparison "{params.proteomics_comparison}"
         """

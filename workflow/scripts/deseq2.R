@@ -15,6 +15,7 @@ suppressPackageStartupMessages({
   library(ggrepel)
   library(optparse)
   library(dplyr)
+  library(readxl)
 })
 
 # ─── Parse arguments ─────────────────────────────────────────────────────────
@@ -30,7 +31,23 @@ option_list <- list(
   make_option("--lfc",           type = "double",    default = 1.0,
               help = "Log2 fold-change threshold [default %default]"),
   make_option("--contrast_name", type = "character", default = "",
-              help = "Human-readable name for this contrast (used in metadata file)")
+              help = "Human-readable name for this contrast (used in metadata file)"),
+  make_option("--proteomics_xlsx", type = "character", default = "",
+              help = "Path to limma proteomics xlsx file"),
+  make_option("--proteomics_sheet", type = "character", default = "limma result",
+              help = "Sheet name in limma proteomics xlsx [default %default]"),
+  make_option("--proteomics_gene_column", type = "character", default = "",
+              help = "Column name for gene IDs in proteomics sheet"),
+  make_option("--proteomics_comparison_column", type = "character", default = "",
+              help = "Column name for comparison IDs in proteomics sheet"),
+  make_option("--proteomics_fdr_column", type = "character", default = "",
+              help = "Column name for FDR in proteomics sheet"),
+  make_option("--proteomics_logfc_column", type = "character", default = "",
+              help = "Column name for logFC in proteomics sheet"),
+  make_option("--proteomics_fdr_threshold", type = "double", default = 0.05,
+              help = "FDR threshold for proteomics significance [default %default]"),
+  make_option("--proteomics_comparison", type = "character", default = "",
+              help = "Proteomics comparison mapped to this DESeq2 contrast")
 )
 
 opt <- parse_args(OptionParser(option_list = option_list), positional_arguments = TRUE)
@@ -129,33 +146,113 @@ plotMA(res, alpha = padj_thr,
 dev.off()
 
 # ─── Volcano plot ────────────────────────────────────────────────────────────
-volcano_df <- res_df %>%
+volcano_df_base <- res_df %>%
   dplyr::filter(!is.na(padj)) %>%
   dplyr::mutate(
-    significance = dplyr::case_when(
-      padj < padj_thr & abs(log2FoldChange) >= lfc_thr ~ "Significant",
-      TRUE                                              ~ "Not significant"
-    ),
-    label = ifelse(
-      padj < padj_thr & abs(log2FoldChange) >= lfc_thr,
-      gene_id, NA_character_
+    rna_significant = padj < padj_thr & abs(log2FoldChange) >= lfc_thr,
+    rna_direction = dplyr::case_when(
+      log2FoldChange > 0 ~ "Up",
+      log2FoldChange < 0 ~ "Down",
+      TRUE               ~ NA_character_
     )
   )
+
+use_proteomics <- nchar(trimws(args$proteomics_xlsx)) > 0 &&
+                  file.exists(args$proteomics_xlsx) &&
+                  nchar(trimws(args$proteomics_comparison)) > 0 &&
+                  nchar(trimws(args$proteomics_gene_column)) > 0 &&
+                  nchar(trimws(args$proteomics_comparison_column)) > 0 &&
+                  nchar(trimws(args$proteomics_fdr_column)) > 0 &&
+                  nchar(trimws(args$proteomics_logfc_column)) > 0
+
+if (use_proteomics) {
+  prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet)
+  req_cols <- c(
+    args$proteomics_gene_column,
+    args$proteomics_comparison_column,
+    args$proteomics_fdr_column,
+    args$proteomics_logfc_column
+  )
+  missing_cols <- setdiff(req_cols, colnames(prot_tbl))
+  if (length(missing_cols) > 0) {
+    stop("Missing proteomics column(s): ", paste(missing_cols, collapse = ", "))
+  }
+
+  prot_sig <- prot_tbl %>%
+    dplyr::filter(.data[[args$proteomics_comparison_column]] == args$proteomics_comparison) %>%
+    dplyr::mutate(
+      prot_gene = as.character(.data[[args$proteomics_gene_column]]),
+      prot_fdr = suppressWarnings(as.numeric(.data[[args$proteomics_fdr_column]])),
+      prot_logfc = suppressWarnings(as.numeric(.data[[args$proteomics_logfc_column]]))
+    ) %>%
+    dplyr::filter(!is.na(prot_gene), prot_gene != "", !is.na(prot_fdr), !is.na(prot_logfc)) %>%
+    dplyr::filter(prot_fdr <= args$proteomics_fdr_threshold) %>%
+    dplyr::arrange(prot_fdr, dplyr::desc(abs(prot_logfc))) %>%
+    dplyr::distinct(prot_gene, .keep_all = TRUE) %>%
+    dplyr::mutate(
+      prot_direction = dplyr::case_when(
+        prot_logfc > 0 ~ "Up",
+        prot_logfc < 0 ~ "Down",
+        TRUE           ~ NA_character_
+      )
+    ) %>%
+    dplyr::select(gene_id = prot_gene, prot_direction)
+
+  volcano_df <- volcano_df_base %>%
+    dplyr::inner_join(prot_sig, by = "gene_id") %>%
+    dplyr::mutate(
+      significance = dplyr::case_when(
+        rna_significant & !is.na(prot_direction) & rna_direction == prot_direction ~ "Significant same direction",
+        rna_significant & !is.na(prot_direction) & rna_direction != prot_direction ~ "Significant opposite direction",
+        TRUE                                                                        ~ "Not significant"
+      ),
+      label = ifelse(rna_significant, gene_id, NA_character_)
+    )
+
+  if (nrow(volcano_df) == 0) {
+    warning("No overlap between DESeq2 genes and significant proteomics genes for contrast: ",
+            contrast_name,
+            " (proteomics comparison: ", args$proteomics_comparison, ")")
+  }
+
+  volcano_colors <- c(
+    "Significant same direction"     = "#1B9E77",
+    "Significant opposite direction" = "#D95F02",
+    "Not significant"                = "grey60"
+  )
+  volcano_subtitle <- paste0(
+    "Filtered to significant proteomics genes from ",
+    args$proteomics_comparison,
+    " (FDR ≤ ", args$proteomics_fdr_threshold, "); log2FC > 0: higher in ", contrast_num,
+    "   \u2502   log2FC < 0: higher in ", contrast_den
+  )
+} else {
+  volcano_df <- volcano_df_base %>%
+    dplyr::mutate(
+      significance = dplyr::case_when(
+        rna_significant ~ "Significant",
+        TRUE            ~ "Not significant"
+      ),
+      label = ifelse(rna_significant, gene_id, NA_character_)
+    )
+  volcano_colors <- c("Significant" = "#E41A1C",
+                      "Not significant" = "grey60")
+  volcano_subtitle <- paste0("log2FC > 0: higher in ", contrast_num,
+                             "   \u2502   log2FC < 0: higher in ", contrast_den)
+}
 
 p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
                              colour = significance, label = label)) +
   geom_point(alpha = 0.6, size = 1.2) +
-  geom_text_repel(size = 2.5, max.overlaps = 20, show.legend = FALSE) +
-  scale_colour_manual(values = c("Significant" = "#E41A1C",
-                                 "Not significant" = "grey60")) +
+  geom_text_repel(size = 2.5, max.overlaps = Inf, show.legend = FALSE) +
+  scale_colour_manual(values = volcano_colors) +
   geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
   geom_hline(yintercept = -log10(padj_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
   labs(
     title    = paste("Volcano:", contrast_num, "vs", contrast_den),
-    subtitle = paste0("log2FC > 0: higher in ", contrast_num,
-                      "   \u2502   log2FC < 0: higher in ", contrast_den),
+    subtitle = volcano_subtitle,
     x        = paste0("log2FC (", contrast_num, " / ", contrast_den, ")"),
     y        = expression(-log[10]~"adjusted p-value"),
     colour   = NULL
