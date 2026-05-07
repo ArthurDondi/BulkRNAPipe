@@ -171,15 +171,27 @@ Proteomics:
   limma_xlsx: /path/to/proteomics_results.xlsx
   sheet: "limma result"
   gene_column: "Gene"
-  comparison_column: "Comparison"
-  fdr_column: "FDR"
-  logfc_column: "logFC"
+  # Wide-format Excel: comparison_column is empty; logfc_column and fdr_column
+  # are suffixes appended to the comparison name to form the actual column names
+  # (e.g. "S1011_vs_control" + "_LOG2FC" → column "S1011_vs_control_LOG2FC").
+  comparison_column: ""
+  fdr_column: "_adj.P.Val"
+  logfc_column: "_LOG2FC"
   fdr_threshold: 0.05
-  deseq2_to_proteomics_comparison: {}
-  # Example:
-  # deseq2_to_proteomics_comparison:
-  #   ATRX_IFF_vs_ATRX_FL: "IFF_vs_FL"
-  #   ATRX_Ctrl_vs_ATRX_IFF: "IFF_vs_Ctrl"
+  # Sample code mapping used below:
+  #   S1011 = ATRX_FL  |  S1744 = ATRX_IFF  |  S1760 = ATRX_EmptyVector
+  #   SE6   = ATRX_NoVector  |  control = NoATRX_Ctrl
+  #
+  # Note: ATRX_Ctrl (DESeq2 combined NoVector+EmptyVector) has no direct
+  # proteomics equivalent; the vs-control comparisons are the closest match.
+  deseq2_to_proteomics_comparison:
+    NoATRX_Ctrl_vs_ATRX_NoVector:       "SE6_vs_control"
+    ATRX_NoVector_vs_ATRX_EmptyVector:  "S1760_vs_SE6"
+    ATRX_EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
+    ATRX_EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
+    ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
+    ATRX_Ctrl_vs_ATRX_FL:               "S1011_vs_control"   # ATRX_Ctrl ≈ control
+    ATRX_Ctrl_vs_ATRX_IFF:              "S1744_vs_control"   # ATRX_Ctrl ≈ control
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
