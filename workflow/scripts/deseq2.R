@@ -246,7 +246,7 @@ if (use_proteomics) {
 p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj),
                              colour = significance, label = label)) +
   geom_point(alpha = 0.6, size = 1.2) +
-  geom_text_repel(size = 2.5, max.overlaps = sum(volcano_df$label != "", na.rm = TRUE), show.legend = FALSE) +
+  geom_text_repel(size = 2.5, max.overlaps = sum(!is.na(volcano_df$label)), show.legend = FALSE) +
   scale_colour_manual(values = volcano_colors) +
   geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
              colour = "black", linewidth = 0.4) +
