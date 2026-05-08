@@ -116,9 +116,10 @@ DESeq2:
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
-# ─── Optional proteomics limma overlay for DESeq2 volcano plots ──────────────
-# When enabled, the DESeq2 volcano for each contrast is filtered to genes that
-# are significant in the mapped proteomics comparison (FDR <= fdr_threshold).
+# ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
+# When enabled, an additional volcano file (volcano_proteomic.pdf) is generated
+# per contrast using DESeq2 results restricted to genes that are significant in
+# the mapped proteomics comparison (FDR <= fdr_threshold).
 # Significant RNA points are labelled and coloured by RNA/protein direction:
 #   - green: same direction (both up or both down)
 #   - red: opposite direction
