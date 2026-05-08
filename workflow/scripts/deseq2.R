@@ -177,20 +177,22 @@ make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
     theme(legend.position = "bottom",
           plot.subtitle   = element_text(size = 9, colour = "grey30"))
 
-  if (label_mode != "none" && !"label" %in% colnames(df)) {
-    stop("Volcano plot labeling requires a 'label' column when label_mode != 'none'.")
-  }
+  if (label_mode != "none") {
+    if (!"label" %in% colnames(df)) {
+      stop("Volcano plot labeling requires a 'label' column when label_mode = '",
+           label_mode, "'.")
+    }
 
-  label_df <- df %>%
-    dplyr::filter(!is.na(label))
+    label_df <- df %>%
+      dplyr::filter(!is.na(label))
 
-  if (label_mode == "top" && nrow(label_df) > 0) {
-    label_df <- label_df %>%
-      dplyr::arrange(padj, dplyr::desc(abs(log2FoldChange))) %>%
-      dplyr::slice_head(n = label_top_n)
-  }
+    if (label_mode == "top" && nrow(label_df) > 0) {
+      # Prefer the smallest adjusted p-values; break ties by larger effect size.
+      label_df <- label_df %>%
+        dplyr::arrange(padj, dplyr::desc(abs(log2FoldChange))) %>%
+        dplyr::slice_head(n = label_top_n)
+    }
 
-  if (label_mode != "none" && nrow(label_df) > 0) {
     p <- p + geom_text_repel(
       data = label_df,
       aes(label = label),
