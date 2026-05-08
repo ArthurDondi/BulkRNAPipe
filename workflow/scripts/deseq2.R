@@ -238,9 +238,28 @@ volcano_df_rna <- volcano_df_base %>%
 rna_colors <- c("Significant" = "#E41A1C", "Not significant" = "grey60")
 
 if (use_proteomics) {
+  max_examples_to_report <- 10
+  parse_proteomics_numeric <- function(x, column_name) {
+    raw_values <- trimws(as.character(x))
+    parsed_values <- suppressWarnings(as.numeric(raw_values))
+    failed_parse <- !is.na(raw_values) & raw_values != "" & is.na(parsed_values)
+
+    if (any(failed_parse)) {
+      bad_values <- unique(raw_values[failed_parse])
+      message(
+        "Proteomics numeric parse warning for column '", column_name, "': ",
+        length(bad_values), " value(s) could not be converted to numeric and were set to NA. Examples: ",
+        paste(head(bad_values, max_examples_to_report), collapse = ", "),
+        if (length(bad_values) > max_examples_to_report) " ..." else ""
+      )
+    }
+
+    parsed_values
+  }
+
   # Read all columns as text to prevent Excel date/numeric coercions of gene
   # symbols (e.g. "MARCH1" → date, "SEPT7" → date).  Numeric columns are
-  # converted explicitly with as.numeric() further below.
+  # converted explicitly with diagnostics further below.
   prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet,
                                   col_types = "text")
 
@@ -281,16 +300,16 @@ if (use_proteomics) {
     prot_sig <- prot_tbl %>%
       dplyr::mutate(
         prot_gene  = trimws(as.character(.data[[args$proteomics_gene_column]])),
-        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
-        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+        prot_fdr   = parse_proteomics_numeric(.data[[actual_fdr_col]], actual_fdr_col),
+        prot_logfc = parse_proteomics_numeric(.data[[actual_logfc_col]], actual_logfc_col)
       )
   } else {
     prot_sig <- prot_tbl %>%
       dplyr::filter(.data[[args$proteomics_comparison_column]] == args$proteomics_comparison) %>%
       dplyr::mutate(
         prot_gene  = trimws(as.character(.data[[args$proteomics_gene_column]])),
-        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
-        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+        prot_fdr   = parse_proteomics_numeric(.data[[actual_fdr_col]], actual_fdr_col),
+        prot_logfc = parse_proteomics_numeric(.data[[actual_logfc_col]], actual_logfc_col)
       )
   }
   prot_sig <- prot_sig %>%
@@ -332,8 +351,8 @@ if (use_proteomics) {
   if (n_prot_sig > 0 && n_overlap < n_prot_sig) {
     unmatched <- setdiff(prot_sig$gene_id, volcano_df_base$gene_id)
     message("  Proteomics genes not in RNA data (", length(unmatched), "): ",
-            paste(head(unmatched, 10), collapse = ", "),
-            if (length(unmatched) > 10) " ..." else "")
+            paste(head(unmatched, max_examples_to_report), collapse = ", "),
+            if (length(unmatched) > max_examples_to_report) " ..." else "")
   }
 
   if (nrow(volcano_df_prot) == 0) {
