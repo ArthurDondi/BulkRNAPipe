@@ -130,18 +130,20 @@ DESeq2:
   contrasts:
     # Each contrast: [name_for_output, numerator, denominator(reference)]
     # Compare untransfected control vs. E6 alone (ATRX_NoVector)
-    - [NoATRX_Ctrl_vs_ATRX_NoVector, ATRX_NoVector, NoATRX_Ctrl]
+    #- [NoATRX_Ctrl_vs_ATRX_NoVector, ATRX_NoVector, NoATRX_Ctrl]
     # Compare E6 alone vs. empty vector control
     - [ATRX_NoVector_vs_ATRX_EmptyVector, ATRX_EmptyVector, ATRX_NoVector]
     # Compare empty vector vs. ATRX full-length
-    - [ATRX_EmptyVector_vs_ATRX_FL, ATRX_FL, ATRX_EmptyVector]
+    #- [ATRX_EmptyVector_vs_ATRX_FL, ATRX_FL, ATRX_EmptyVector]
     # Compare empty vector vs. ATRX in-frame fusion
-    - [ATRX_EmptyVector_vs_ATRX_IFF, ATRX_IFF, ATRX_EmptyVector]
+    #- [ATRX_EmptyVector_vs_ATRX_IFF, ATRX_IFF, ATRX_EmptyVector]
     # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
     - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
-    # Combined vector-control contrasts (ATRX_Ctrl = NoVector + EmptyVector merged)
-    - [ATRX_Ctrl_vs_ATRX_FL, ATRX_FL, ATRX_Ctrl]
-    - [ATRX_Ctrl_vs_ATRX_IFF, ATRX_IFF, ATRX_Ctrl]
+    # Compare ATRX+ cell line vs. ATRX in-frame fusion
+    - [NoATRX_Ctrl_vs_ATRX_IFF, ATRX_IFF, NoATRX_Ctrl]
+    # Compare ATRX+ cell line vs. ATRX FL (rescue experiment)
+    - [NoATRX_Ctrl_vs_ATRX_FL, ATRX_FL, NoATRX_Ctrl]
+
 
   # ─── Combined / derived conditions ─────────────────────────────────────────
   # Optional: merge two or more existing condition labels into one new label
@@ -168,14 +170,14 @@ DESeq2:
 # ─── Optional proteomics limma overlay for DESeq2 volcano plots ──────────────
 Proteomics:
   enabled: False
-  limma_xlsx: /path/to/proteomics_results.xlsx
+  limma_xlsx: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx
   sheet: "limma result"
   gene_column: "Gene"
   # Wide-format Excel: comparison_column is empty; logfc_column and fdr_column
   # are suffixes appended to the comparison name to form the actual column names
   # (e.g. "S1011_vs_control" + "_LOG2FC" → column "S1011_vs_control_LOG2FC").
   comparison_column: ""
-  fdr_column: "_adj.P.Val"
+  fdr_column: "_FDR"
   logfc_column: "_LOG2FC"
   fdr_threshold: 0.05
   # Sample code mapping used below:
@@ -185,13 +187,13 @@ Proteomics:
   # Note: ATRX_Ctrl (DESeq2 combined NoVector+EmptyVector) has no direct
   # proteomics equivalent; the vs-control comparisons are the closest match.
   deseq2_to_proteomics_comparison:
-    NoATRX_Ctrl_vs_ATRX_NoVector:       "SE6_vs_control"
+    #NoATRX_Ctrl_vs_ATRX_NoVector:       "SE6_vs_control"
     ATRX_NoVector_vs_ATRX_EmptyVector:  "S1760_vs_SE6"
-    ATRX_EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
-    ATRX_EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
+    #ATRX_EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
+    #ATRX_EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
     ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
-    ATRX_Ctrl_vs_ATRX_FL:               "S1011_vs_control"   # ATRX_Ctrl ≈ control
-    ATRX_Ctrl_vs_ATRX_IFF:              "S1744_vs_control"   # ATRX_Ctrl ≈ control
+    NoATRX_Ctrl_vs_ATRX_FL:               "S1011_vs_control" 
+    NoATRX_Ctrl_vs_ATRX_IFF:              "S1744_vs_control"   
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
@@ -219,7 +221,7 @@ GO:
 ContrastComparisons:
   - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
     contrast_A: ATRX_IFF_vs_ATRX_FL
-    contrast_B: ATRX_Ctrl_vs_ATRX_IFF
+    contrast_B: NoATRX_Ctrl_vs_ATRX_IFF
     delta_nes: True
     residual_rank: True
 

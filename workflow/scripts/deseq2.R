@@ -67,10 +67,11 @@ if (is.null(args$contrast) && length(opt$args) >= 2) {
 outdir        <- args$outdir
 padj_thr      <- args$padj
 lfc_thr       <- args$lfc
-contrast_name <- if (!is.null(args$contrast_name) && nchar(trimws(args$contrast_name)) > 0)
-                   trimws(args$contrast_name)
-                 else
-                   paste0(contrast_num, "_vs_", contrast_den)
+contrast_name <- if (!is.null(args$contrast_name) && nchar(trimws(args$contrast_name)) > 0) {
+                      trimws(args$contrast_name)
+                    } else {
+                      paste0(contrast_num, "_vs_", contrast_den)
+                    }
 
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
