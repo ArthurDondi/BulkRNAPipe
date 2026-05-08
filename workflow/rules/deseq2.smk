@@ -43,26 +43,15 @@ rule DESeq2:
         results       = "deseq2/{contrast}/results.csv",
         norm_counts   = "deseq2/{contrast}/normalized_counts.csv",
         volcano       = "deseq2/{contrast}/volcano.pdf",
-        volcano_proteomics = "deseq2/{contrast}/volcano_proteomics.pdf" if PROTEOMICS else [],
         ma_plot       = "deseq2/{contrast}/ma_plot.pdf",
-        contrast_info = "deseq2/{contrast}/contrast_info.yaml",
     params:
         script         = f"{workflow.basedir}/scripts/deseq2.R",
         outdir         = "deseq2/{contrast}",
-        contrast_name  = "{contrast}",
         contrast       = lambda wildcards: next(
             c for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
         ),
         padj_threshold = config['DESeq2']['padj_threshold'],
         lfc_threshold  = config['DESeq2']['lfc_threshold'],
-        proteomics_xlsx = lambda wildcards: str(config.get('Proteomics', {}).get('limma_xlsx', "")),
-        proteomics_sheet = lambda wildcards: str(config.get('Proteomics', {}).get('sheet', "limma result")),
-        proteomics_gene_column = lambda wildcards: str(config.get('Proteomics', {}).get('gene_column', "")),
-        proteomics_comparison_column = lambda wildcards: str(config.get('Proteomics', {}).get('comparison_column', "")),
-        proteomics_fdr_column = lambda wildcards: str(config.get('Proteomics', {}).get('fdr_column', "")),
-        proteomics_logfc_column = lambda wildcards: str(config.get('Proteomics', {}).get('logfc_column', "")),
-        proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.05)),
-        proteomics_comparison = lambda wildcards: str(get_proteomics_comparison(wildcards.contrast)),
         # Inline the sample → condition mapping as a compact string
         # Format: "sample1:condition1,sample2:condition2,..."
         # get_contrast_effective_condition() applies only the combine_conditions
@@ -91,11 +80,57 @@ rule DESeq2:
         Rscript {params.script} \
             --counts         {input.counts} \
             --outdir         {params.outdir} \
-            --contrast_name  "{params.contrast_name}" \
             --contrast       "{params.contrast[1]} {params.contrast[2]}" \
             --samples        {params.sample_conditions} \
             --padj           {params.padj_threshold} \
-            --lfc            {params.lfc_threshold} \
+            --lfc            {params.lfc_threshold}
+        """
+
+
+rule DESeq2Proteomic:
+    input:
+        results = "deseq2/{contrast}/results.csv",
+    output:
+        volcano_proteomic = "deseq2/{contrast}/volcano_proteomic.pdf",
+    params:
+        script         = f"{workflow.basedir}/scripts/deseq2_proteomic.R",
+        outdir         = "deseq2/{contrast}",
+        contrast_name  = "{contrast}",
+        contrast       = lambda wildcards: next(
+            c for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        padj_threshold = config['DESeq2']['padj_threshold'],
+        lfc_threshold  = config['DESeq2']['lfc_threshold'],
+        proteomics_xlsx = lambda wildcards: str(config.get('Proteomics', {}).get('limma_xlsx', "")),
+        proteomics_sheet = lambda wildcards: str(config.get('Proteomics', {}).get('sheet', "limma result")),
+        proteomics_gene_column = lambda wildcards: str(config.get('Proteomics', {}).get('gene_column', "")),
+        proteomics_comparison_column = lambda wildcards: str(config.get('Proteomics', {}).get('comparison_column', "")),
+        proteomics_fdr_column = lambda wildcards: str(config.get('Proteomics', {}).get('fdr_column', "")),
+        proteomics_logfc_column = lambda wildcards: str(config.get('Proteomics', {}).get('logfc_column', "")),
+        proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.05)),
+        proteomics_comparison = lambda wildcards: str(get_proteomics_comparison(wildcards.contrast)),
+    threads: 2
+    resources:
+        mem_mb        = 8000,
+        runtime       = 60,
+        cpus_per_task = 2,
+    conda:
+        "../envs/deseq2.yaml"
+    log:
+        "logs/DESeq2_proteomic/{contrast}.log"
+    benchmark:
+        "benchmark/DESeq2_proteomic/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results         {input.results} \
+            --outdir          {params.outdir} \
+            --contrast_name   "{params.contrast_name}" \
+            --contrast        "{params.contrast[1]} {params.contrast[2]}" \
+            --padj            {params.padj_threshold} \
+            --lfc             {params.lfc_threshold} \
             --proteomics_xlsx "{params.proteomics_xlsx}" \
             --proteomics_sheet "{params.proteomics_sheet}" \
             --proteomics_gene_column "{params.proteomics_gene_column}" \
