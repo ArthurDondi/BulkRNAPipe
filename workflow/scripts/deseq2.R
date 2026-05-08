@@ -146,6 +146,13 @@ plotMA(res, alpha = padj_thr,
 dev.off()
 
 # ─── Volcano plot helper ─────────────────────────────────────────────────────
+# label_mode:
+#   - "none": no text labels
+#   - "top" : label the top `label_top_n` rows with non-NA `label`, ranked by
+#             lowest padj then largest absolute log2 fold-change
+#   - "all" : label all rows with non-NA `label`
+# label_top_n is only used when label_mode == "top".
+# When labels are enabled, `df` is expected to contain a `label` column.
 make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
                               contrast_num, contrast_den,
                               label_mode = c("none", "top", "all"),
@@ -169,6 +176,10 @@ make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
     theme_bw(base_size = 12) +
     theme(legend.position = "bottom",
           plot.subtitle   = element_text(size = 9, colour = "grey30"))
+
+  if (label_mode != "none" && !"label" %in% colnames(df)) {
+    stop("Volcano plot labeling requires a 'label' column when label_mode != 'none'.")
+  }
 
   label_df <- df %>%
     dplyr::filter(!is.na(label))
