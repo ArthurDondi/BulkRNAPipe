@@ -146,13 +146,21 @@ plotMA(res, alpha = padj_thr,
 dev.off()
 
 # ─── Volcano plot helper ─────────────────────────────────────────────────────
+# label_mode:
+#   - "none": no text labels
+#   - "top" : label the top `label_top_n` rows with non-NA `label`, ranked by
+#             lowest padj then largest absolute log2 fold-change
+#   - "all" : label all rows with non-NA `label`
+# label_top_n is only used when label_mode == "top".
+# When labels are enabled, `df` is expected to contain a `label` column.
 make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
-                              contrast_num, contrast_den) {
-  label_count <- sum(!is.na(df$label))
-  ggplot(df, aes(x = log2FoldChange, y = -log10(padj),
-                 colour = significance, label = label)) +
+                              contrast_num, contrast_den,
+                              label_mode = c("none", "top", "all"),
+                              label_top_n = 10) {
+  label_mode <- match.arg(label_mode)
+  p <- ggplot(df, aes(x = log2FoldChange, y = -log10(padj),
+                      colour = significance)) +
     geom_point(alpha = 0.6, size = 1.2) +
-    geom_text_repel(size = 2.5, max.overlaps = label_count, show.legend = FALSE) +
     scale_colour_manual(values = colors) +
     geom_vline(xintercept = c(-lfc_thr, lfc_thr), linetype = "dashed",
                colour = "black", linewidth = 0.4) +
@@ -168,12 +176,39 @@ make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
     theme_bw(base_size = 12) +
     theme(legend.position = "bottom",
           plot.subtitle   = element_text(size = 9, colour = "grey30"))
+
+  if (label_mode != "none") {
+    if (!"label" %in% colnames(df)) {
+      stop("Volcano plot labeling requires a 'label' column when label_mode = '",
+           label_mode, "'.")
+    }
+
+    label_df <- df %>%
+      dplyr::filter(!is.na(label))
+
+    if (label_mode == "top" && nrow(label_df) > 0) {
+      # Prefer the smallest adjusted p-values; break ties by larger effect size.
+      label_df <- label_df %>%
+        dplyr::arrange(padj, dplyr::desc(abs(log2FoldChange))) %>%
+        dplyr::slice_head(n = label_top_n)
+    }
+
+    p <- p + geom_text_repel(
+      data = label_df,
+      aes(label = label),
+      size = 2.5,
+      max.overlaps = nrow(label_df),
+      show.legend = FALSE
+    )
+  }
+  p
 }
 
 # ─── Volcano plot ────────────────────────────────────────────────────────────
 volcano_df_base <- res_df %>%
   dplyr::filter(!is.na(padj)) %>%
   dplyr::mutate(
+    gene_id = trimws(gene_id),
     rna_significant = padj < padj_thr & abs(log2FoldChange) >= lfc_thr,
     rna_direction = dplyr::case_when(
       log2FoldChange > 0 ~ "Up",
@@ -203,7 +238,30 @@ volcano_df_rna <- volcano_df_base %>%
 rna_colors <- c("Significant" = "#E41A1C", "Not significant" = "grey60")
 
 if (use_proteomics) {
-  prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet)
+  max_examples_to_report <- 10
+  parse_proteomics_numeric <- function(x, column_name) {
+    raw_values <- trimws(as.character(x))
+    parsed_values <- suppressWarnings(as.numeric(raw_values))
+    failed_parse <- !is.na(raw_values) & raw_values != "" & is.na(parsed_values)
+
+    if (any(failed_parse)) {
+      bad_values <- unique(raw_values[failed_parse])
+      message(
+        "Proteomics numeric parse warning for column '", column_name, "': ",
+        length(bad_values), " value(s) could not be converted to numeric and were set to NA. Examples: ",
+        paste(head(bad_values, max_examples_to_report), collapse = ", "),
+        if (length(bad_values) > max_examples_to_report) " ..." else ""
+      )
+    }
+
+    parsed_values
+  }
+
+  # Read all columns as text to prevent Excel date/numeric coercions of gene
+  # symbols (e.g. "MARCH1" → date, "SEPT7" → date).  Numeric columns are
+  # converted explicitly by parse_proteomics_numeric() immediately below.
+  prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet,
+                                  col_types = "text")
 
   # Detect wide vs. long format.
   # Wide format: comparison_column is empty; logfc_column and fdr_column are
@@ -241,17 +299,17 @@ if (use_proteomics) {
   if (wide_format) {
     prot_sig <- prot_tbl %>%
       dplyr::mutate(
-        prot_gene  = as.character(.data[[args$proteomics_gene_column]]),
-        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
-        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+        prot_gene  = trimws(as.character(.data[[args$proteomics_gene_column]])),
+        prot_fdr   = parse_proteomics_numeric(.data[[actual_fdr_col]], actual_fdr_col),
+        prot_logfc = parse_proteomics_numeric(.data[[actual_logfc_col]], actual_logfc_col)
       )
   } else {
     prot_sig <- prot_tbl %>%
       dplyr::filter(.data[[args$proteomics_comparison_column]] == args$proteomics_comparison) %>%
       dplyr::mutate(
-        prot_gene  = as.character(.data[[args$proteomics_gene_column]]),
-        prot_fdr   = suppressWarnings(as.numeric(.data[[actual_fdr_col]])),
-        prot_logfc = suppressWarnings(as.numeric(.data[[actual_logfc_col]]))
+        prot_gene  = trimws(as.character(.data[[args$proteomics_gene_column]])),
+        prot_fdr   = parse_proteomics_numeric(.data[[actual_fdr_col]], actual_fdr_col),
+        prot_logfc = parse_proteomics_numeric(.data[[actual_logfc_col]], actual_logfc_col)
       )
   }
   prot_sig <- prot_sig %>%
@@ -281,6 +339,22 @@ if (use_proteomics) {
     ) %>%
     dplyr::select(-concordance_eligible)
 
+  # ── Diagnostic logging ────────────────────────────────────────────────────
+  n_rna_genes  <- nrow(volcano_df_base)
+  n_prot_sig   <- nrow(prot_sig)
+  n_overlap    <- nrow(volcano_df_prot)
+  message("Proteomics join diagnostics:")
+  message("  RNA genes with non-NA padj  : ", n_rna_genes)
+  message("  Proteomics significant genes: ", n_prot_sig,
+          " (FDR <= ", args$proteomics_fdr_threshold, ")")
+  message("  Overlap (inner join)        : ", n_overlap)
+  if (n_prot_sig > 0 && n_overlap < n_prot_sig) {
+    unmatched <- setdiff(prot_sig$gene_id, volcano_df_base$gene_id)
+    message("  Proteomics genes not in RNA data (", length(unmatched), "): ",
+            paste(head(unmatched, max_examples_to_report), collapse = ", "),
+            if (length(unmatched) > max_examples_to_report) " ..." else "")
+  }
+
   if (nrow(volcano_df_prot) == 0) {
     warning("No overlap between DESeq2 genes and significant proteomics genes for contrast: ",
             contrast_name,
@@ -300,6 +374,7 @@ if (use_proteomics) {
   )
 
   # Plot 1: full RNA volcano (saved as volcano.pdf for backwards compatibility)
+  # Keep a minimal set of top RNA-significant labels.
   p_rna <- make_volcano_plot(
     df           = volcano_df_rna,
     colors       = rna_colors,
@@ -308,11 +383,12 @@ if (use_proteomics) {
     lfc_thr      = lfc_thr,
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
-    contrast_den = contrast_den
+    contrast_den = contrast_den,
+    label_mode   = "top"
   )
   ggsave(file.path(outdir, "volcano.pdf"), plot = p_rna, width = 7, height = 6)
 
-  # Plot 2: proteomics-filtered concordance volcano
+  # Plot 2: proteomics-filtered concordance volcano (all significant labels)
   p_prot <- make_volcano_plot(
     df           = volcano_df_prot,
     colors       = prot_colors,
@@ -321,7 +397,8 @@ if (use_proteomics) {
     lfc_thr      = lfc_thr,
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
-    contrast_den = contrast_den
+    contrast_den = contrast_den,
+    label_mode   = "all"
   )
   ggsave(file.path(outdir, "volcano_proteomics.pdf"), plot = p_prot, width = 7, height = 6)
 
@@ -334,7 +411,8 @@ if (use_proteomics) {
     lfc_thr      = lfc_thr,
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
-    contrast_den = contrast_den
+    contrast_den = contrast_den,
+    label_mode   = "top"
   )
   ggsave(file.path(outdir, "volcano.pdf"), plot = p, width = 7, height = 6)
 }
