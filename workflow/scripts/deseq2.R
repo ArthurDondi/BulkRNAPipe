@@ -146,10 +146,11 @@ plotMA(res, alpha = padj_thr,
 dev.off()
 
 # ─── Volcano plot helper ─────────────────────────────────────────────────────
-# show_labels: when TRUE, significant gene IDs are annotated with ggrepel text.
-#              Set FALSE for plain RNA volcano (original DESeq2-style, points only).
 make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
-                              contrast_num, contrast_den, show_labels = FALSE) {
+                              contrast_num, contrast_den,
+                              label_mode = c("none", "top", "all"),
+                              label_top_n = 10) {
+  label_mode <- match.arg(label_mode)
   p <- ggplot(df, aes(x = log2FoldChange, y = -log10(padj),
                       colour = significance)) +
     geom_point(alpha = 0.6, size = 1.2) +
@@ -168,10 +169,24 @@ make_volcano_plot <- function(df, colors, title, subtitle, lfc_thr, padj_thr,
     theme_bw(base_size = 12) +
     theme(legend.position = "bottom",
           plot.subtitle   = element_text(size = 9, colour = "grey30"))
-  if (show_labels) {
-    label_count <- sum(!is.na(df$label))
-    p <- p + geom_text_repel(aes(label = label), size = 2.5,
-                              max.overlaps = label_count, show.legend = FALSE)
+
+  label_df <- df %>%
+    dplyr::filter(!is.na(label))
+
+  if (label_mode == "top" && nrow(label_df) > 0) {
+    label_df <- label_df %>%
+      dplyr::arrange(padj, dplyr::desc(abs(log2FoldChange))) %>%
+      dplyr::slice_head(n = label_top_n)
+  }
+
+  if (label_mode != "none" && nrow(label_df) > 0) {
+    p <- p + geom_text_repel(
+      data = label_df,
+      aes(label = label),
+      size = 2.5,
+      max.overlaps = nrow(label_df),
+      show.legend = FALSE
+    )
   }
   p
 }
@@ -327,7 +342,7 @@ if (use_proteomics) {
   )
 
   # Plot 1: full RNA volcano (saved as volcano.pdf for backwards compatibility)
-  # Labels are suppressed here to match original DESeq2-style (points only).
+  # Keep a minimal set of top RNA-significant labels.
   p_rna <- make_volcano_plot(
     df           = volcano_df_rna,
     colors       = rna_colors,
@@ -337,11 +352,11 @@ if (use_proteomics) {
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
     contrast_den = contrast_den,
-    show_labels  = FALSE
+    label_mode   = "top"
   )
   ggsave(file.path(outdir, "volcano.pdf"), plot = p_rna, width = 7, height = 6)
 
-  # Plot 2: proteomics-filtered concordance volcano (labels enabled)
+  # Plot 2: proteomics-filtered concordance volcano (all significant labels)
   p_prot <- make_volcano_plot(
     df           = volcano_df_prot,
     colors       = prot_colors,
@@ -351,7 +366,7 @@ if (use_proteomics) {
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
     contrast_den = contrast_den,
-    show_labels  = TRUE
+    label_mode   = "all"
   )
   ggsave(file.path(outdir, "volcano_proteomics.pdf"), plot = p_prot, width = 7, height = 6)
 
@@ -365,7 +380,7 @@ if (use_proteomics) {
     padj_thr     = padj_thr,
     contrast_num = contrast_num,
     contrast_den = contrast_den,
-    show_labels  = FALSE
+    label_mode   = "top"
   )
   ggsave(file.path(outdir, "volcano.pdf"), plot = p, width = 7, height = 6)
 }
