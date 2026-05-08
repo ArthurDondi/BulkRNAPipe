@@ -259,7 +259,7 @@ if (use_proteomics) {
 
   # Read all columns as text to prevent Excel date/numeric coercions of gene
   # symbols (e.g. "MARCH1" → date, "SEPT7" → date).  Numeric columns are
-  # converted explicitly by parse_proteomics_numeric() further below.
+  # converted explicitly by parse_proteomics_numeric() immediately below.
   prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet,
                                   col_types = "text")
 
