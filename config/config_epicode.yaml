@@ -57,29 +57,29 @@ Library:
 #   For single-end data, omit R2 (or leave it as an empty string "").
 #   For SRA data, leave R1/R2 blank and add an "sra" field with the SRR accession.
 samples:
-  NoATRX_Ctrl_1:
-    condition: NoATRX_Ctrl
+  TP53_1:
+    condition: TP53
     R1: 20260203-SK-N-SH-p53-R1-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-R1-RNAbulk_R2_001.fastq.gz
-  NoATRX_Ctrl_2:
-    condition: NoATRX_Ctrl
+  TP53_2:
+    condition: TP53
     R1: 20260203-SK-N-SH-p53-R2-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-R2-RNAbulk_R2_001.fastq.gz
-  NoATRX_Ctrl_3:
-    condition: NoATRX_Ctrl
+  TP53_3:
+    condition: TP53
     R1: 20260203-SK-N-SH-p53-R3-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-R3-RNAbulk_R2_001.fastq.gz
 
-  ATRX_NoVector_1:
-    condition: ATRX_NoVector
+  E6_1:
+    condition: E6
     R1: 20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-R1-RNAbulk_R2_001.fastq.gz
-  ATRX_NoVector_2:
-    condition: ATRX_NoVector
+  E6_2:
+    condition: E6
     R1: 20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-R2-RNAbulk_R2_001.fastq.gz
-  ATRX_NoVector_3:
-    condition: ATRX_NoVector
+  E6_3:
+    condition: E6
     R1: 20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-R3-RNAbulk_R2_001.fastq.gz
 
@@ -109,16 +109,16 @@ samples:
     R1: 20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-1744-R3-RNAbulk_R2_001.fastq.gz
 
-  ATRX_EmptyVector_1:
-    condition: ATRX_EmptyVector
+  EmptyVector_1:
+    condition: EmptyVector
     R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R1-RNAbulk_R2_001.fastq.gz
-  ATRX_EmptyVector_2:
-    condition: ATRX_EmptyVector
+  EmptyVector_2:
+    condition: EmptyVector
     R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R2-RNAbulk_R2_001.fastq.gz
-  ATRX_EmptyVector_3:
-    condition: ATRX_EmptyVector
+  EmptyVector_3:
+    condition: EmptyVector
     R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R2_001.fastq.gz
     
@@ -129,20 +129,20 @@ samples:
 DESeq2:
   contrasts:
     # Each contrast: [name_for_output, numerator, denominator(reference)]
-    # Compare untransfected control vs. E6 alone (ATRX_NoVector)
-    #- [NoATRX_Ctrl_vs_ATRX_NoVector, ATRX_NoVector, NoATRX_Ctrl]
-    # Compare E6 alone vs. empty vector control
-    - [ATRX_NoVector_vs_ATRX_EmptyVector, ATRX_EmptyVector, ATRX_NoVector]
-    # Compare empty vector vs. ATRX full-length
-    #- [ATRX_EmptyVector_vs_ATRX_FL, ATRX_FL, ATRX_EmptyVector]
+    # Compare ATRX+ cell line vs. ATRX- (E6) cell line
+    - [TP53_vs_E6, E6, TP53]
+    # Compare E6 alone vs. E6 + empty vector
+    - [E6_vs_EmptyVector, EmptyVector, E6]
+    # Compare E6 + empty vector vs. E6 + ATRX full-length
+    - [EmptyVector_vs_ATRX_FL, ATRX_FL, EmptyVector]
     # Compare empty vector vs. ATRX in-frame fusion
-    #- [ATRX_EmptyVector_vs_ATRX_IFF, ATRX_IFF, ATRX_EmptyVector]
+    - [EmptyVector_vs_ATRX_IFF, ATRX_IFF, EmptyVector]
     # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
-    - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
+    - [ATRX_FL_vs_ATRX_IFF, ATRX_IFF, ATRX_FL]
     # Compare ATRX+ cell line vs. ATRX in-frame fusion
-    - [NoATRX_Ctrl_vs_ATRX_IFF, ATRX_IFF, NoATRX_Ctrl]
+    - [TP53_vs_ATRX_IFF, ATRX_IFF, TP53]
     # Compare ATRX+ cell line vs. ATRX FL (rescue experiment)
-    - [NoATRX_Ctrl_vs_ATRX_FL, ATRX_FL, NoATRX_Ctrl]
+    - [TP53_vs_ATRX_FL, ATRX_FL, TP53]
 
 
   # ─── Combined / derived conditions ─────────────────────────────────────────
@@ -159,8 +159,8 @@ DESeq2:
   #     member of the combined group on the other side.
   combine_conditions:
     ATRX_Ctrl:
-      - ATRX_NoVector
-      - ATRX_EmptyVector
+      - E6
+      - EmptyVector
 
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
@@ -169,9 +169,9 @@ DESeq2:
 
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:
-  enabled: False
+  enabled: True
   limma_xlsx: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx
-  sheet: "limma result"
+  sheet: "limma result filtered"
   gene_column: "Gene"
   # Wide-format Excel: comparison_column is empty; logfc_column and fdr_column
   # are suffixes appended to the comparison name to form the actual column names
@@ -181,19 +181,19 @@ Proteomics:
   logfc_column: "_LOG2FC"
   fdr_threshold: 0.05
   # Sample code mapping used below:
-  #   S1011 = ATRX_FL  |  S1744 = ATRX_IFF  |  S1760 = ATRX_EmptyVector
-  #   SE6   = ATRX_NoVector  |  control = NoATRX_Ctrl
+  #   S1011 = ATRX_FL  |  S1744 = ATRX_IFF  |  S1760 = EmptyVector
+  #   SE6   = E6  |  control = TP53
   #
   # Note: ATRX_Ctrl (DESeq2 combined NoVector+EmptyVector) has no direct
   # proteomics equivalent; the vs-control comparisons are the closest match.
   deseq2_to_proteomics_comparison:
-    #NoATRX_Ctrl_vs_ATRX_NoVector:       "SE6_vs_control"
-    ATRX_NoVector_vs_ATRX_EmptyVector:  "S1760_vs_SE6"
-    #ATRX_EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
-    #ATRX_EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
+    #TP53_vs_E6:       "SE6_vs_control"
+    E6_vs_EmptyVector:  "S1760_vs_SE6"
+    #EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
+    #EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
     ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
-    NoATRX_Ctrl_vs_ATRX_FL:               "S1011_vs_control" 
-    NoATRX_Ctrl_vs_ATRX_IFF:              "S1744_vs_control"   
+    TP53_vs_ATRX_FL:               "S1011_vs_control" 
+    TP53_vs_ATRX_IFF:              "S1744_vs_control"   
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
@@ -220,8 +220,8 @@ GO:
 # "Normalise" IFF-vs-FL by subtracting the IFF-vs-Ctrl baseline.
 ContrastComparisons:
   - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
-    contrast_A: ATRX_IFF_vs_ATRX_FL
-    contrast_B: NoATRX_Ctrl_vs_ATRX_IFF
+    contrast_A: ATRX_FL_vs_ATRX_IFF
+    contrast_B: TP53_vs_ATRX_IFF
     delta_nes: True
     residual_rank: True
 

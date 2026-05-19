@@ -89,6 +89,8 @@ res_df <- read.csv(args$results, stringsAsFactors = FALSE, check.names = FALSE) 
   )
 
 prot_tbl <- readxl::read_excel(args$proteomics_xlsx, sheet = args$proteomics_sheet, col_types = "text")
+print("prot_tbl")
+print(prot_tbl)
 
 wide_format <- nchar(trimws(args$proteomics_comparison_column)) == 0
 if (wide_format) {
@@ -136,6 +138,8 @@ prot_sig <- prot_sig %>%
     )
   ) %>%
   dplyr::select(gene_id = prot_gene, prot_direction)
+print("prot_sig")
+print(prot_sig)
 
 # Strict filtering: only genes present in significant proteomics set are kept.
 volcano_df <- res_df %>%
@@ -149,6 +153,8 @@ volcano_df <- res_df %>%
     ),
     label = ifelse(rna_significant, gene_id, NA_character_)
   )
+print("volcano_df")
+print(volcano_df)
 
 if (nrow(volcano_df) == 0) {
   warning("No overlap between RNA DESeq2 results and significant proteomics genes for contrast: ", contrast_name)
