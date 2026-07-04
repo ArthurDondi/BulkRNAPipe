@@ -19,7 +19,7 @@ rule STARindex:
         runtime       = 240,
         cpus_per_task = 16,
         slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
-        slurm_extra   = "--qos=mediumq",
+        qos             = "mediumq",  # qos must match the partition (not via slurm_extra)
     conda:
         "../envs/star.yaml"
     log:
@@ -59,7 +59,7 @@ if PAIRED:
             runtime         = 180,
             cpus_per_task   = 8,
             slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
-            slurm_extra     = "--qos=mediumq",
+            qos             = "mediumq",  # qos must match the partition (not via slurm_extra)
         conda:
             "../envs/star.yaml"
         log:
@@ -99,7 +99,7 @@ else:
             runtime         = 180,
             cpus_per_task   = 8,
             slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
-            slurm_extra     = "--qos=mediumq",
+            qos             = "mediumq",  # qos must match the partition (not via slurm_extra)
         conda:
             "../envs/star.yaml"
         log:

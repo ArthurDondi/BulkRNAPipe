@@ -187,15 +187,32 @@ snakemake -s workflow/Snakefile --configfile config/config_myproject.yaml \
 
 ### 3b. SLURM cluster run
 
-Edit `profile/slurm/config.yaml` to match your cluster, then:
+One-time setup in the BulkRNAPipe conda env — install the SLURM executor plugin
+and create the controller log directory:
 
 ```bash
-bash run_BulkRNAPipe_slurm.sh
+pip install snakemake-executor-plugin-slurm
+mkdir -p logs
 ```
 
-Snakemake itself runs on the login node and dispatches each rule as a separate
-Slurm job.  Run it inside a `screen` or `tmux` session to keep it alive after
-disconnecting.
+Edit `profile/slurm/config.yaml` to match your cluster's partitions/QoS, then
+submit the controller batch job (it runs Snakemake on `longq` and dispatches
+each rule as its own SLURM job):
+
+```bash
+sbatch run_BulkRNAPipe_slurm.sh                          # uses config/config.yaml
+sbatch run_BulkRNAPipe_slurm.sh config/config_myproject.yaml
+```
+
+Edit the `#SBATCH` log paths / `--mail-user` at the top of that script for your
+account. To run interactively instead (Snakemake on the login node, inside a
+`screen`/`tmux` session so it survives disconnecting), dry-run first then drop
+`-n`:
+
+```bash
+snakemake -s workflow/Snakefile --configfile config/config.yaml \
+    --workflow-profile profile/slurm -n
+```
 
 ## Running on a SLURM cluster
 
@@ -205,15 +222,23 @@ Edit `profile/slurm/config.yaml`:
 
 | Field | Description | Default |
 |-------|-------------|---------|
-| `slurm_partition` | Partition/queue for jobs | `cpu` |
+| `slurm_partition` | Default partition/queue for jobs | `tinyq` (≤ 2 h) |
+| `qos` | QoS — must match the partition | `tinyq` |
 | `mem_mb` | Default memory per job (MB) | `16000` |
-| `runtime` | Default wall-clock limit (minutes) | `240` |
+| `runtime` | Default wall-clock limit (minutes) | `120` |
 | `cpus_per_task` | Default CPUs per job | `4` |
 | `jobs` | Max concurrent Slurm jobs | `50` |
 
-Rules that are resource-intensive override these defaults via their own
-`resources:` blocks (e.g. `STARindex` requests 64 GB RAM and 16 CPUs;
-`STARalign` requests 32 GB and 8 CPUs).
+On this cluster the QoS must match the partition, and QoS is set via the
+dedicated `qos` resource rather than `slurm_extra`, because the SLURM executor
+plugin manages QoS itself and rejects `--qos` passed through `slurm_extra`.
+`runtime` is expressed in **minutes**.
+
+Rules that exceed the 2 h `tinyq` limit override the partition/QoS in their own
+`resources:` block to route to `mediumq` (e.g. `STARindex` requests 64 GB RAM,
+16 CPUs, `mediumq`; `STARalign` requests 32 GB, 8 CPUs, `mediumq`). Per-rule
+`mem_mb` / `runtime` declared on the rules take precedence over the profile
+defaults.
 
 ## Outputs
 
