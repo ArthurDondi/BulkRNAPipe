@@ -1,38 +1,50 @@
 #!/bin/bash
-# Run BulkRNAPipe on a SLURM cluster.
+#SBATCH --output logs/BulkRNAPipe_%j.log
+#SBATCH --error  logs/BulkRNAPipe_%j.err
+#SBATCH --job-name=BulkRNAPipe
+#SBATCH --partition=longq      # 30d limit: long enough for the whole workflow
+#SBATCH --qos=longq            # qos must match the partition
+#SBATCH --time=2-00:00:00      # 2 days (raise for very large sample sets)
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1      # this job is only the Snakemake controller
+#SBATCH --mem=8000             # controller is light; rules get their own jobs
+#SBATCH --mail-type=end
+#SBATCH --mail-user=arthur.dondi@cemm.at
 #
-# This script submits the Snakemake orchestrator itself as a SLURM job on
-# mediumq (up to 2 days), which in turn dispatches each pipeline rule as its
-# own individual Slurm job via the profile in profile/slurm/config.yaml.
+# Run the whole BulkRNAPipe Snakemake workflow on the SLURM cluster.
 #
-# Requirements:
+# This batch job is the Snakemake *controller*: it stays alive for the whole
+# run and submits each rule as its own SLURM job through the profile in
+# profile/slurm/config.yaml (per-rule memory / walltime / partition). It
+# therefore needs few resources itself but a long walltime, hence longq.
+#
+# One-time setup (in the BulkRNAPipe conda env):
 #   pip install snakemake-executor-plugin-slurm
 #
-# Usage (from the BulkRNAPipe/ root directory):
-#   bash run_BulkRNAPipe_slurm.sh
+# Create the controller log directory once before the first submission:
+#   mkdir -p logs
 #
-# The Snakemake log is written to logs/snakemake_<jobid>.out/err in the
-# current directory.
+# Submit with (from the BulkRNAPipe/ root):
+#   sbatch run_BulkRNAPipe_slurm.sh [config/your_config.yaml]
 #
-# --configfile             : change to point to your own config file
-# --profile profile/slurm  : load the Slurm executor profile
-# --rerun-triggers ...     : resubmit when inputs or params change
+# Edit the #SBATCH log paths / --mail-user above for your account.
 
-mkdir -p logs
+set -euo pipefail
 
-sbatch \
-    --partition=mediumq \
-    --qos=mediumq \
-    --job-name=BulkRNAPipe \
-    --output=logs/snakemake_%j.out \
-    --error=logs/snakemake_%j.err \
-    --time=2-00:00:00 \
-    --ntasks=1 \
-    --cpus-per-task=1 \
-    --mem=4G \
-    --wrap="snakemake \
-        -s workflow/Snakefile \
-        --configfile config/config.yaml \
-        --profile profile/slurm \
-        --rerun-triggers mtime params \
-        -p"
+CONFIG="${1:-config/config.yaml}"
+
+echo "======================"
+echo "submit dir : ${SLURM_SUBMIT_DIR:-$PWD}"
+echo "job name   : ${SLURM_JOB_NAME:-BulkRNAPipe}"
+echo "partition  : ${SLURM_JOB_PARTITION:-longq}"
+echo "job id     : ${SLURM_JOB_ID:-NA}"
+echo "config     : $CONFIG"
+echo "======================"
+
+snakemake \
+    -s workflow/Snakefile \
+    --configfile "$CONFIG" \
+    --workflow-profile profile/slurm \
+    --rerun-triggers mtime params software-env \
+    -p

@@ -1,42 +1,49 @@
-# Snakemake profile for SLURM execution
+# Snakemake workflow profile for SLURM submission.
 #
 # Requires snakemake-executor-plugin-slurm:
 #   pip install snakemake-executor-plugin-slurm
 #
-# Usage:
-#   snakemake --profile profile/slurm ...
+# Usage (from BulkRNAPipe/):
+#   snakemake -s workflow/Snakefile \
+#       --configfile config/<your_config>.yaml \
+#       --workflow-profile profile/slurm
 #
-# The Snakemake orchestrator itself is submitted via sbatch to mediumq in
-# run_BulkRNAPipe_slurm.sh. This profile controls the per-rule Slurm jobs.
+# The Snakemake controller itself is submitted to longq via
+# run_BulkRNAPipe_slurm.sh; this profile controls the per-rule Slurm jobs.
 #
-# Default partition is tinyq (≤ 2 h). Rules that exceed 2 h override
-# slurm_partition and slurm_extra in their own resources block.
+# Notes
+# - QoS is set via the dedicated `qos` resource (NOT via slurm_extra): the SLURM
+#   executor plugin manages QoS itself and rejects `--qos` inside slurm_extra.
+#   This cluster requires qos to match the partition, so each partition is
+#   paired with its matching qos below.
+# - `runtime` is in MINUTES (not the D-HH:MM:SS strings shown in the queue table).
+# - Default partition is tinyq (≤ 2 h), which fits the light rules (QC, MultiQC,
+#   DESeq2, GSEA, GO). Rules that exceed 2 h (STAR index / align) override
+#   slurm_partition and qos in their own resources block to route to mediumq.
+# - Per-rule `mem_mb` / `runtime` declared in workflow/rules/*.smk take
+#   precedence over these default-resources.
 
 executor: slurm
-
-# Default resources applied to every rule unless overridden in the rule itself
-default-resources:
-  slurm_partition: "tinyq"          # ≤ 2 h jobs
-  slurm_extra: "--qos=tinyq"        # qos must match the partition
-  mem_mb: 16000                     # 16 GB RAM per job
-  runtime: 120                      # Wall-clock limit in minutes (2 h = tinyq max)
-  cpus_per_task: 4                  # Default CPUs per Slurm task
-  tasks: 1
+use-conda: true
+conda-frontend: conda
+jobs: 50                  # max SLURM jobs in flight at once (stay under group limits)
+latency-wait: 60
+printshellcmds: true
 
 # Allow one automatic retry on failure (useful for transient I/O errors)
 retries: 1
 
-# Maximum number of Slurm jobs submitted in parallel
-jobs: 50
-
-# Conda settings
-use-conda: true
-conda-frontend: conda
-
-# Print shell commands as they are executed
-printshellcmds: true
-
-# Re-submit a job when its input modification time or parameters change
+# Re-submit a job when its inputs, params, or conda environment change
 rerun-triggers:
   - mtime
   - params
+  - software-env
+
+# Default resources applied to every rule unless the rule itself overrides them
+default-resources:
+  slurm_partition: "tinyq"          # ≤ 2 h jobs
+  qos: "tinyq"                       # qos must match the partition
+  mem_mb: 16000                     # 16 GB RAM per job
+  runtime: 120                      # wall-clock limit in minutes (2 h = tinyq max)
+  cpus_per_task: 4                  # default CPUs per Slurm task
+  tasks: 1
