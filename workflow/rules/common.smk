@@ -17,10 +17,43 @@ READ_LENGTH = config['Library']['read_length']
 STRANDEDNESS = config['Library']['strandedness']
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
+OUTPUT     = config['User']['output_dir']
 INPUT      = config['User']['input_dir']
 GENOME     = config['Reference']['genome_fasta']
 GTF        = config['Reference']['gtf']
 STAR_INDEX = config['Reference']['star_index']
+
+# ─── Validate configured paths ────────────────────────────────────────────────
+# The template config (config/config.yaml) ships with placeholder paths such as
+# '/path/to/output'. If the pipeline is launched before these are replaced with
+# real paths — e.g. `sbatch run_BulkRNAPipe_slurm.sh` with no config argument,
+# which defaults to the template — Snakemake's `workdir:` directive tries to
+# create '/path/to/output' and dies with an opaque
+# "PermissionError: [Errno 13] Permission denied: '/path'". Detect leftover
+# placeholders here (common.smk is parsed before the `workdir:` directive) and
+# raise a clear, actionable message instead.
+_PLACEHOLDER_PREFIX = "/path/to/"
+
+def _check_configured(name, value, needed=True):
+    """Raise a clear error if a required path is still the template placeholder."""
+    if needed and str(value).startswith(_PLACEHOLDER_PREFIX):
+        raise ValueError(
+            f"BulkRNAPipe config error: '{name}' is still set to the template "
+            f"placeholder '{value}'. Edit your config before running — copy the "
+            "template with `cp config/config.yaml config/config_myproject.yaml`, "
+            "fill in real paths, and pass it explicitly, e.g. "
+            "`sbatch run_BulkRNAPipe_slurm.sh config/config_myproject.yaml`."
+        )
+
+_reads_raw_fastq = QC_RAW or TRIM or ALIGN
+_check_configured('User.output_dir',        OUTPUT)
+_check_configured('User.input_dir',         INPUT,      needed=_reads_raw_fastq)
+_check_configured('Reference.genome_fasta', GENOME,     needed=ALIGN)
+_check_configured('Reference.gtf',          GTF,        needed=ALIGN or QUANTIFY)
+_check_configured('Reference.star_index',   STAR_INDEX, needed=ALIGN)
+if PROTEOMICS:
+    _check_configured('Proteomics.limma_xlsx',
+                      config.get('Proteomics', {}).get('limma_xlsx', ''))
 
 # ─── Samples and contrasts ────────────────────────────────────────────────────
 SAMPLES   = list(config['samples'].keys())
