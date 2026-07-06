@@ -185,3 +185,10 @@ def get_proteomics_comparison(contrast_name):
     """Return the mapped proteomics comparison string for a DESeq2 contrast."""
     mapping = _proteomics_cfg.get('deseq2_to_proteomics_comparison') or {}
     return mapping.get(contrast_name, "")
+
+# Subset of DESeq2 contrasts that have a non-empty proteomics comparison mapping
+# in deseq2_to_proteomics_comparison.  Only these contrasts get a
+# DESeq2 × proteomics overlay (volcano_proteomic.pdf); contrasts without a
+# mapping are skipped so the overlay rule never runs with an empty comparison
+# (which would otherwise fail with "Missing required proteomics parameters").
+PROTEOMICS_CONTRASTS = [c for c in CONTRASTS if get_proteomics_comparison(c)]
