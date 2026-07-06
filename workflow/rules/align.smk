@@ -55,7 +55,9 @@ if PAIRED:
             extra   = config['STAR'].get('align_extra', ''),
         threads: 8
         resources:
-            mem_mb          = 32000,
+            # hg38 genome load (~27-30 GB) plus the 2-pass junction re-insertion
+            # that rebuilds the index in memory pushes peak RSS past 32 GB (OOM).
+            mem_mb          = 48000,
             runtime         = 180,
             cpus_per_task   = 8,
             slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
@@ -95,7 +97,9 @@ else:
             extra  = config['STAR'].get('align_extra', ''),
         threads: 8
         resources:
-            mem_mb          = 32000,
+            # hg38 genome load (~27-30 GB) plus the 2-pass junction re-insertion
+            # that rebuilds the index in memory pushes peak RSS past 32 GB (OOM).
+            mem_mb          = 48000,
             runtime         = 180,
             cpus_per_task   = 8,
             slurm_partition = "mediumq",  # > 2 h → cannot use tinyq
