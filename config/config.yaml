@@ -116,6 +116,31 @@ DESeq2:
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
+# ─── PCA (sample-level QC) ───────────────────────────────────────────────────
+# The PCA rule always writes two plots to deseq2/:
+#   pca.pdf                 – every gene in counts.txt
+#   pca_no_vector_genes.pdf – the same PCA after dropping the features listed
+#                             below (dropped before normalisation, so size
+#                             factors and the VST are re-estimated without them)
+# It also writes pca_excluded_genes.csv, listing every excluded feature and the
+# % of each library it accounts for.
+#
+# Use this when your reference contains extra contigs for a delivery vector
+# (EGFP, mCherry, a transgene ORF, a selection marker, ...): those features are
+# zero in untransduced samples and very highly expressed in transduced ones, so
+# they can pull the PCA on their own.  Leave the lists empty for a plain
+# reference — both plots are then identical.
+PCA:
+  # Exact gene IDs as they appear in the Geneid column of counts.txt
+  # (case-insensitive).  Must match the gene_id used in your GTF.
+  exclude_genes: []
+  # Regular expressions matched against gene IDs (case-insensitive), for when
+  # the vector features share a naming prefix, e.g. ["^vector_", "GFP"]
+  exclude_gene_patterns: []
+  # Reference contig names; a gene is dropped when all of its exons sit on
+  # these contigs, e.g. ["pLVX_EF1a_ATRX_IRES_mCherry"]
+  exclude_contigs: []
+
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 # When enabled, an additional volcano file (volcano_proteomic.pdf) is generated
 # per contrast using DESeq2 results restricted to genes that are significant in

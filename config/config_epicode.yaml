@@ -167,6 +167,25 @@ DESeq2:
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
+# ─── PCA (sample-level QC) ───────────────────────────────────────────────────
+# Two PCA plots are written to deseq2/: pca.pdf (all genes) and
+# pca_no_vector_genes.pdf (transgene/vector features removed before
+# normalisation), plus pca_excluded_genes.csv reporting the % of each library
+# taken up by the excluded features.
+#
+# The reference here is hg38_plus_vectors, so EGFP / mCherry are real rows in
+# counts.txt: zero in TP53 and E6, very high in EmptyVector / ATRX_FL /
+# ATRX_IFF.  Check the exact IDs used in the custom GTF with
+#   grep -o 'gene_id "[^"]*"' hg38_plus_vectors.gtf | sort -u
+# and fix the names below if they differ - pca.R prints a WARNING in
+# logs/PCA/pca.log for any entry that matches nothing.
+PCA:
+  exclude_genes:
+    - EGFP
+    - mCherry
+  exclude_gene_patterns: []
+  exclude_contigs: []
+
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:
   enabled: True

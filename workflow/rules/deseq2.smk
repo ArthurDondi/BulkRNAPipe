@@ -1,11 +1,18 @@
 ### Rules for differential expression analysis with DESeq2
 
 rule PCA:
-    """PCA plot (PC1 vs PC2, % variance explained) across all samples."""
+    """PCA plots (PC1 vs PC2, % variance explained) across all samples.
+
+    Two plots are produced: one on the full count matrix and one after removing
+    the transgene / vector features listed under the PCA block in the config
+    (e.g. EGFP, mCherry when aligning against a genome+vector reference).
+    """
     input:
         counts = "quantify/counts.txt",
     output:
-        pca_plot = "deseq2/pca.pdf",
+        pca_plot           = "deseq2/pca.pdf",
+        pca_plot_no_vector = "deseq2/pca_no_vector_genes.pdf",
+        excluded_genes     = "deseq2/pca_excluded_genes.csv",
     params:
         script  = f"{workflow.basedir}/scripts/pca.R",
         outdir  = "deseq2",
@@ -14,6 +21,9 @@ rule PCA:
         samples = lambda wildcards: ",".join(
             f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
         ),
+        exclude_genes         = ",".join(PCA_EXCLUDE_GENES),
+        exclude_gene_patterns = ",".join(PCA_EXCLUDE_GENE_PATTERNS),
+        exclude_contigs       = ",".join(PCA_EXCLUDE_CONTIGS),
     threads: 1
     resources:
         mem_mb        = 4000,
@@ -32,7 +42,10 @@ rule PCA:
         Rscript {params.script} \
             --counts   {input.counts} \
             --outdir   {params.outdir} \
-            --samples  {params.samples}
+            --samples  {params.samples} \
+            --exclude_genes         "{params.exclude_genes}" \
+            --exclude_gene_patterns "{params.exclude_gene_patterns}" \
+            --exclude_contigs       "{params.exclude_contigs}"
         """
 
 

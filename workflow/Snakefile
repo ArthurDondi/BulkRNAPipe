@@ -31,6 +31,7 @@ rule BulkRNAPipe_output:
         expand("deseq2/{contrast}/volcano_proteomic.pdf", contrast=PROTEOMICS_CONTRASTS) if DESEQ2 and PROTEOMICS else [],
         # ── PCA ───────────────────────────────────────────────────────────────
         "deseq2/pca.pdf" if DESEQ2 else [],
+        "deseq2/pca_no_vector_genes.pdf" if DESEQ2 else [],
         # ── GSEA ─────────────────────────────────────────────────────────────
         expand("gsea/{contrast}/{collection}_results.csv",
                contrast=CONTRASTS, collection=GSEA_COLLECTIONS) if GSEA else [],

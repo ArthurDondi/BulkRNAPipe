@@ -152,6 +152,31 @@ def get_bam_files(_):
     """Return all sorted BAM files for featureCounts."""
     return expand("align/{sample}/{sample}.Aligned.sortedByCoord.out.bam", sample=SAMPLES)
 
+# ─── PCA gene exclusion (transgene / vector features) ────────────────────────
+# When the reference contains extra contigs for the delivery vector (EGFP,
+# mCherry, a transgene ORF, ...), those features are present in counts.txt and
+# can drive the sample-level PCA on their own: they are zero in untransduced
+# samples and very highly expressed in transduced ones.  The PCA rule therefore
+# emits two plots, and these lists define what the second one drops.
+_pca_cfg = config.get('PCA', {}) or {}
+
+PCA_EXCLUDE_GENES         = [str(g) for g in (_pca_cfg.get('exclude_genes') or [])]
+PCA_EXCLUDE_GENE_PATTERNS = [str(p) for p in (_pca_cfg.get('exclude_gene_patterns') or [])]
+PCA_EXCLUDE_CONTIGS       = [str(c) for c in (_pca_cfg.get('exclude_contigs') or [])]
+
+# Commas are the delimiter used to pass these lists to pca.R.
+for _lst, _name in (
+    (PCA_EXCLUDE_GENES, 'exclude_genes'),
+    (PCA_EXCLUDE_GENE_PATTERNS, 'exclude_gene_patterns'),
+    (PCA_EXCLUDE_CONTIGS, 'exclude_contigs'),
+):
+    for _entry in _lst:
+        if ',' in _entry:
+            raise ValueError(
+                f"PCA.{_name}: entry '{_entry}' contains a comma, which is used "
+                "as the list delimiter. Split it into separate list entries."
+            )
+
 # ─── GSEA / GO derived variables ─────────────────────────────────────────────
 
 # Flatten collection identifiers to safe filesystem names, e.g.

@@ -58,7 +58,7 @@ BulkRNAPipe/
 │   │   └── gsea.yaml               # fgsea + msigdbr + clusterProfiler
 │   └── scripts/
 │       ├── deseq2.R                # DESeq2 differential expression
-│       ├── pca.R                   # PCA plot
+│       ├── pca.R                   # PCA plots (all genes + vector-free)
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
 │       ├── gsea.R                  # fgsea enrichment per contrast
 │       ├── go.R                    # GO enrichment per contrast
@@ -253,6 +253,10 @@ output_dir/
 ├── trim/{sample}/                            # Trimmed FASTQs
 ├── align/{sample}/                           # BAM files + STAR logs
 ├── quantify/counts.txt                       # Gene × sample count matrix
+├── deseq2/
+│   ├── pca.pdf                               # Sample PCA, all genes
+│   ├── pca_no_vector_genes.pdf               # Sample PCA, transgene/vector features removed
+│   └── pca_excluded_genes.csv                # Excluded features + % of each library
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
@@ -280,6 +284,55 @@ output_dir/
 ├── logs/                                     # Per-rule log files
 └── benchmark/                                # Per-rule benchmark files
 ```
+
+## PCA and transgene / vector features
+
+The `PCA` rule writes two plots into `deseq2/`:
+
+| File | Content |
+| --- | --- |
+| `pca.pdf` | PCA over every gene in `quantify/counts.txt` |
+| `pca_no_vector_genes.pdf` | Same PCA after removing the transgene / vector features configured below |
+| `pca_excluded_genes.csv` | The features that were removed and the % of each library they account for |
+
+Both plots use the same recipe as before (counts filtered at ≥ 10 reads total,
+blind VST, `plotPCA` on the top 500 most-variable genes). The exclusion happens
+on the raw count matrix **before** the `DESeqDataSet` is built, so size factors
+and the VST for the second plot are estimated on the human-only matrix — vector
+transcripts driven by strong promoters can take a non-trivial share of the
+library in transduced samples and shift the normalisation itself.
+
+This matters when the STAR/featureCounts reference carries extra contigs for a
+delivery vector (EGFP, mCherry, a transgene ORF, a selection marker). Those
+features are structurally zero in untransduced samples and very high in
+transduced ones, so they sit in the top-variance gene set and can pull a
+principal component on their own.
+
+```yaml
+PCA:
+  # Exact gene IDs from the Geneid column of counts.txt (case-insensitive)
+  exclude_genes:
+    - EGFP
+    - mCherry
+  # Regexes matched against gene IDs, for shared naming prefixes
+  exclude_gene_patterns: []
+  # Contig names; a gene is dropped when all of its exons sit on these contigs
+  exclude_contigs: []
+```
+
+Leave the lists empty (the default) for a plain reference — the two plots are
+then identical. Entries that match nothing are **not** an error, but `pca.R`
+prints a `WARNING` line to `logs/PCA/pca.log`; check there if the two plots come
+out identical unexpectedly. The gene IDs must match the `gene_id` attribute in
+your GTF, which you can list with:
+
+```bash
+grep -o 'gene_id "[^"]*"' /path/to/genome_plus_vectors.gtf | sort -u
+```
+
+Note that this exclusion applies to the PCA only. DESeq2, GSEA and GO still see
+the full count matrix; the vector features simply appear as (very significant)
+genes in contrasts that cross the transduction boundary.
 
 ## GSEA / GO enrichment modules
 
