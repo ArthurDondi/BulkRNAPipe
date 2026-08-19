@@ -287,10 +287,11 @@ message("GO raw dotplot written to: ", out_pdf_raw)
 # given, so both memory and runtime scale with the SQUARE of that count.
 #
 # enrichGO above is deliberately run with pvalueCutoff=1/qvalueCutoff=1, so `ego`
-# holds every tested term - on the order of ten thousand for BP. Handing that
-# whole object to simplify() means a ~10,000 x 10,000 similarity matrix, which
-# exhausts the job allocation and gets the process killed by the scheduler (a
-# SIGKILL, which the tryCatch below cannot intercept).
+# holds every tested term - 6379 of them for BP with minGSSize 10 / maxGSSize 500
+# against org.Hs.eg.db. Handing that whole object to simplify() means a
+# 6379 x 6379 matrix: 40.7 million pairwise Wang comparisons, which overruns the
+# job allocation and gets the process killed by the scheduler (a SIGKILL, which
+# the tryCatch below cannot intercept).
 #
 # Restricting it to the significant terms first is not an approximation: the
 # result is filtered to p.adjust <= padj_cutoff immediately afterwards anyway,
