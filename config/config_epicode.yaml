@@ -354,16 +354,40 @@ SignatureReversal:
     padj_threshold: 0.05
     lfc_threshold: 0.0
     restored_fraction: 0.5
-  # Sanity check: the empty vector should NOT reverse the KO signature.  A
-  # reversal score far from zero here means the score is picking up the
-  # transduction step rather than ATRX, and the two rescue scores above have to
-  # be read against this baseline rather than against zero.
-  - name: EmptyVector_reverses_KO_signature_NEGATIVE_CONTROL
+  # The same two comparisons with the signature restricted to genes that moved
+  # substantially in the KO.  With lfc_threshold 0.0 the signature is ~8600 genes
+  # - close to half the transcriptome - because the E6/TP53 contrast carries the
+  # whole clonal difference, not just ATRX loss.  Most of those genes cannot
+  # respond to ATRX at all, and their noisy log2FCs flatten the slope through
+  # regression dilution.  Requiring |log2FC| >= 1 keeps the genes where a real
+  # effect exists.  Both versions are run so the two can be compared.
+  - name: ATRX_FL_reverses_KO_signature_lfc1
     signature_contrast: TP53_vs_E6
-    response_contrast:  E6_vs_EmptyVector
+    response_contrast:  EmptyVector_vs_ATRX_FL
     padj_threshold: 0.05
-    lfc_threshold: 0.0
+    lfc_threshold: 1.0
     restored_fraction: 0.5
+  - name: ATRX_IFF_reverses_KO_signature_lfc1
+    signature_contrast: TP53_vs_E6
+    response_contrast:  EmptyVector_vs_ATRX_IFF
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
+    restored_fraction: 0.5
+
+  # NOTE: there is deliberately no EmptyVector negative control here.  The only
+  # candidate, TP53_vs_E6 against E6_vs_EmptyVector, shares the E6 group: E6
+  # enters the signature as the numerator and the response as the denominator,
+  # so its sampling noise appears with opposite signs on the two axes and
+  # manufactures a negative correlation with no biology involved.  On pure noise
+  # that pair scores ~66% "reversed" with rho ~ -0.5.  The script now detects any
+  # shared condition, flags the comparison as not interpretable, and stamps the
+  # warning onto the figure.
+  #
+  # The baseline instead comes from the permutation null computed inside every
+  # comparison (n_perm, default 1000): the response log2FCs are shuffled across
+  # genes, which preserves both sign distributions and gives the true baseline
+  # for this statistic on this data.  Read excess_over_null and perm_p in
+  # reversal_stats.csv, not pct_reversed against an assumed 50%.
 
 # ─── Contrast comparisons ────────────────────────────────────────────────────
 # "Normalise" IFF-vs-FL by subtracting the IFF-vs-Ctrl baseline.

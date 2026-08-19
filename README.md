@@ -439,17 +439,33 @@ SignatureReversal:
 | Field | Meaning |
 | --- | --- |
 | `reversal_score` | −slope of the total-least-squares fit; 1 = complete reversal, 0 = no response |
-| `pct_reversed` | % of signature genes moving the opposite way, with a binomial test |
+| `pct_reversed` | % of signature genes moving the opposite way |
+| `null_pct_reversed` / `excess_over_null` / `perm_p` | permutation baseline, the excess over it, and its empirical p-value |
+| `shares_condition` / `interpretable` | flags a pair whose contrasts share a group, which invalidates the score |
 | `pct_restored` | % recovering at least `restored_fraction` of the perturbation |
 | `spearman_rho` | rank correlation between the two fold-change vectors |
 
 Total least squares rather than ordinary least squares: both axes are estimated
 with comparable noise, and OLS would bias the slope toward zero.
 
-**Always configure a negative control** — an intervention that should not
-reverse the signature (the empty vector against the untransduced parent). Scores
-are mildly attenuated by selecting genes on the signature contrast, so the
-rescue scores should be read against that baseline rather than against zero.
+**The two contrasts must not share a condition.** If they do, that group's
+sampling noise enters one log2FC positively and the other negatively, creating a
+negative correlation out of nothing — on pure noise, sharing one group of three
+replicates gives ~66% "reversed" and rho ~ -0.5. The script detects this, sets
+`interpretable = FALSE`, and stamps the warning onto the figure. It rules out the
+obvious-looking negative control (a knockout signature against
+`control vs control+empty_vector`), which shares the knockout group.
+
+**Read `excess_over_null`, not `pct_reversed`.** Every comparison builds a
+permutation null by shuffling the response log2FCs across genes, which preserves
+both sign distributions and gives the baseline this statistic actually has on
+this data. The binomial test against 50% is also reported, but it assumes
+balanced signs in both contrasts and is optimistic when they are skewed.
+
+**Beware a signature that is too broad.** Selecting on a contrast whose groups
+differ by more than the intended variable admits genes no intervention could
+reverse, which dilutes the slope toward zero. Raising `lfc_threshold` restricts
+the signature to genes with a substantial effect.
 
 ### Design QC
 

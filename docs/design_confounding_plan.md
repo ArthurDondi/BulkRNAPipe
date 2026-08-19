@@ -188,9 +188,16 @@ against the other:
 - reported as a **reversal score**: 1 = complete reversal, 0 = no effect
 
 `ATRX_IFF` gets the same treatment, so "semi-rescue" becomes a number rather
-than an impression. Crucially there is also a **negative control**
-(`EmptyVector` vs `E6`, which should not reverse the KO signature) — the two
-rescue scores must be read against that baseline, not against zero.
+than an impression. The baseline comes from a **permutation null** computed inside each comparison
+(the response log2FCs are shuffled across genes), not from an assumed 50%.
+Read `excess_over_null` and `perm_p`.
+
+One trap worth knowing: the obvious negative control — `EmptyVector` vs `E6` —
+is invalid here. It shares the `E6` group with the signature, so E6's sampling
+noise enters one axis positively and the other negatively and manufactures a
+negative correlation from nothing (~66% "reversed" on pure noise). The script
+now detects any shared condition, marks the comparison `interpretable = FALSE`,
+and stamps the warning onto the figure.
 
 On simulated data with a known answer the scores recovered the truth in the
 right order and roughly the right size (0.59 for a true 0.70, 0.28 for a true

@@ -49,7 +49,13 @@ option_list <- list(
   make_option("--restored_fraction", type = "double", default = 0.5,
               help = "fraction of the perturbation a gene must recover to count as restored [default %default]"),
   make_option("--label_n",           type = "integer", default = 20,
-              help = "number of genes to label on the scatter [default %default]")
+              help = "number of genes to label on the scatter [default %default]"),
+  make_option("--signature_groups",  type = "character", default = "",
+              help = "comma-separated conditions used by the signature contrast"),
+  make_option("--response_groups",   type = "character", default = "",
+              help = "comma-separated conditions used by the response contrast"),
+  make_option("--n_perm",            type = "integer", default = 1000,
+              help = "permutations used to build the null [default %default]")
 )
 
 args   <- parse_args(OptionParser(option_list = option_list))
@@ -87,6 +93,27 @@ if (nrow(sel) < 10) {
        "Loosen --padj/--lfc or check that the contrast is the one you meant.")
 }
 
+# ─── Shared-sample check ─────────────────────────────────────────────────────
+# If the two contrasts have a condition in common, its sampling noise enters one
+# log2FC positively and the other negatively, which manufactures a negative
+# correlation with no biology involved. On pure noise, sharing one group of three
+# replicates yields ~66% "reversed" and rho ~ -0.5. Such a pair cannot be used as
+# a rescue score OR as a negative control.
+split_csv <- function(x) {
+  if (is.null(x)) return(character(0))
+  p <- trimws(strsplit(x, ",")[[1]]); p[nzchar(p)]
+}
+shared_groups <- intersect(split_csv(args$signature_groups),
+                           split_csv(args$response_groups))
+shares <- length(shared_groups) > 0
+if (shares) {
+  message("WARNING: the signature and response contrasts share condition(s): ",
+          paste(shared_groups, collapse = ", "),
+          ". Their shared sampling noise induces a spurious negative correlation, ",
+          "so the reversal score is biased upward and is NOT interpretable. ",
+          "Choose contrasts with no condition in common.")
+}
+
 # ─── Per-gene classification ─────────────────────────────────────────────────
 sel$reversed <- sign(sel$lfc_resp) == -sign(sel$lfc_sig) & sel$lfc_resp != 0
 # Recovered fraction of the perturbation: 1 = fully back to baseline, >1 = overshoot,
@@ -104,6 +131,23 @@ tls_slope <- function(x, y) {
   v <- prcomp(cbind(x, y), center = TRUE, scale. = FALSE)$rotation
   v[2, 1] / v[1, 1]
 }
+
+# ─── Permutation null ────────────────────────────────────────────────────────
+# The binomial test assumes 50% reversal under no effect, which only holds if the
+# signs in both contrasts are balanced. Shuffling the response across genes
+# preserves both sign distributions and gives the baseline this statistic
+# actually has on this data.
+perm_null <- function(x, y, B) {
+  vapply(seq_len(B), function(i) {
+    yp <- sample(y)
+    c(pct = 100 * mean(sign(yp) == -sign(x) & yp != 0),
+      score = -tls_slope(x, yp))
+  }, numeric(2))
+}
+set.seed(1)
+null_mat  <- perm_null(sel$lfc_sig, sel$lfc_resp, args$n_perm)
+null_pct  <- null_mat["pct", ]
+null_score <- null_mat["score", ]
 
 slope     <- tls_slope(sel$lfc_sig, sel$lfc_resp)
 ols       <- coef(lm(lfc_resp ~ lfc_sig, data = sel))
@@ -128,6 +172,13 @@ stats <- data.frame(
   n_reversed            = n_rev,
   pct_reversed          = round(100 * n_rev / nrow(sel), 2),
   binom_p               = signif(bt$p.value, 3),
+  null_pct_reversed     = round(mean(null_pct), 2),
+  excess_over_null      = round(100 * n_rev / nrow(sel) - mean(null_pct), 2),
+  perm_p                = signif((sum(null_pct >= 100 * n_rev / nrow(sel)) + 1) /
+                                 (args$n_perm + 1), 3),
+  null_reversal_score   = round(mean(null_score), 4),
+  shares_condition      = if (shares) paste(shared_groups, collapse = ";") else "",
+  interpretable         = !shares,
   restored_fraction_cut = args$restored_fraction,
   n_restored            = sum(sel$restored, na.rm = TRUE),
   pct_restored          = round(100 * sum(sel$restored, na.rm = TRUE) / nrow(sel), 2),
@@ -148,14 +199,18 @@ sel$label[lab_idx] <- sel$gene_id[lab_idx]
 
 lim <- max(abs(c(sel$lfc_sig, sel$lfc_resp)), na.rm = TRUE) * 1.05
 
-verdict <- if (stats$reversal_score > 0.5 && bt$p.value < 0.05) {
+excess  <- stats$excess_over_null
+perm_p  <- stats$perm_p
+verdict <- if (shares) {
+  "NOT INTERPRETABLE - contrasts share a condition"
+} else if (perm_p >= 0.05) {
+  "no reversal above the null"
+} else if (excess >= 15) {
   "strong reversal"
-} else if (stats$reversal_score > 0.2 && bt$p.value < 0.05) {
+} else if (excess >= 5) {
   "partial reversal"
-} else if (stats$reversal_score > -0.2) {
-  "no consistent reversal"
 } else {
-  "same direction as the perturbation"
+  "weak reversal"
 }
 
 p <- ggplot(sel, aes(x = lfc_sig, y = lfc_resp)) +
@@ -176,13 +231,18 @@ p <- ggplot(sel, aes(x = lfc_sig, y = lfc_resp)) +
   labs(
     title = paste0("Signature reversal: ", args$name),
     subtitle = sprintf(
-      "%d signature genes | reversal score %.2f (%s) | %.0f%% reversed (binomial p = %s) | rho = %.2f",
-      nrow(sel), -slope, verdict, stats$pct_reversed, format(signif(bt$p.value, 2)), rho),
+      "%d signature genes | %.0f%% reversed vs %.0f%% null (%+.0f pts, perm p = %s) | rho = %.2f | %s",
+      nrow(sel), stats$pct_reversed, stats$null_pct_reversed, excess,
+      format(signif(perm_p, 2)), rho, verdict),
     x = paste0("log2FC  ", args$signature_label, "   (the perturbation)"),
     y = paste0("log2FC  ", args$response_label, "   (the intervention)"),
-    caption = paste0(
+    caption = if (shares) paste0(
+      "NOT INTERPRETABLE: these contrasts share condition(s) ",
+      paste(shared_groups, collapse = ", "),
+      ", whose shared noise creates negative correlation on its own.") else paste0(
       "shaded quadrants = reversal | dashed line = complete reversal (slope -1) | ",
-      "red line = fitted slope (total least squares)")
+      "red line = fitted slope (total least squares) | null from ",
+      args$n_perm, " permutations")
   ) +
   theme_bw(base_size = 12)
 
