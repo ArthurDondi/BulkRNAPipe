@@ -91,6 +91,42 @@ a sixth.
 quantity we would want to subtract is not small, or noisy — in this design it is
 **not a measurable quantity at all**.
 
+### But can't we just measure the vector effect and subtract it?
+
+Yes — and we already do. This is worth being precise about, because "confounded"
+is easy to over-apply.
+
+Within the E6 lineage the vector effect **is** estimable: `EmptyVector` minus
+`E6` measures it directly. And subtracting it from the rescue is not a new
+analysis, it is the one already in the config. The algebra collapses:
+
+```
+(ATRX_FL − E6) − (EmptyVector − E6)  =  ATRX_FL − EmptyVector
+ ^ rescue vs untransduced KO   ^ vector effect       ^ what we already run
+```
+
+Subtracting the vector effect **is** using `EmptyVector` as the denominator.
+They are the same operation, and `EmptyVector_vs_ATRX_FL` already does it. There
+is nothing extra to gain, and the `ATRX_FL` / `ATRX_IFF` comparisons were never
+affected by the confounding in the first place — both sides carry the vector, so
+it cancels whether or not you think of it as a subtraction.
+
+So the confounding is narrower than "the whole experiment". It bites in exactly
+two places:
+
+- **Anything involving `TP53`.** The clone difference has no control group
+  anywhere in the design, so it cannot be measured, let alone subtracted. This
+  is the one that is genuinely unfixable.
+- **Decomposing `E6` → `EmptyVector` into sub-causes** — vector insertion vs
+  reporter-protein burden vs the selection/expansion the transduced cells went
+  through. We can measure the total, not the parts. In practice we don't need
+  the parts.
+
+What we cannot do is take the vector effect measured in the E6 background and
+apply it to `TP53`. That step assumes the vector would do the same thing in a
+different clone, and nothing in this experiment tests that assumption — it is
+exactly the additivity assumption behind the interaction contrast in §5c.
+
 ### What about RUV?
 
 RUV was suggested and it is a reasonable thing to ask. Our conclusion: **use it
@@ -163,11 +199,19 @@ is exactly why the negative control matters.
 
 ### 5c. Interaction contrasts — `deseq2_interaction/`
 
-`(ATRX_FL / EmptyVector) − (E6 / TP53)`: the rescue effect measured in the
-transduced background, minus the KO effect measured in the untransduced one.
-The clone and vector effects **cancel in the subtraction** instead of being
-modelled — no covariate, no rank problem. This is the honest replacement for the
-plain `TP53_vs_ATRX_FL` contrast.
+`(ATRX_FL / EmptyVector) − (TP53 / E6)`: how far the rescue actually moved each
+gene, minus how far it had to move to undo the knockout. The first term is
+measured inside the transduced background, the second inside the untransduced
+one, so the clone and vector effects **cancel in the subtraction** instead of
+being modelled — no covariate, no rank problem. This is the honest replacement
+for the plain `TP53_vs_ATRX_FL` contrast.
+
+Read it as a **shortfall**: `log2FC = 0` is a complete rescue, negative means the
+rescue fell short, positive means it overshot the TP53 level. Note the direction
+of the second pair — it is `TP53 / E6` (the restoration target), not `E6 / TP53`
+(the knockout effect). Flipping it reports the sum of the two effects instead of
+the residual, and a perfect rescue would score twice the effect size rather than
+zero.
 
 It assumes the nuisance effects are the same size in both pairs (additivity).
 That assumption is untestable in this design, so it goes in the methods section —

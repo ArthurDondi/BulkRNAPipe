@@ -169,15 +169,23 @@ DESeq2:
   # rescue effect is measured inside the transduced E6 background, the knockout
   # effect inside the untransduced one, and only the difference is reported.
   interactions:
-    - name: ATRX_FL_rescue_vs_ATRX_loss
-      # (ATRX_FL / EmptyVector) - (E6 / TP53)
-      # ~0 means the rescue moves the gene as far back as the KO moved it.
+    - name: ATRX_FL_rescue_shortfall
+      # (ATRX_FL / EmptyVector) - (TP53 / E6)
+      #   group_A = how far the rescue moved the gene, inside the transduced background
+      #   group_B = how far it HAD to move to undo the KO, inside the untransduced one
+      # log2FC = 0  -> complete rescue
+      # log2FC < 0  -> the rescue fell short
+      # log2FC > 0  -> the rescue overshot the TP53 level
+      # Note group_B is [TP53, E6], not [E6, TP53]: the restoration target is the
+      # KO effect reversed, so flipping it would report rescue + KO instead of the
+      # residual, and a perfect rescue would score twice the effect size instead
+      # of zero.
       group_A: [ATRX_FL, EmptyVector]
-      group_B: [E6, TP53]
-    - name: ATRX_IFF_rescue_vs_ATRX_loss
+      group_B: [TP53, E6]
+    - name: ATRX_IFF_rescue_shortfall
       # Same, for the in-frame fusion.
       group_A: [ATRX_IFF, EmptyVector]
-      group_B: [E6, TP53]
+      group_B: [TP53, E6]
 
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05

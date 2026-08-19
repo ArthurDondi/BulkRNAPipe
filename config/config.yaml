@@ -125,10 +125,17 @@ DESeq2:
   # Assumes the nuisance effect is the same size in both pairs.  With one group
   # per condition that assumption is untestable, so state it in the methods.
   #
+  # Mind the direction of group_B.  For a rescue experiment you usually want
+  # "how far did the intervention move the gene, minus how far it had to move",
+  # so group_B is the restoration target (wildtype / mutant), NOT the
+  # perturbation itself (mutant / wildtype).  Flipping it reports the sum of the
+  # two effects rather than the residual, and a complete rescue then scores twice
+  # the effect size instead of zero.
+  #
   #   interactions:
-  #     - name: rescue_vs_knockout
+  #     - name: rescue_shortfall
   #       group_A: [rescue, empty_vector]   # [numerator, denominator]
-  #       group_B: [mutant, wildtype]
+  #       group_B: [wildtype, mutant]       # the restoration target
   #       # padj_threshold / lfc_threshold optional, default to the values below
   interactions: []
 

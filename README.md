@@ -392,15 +392,28 @@ nuisance term is not, and any effect shared by both pairs cancels.
 ```yaml
 DESeq2:
   interactions:
-    - name: ATRX_FL_rescue_vs_ATRX_loss
-      group_A: [ATRX_FL, EmptyVector]     # the rescue, inside the transduced background
-      group_B: [E6, TP53]                 # the knockout, inside the untransduced one
+    - name: ATRX_FL_rescue_shortfall
+      group_A: [ATRX_FL, EmptyVector]     # how far the rescue moved the gene
+      group_B: [TP53, E6]                 # how far it had to move (restoration target)
 ```
 
 `log2FC ≈ 0` means both comparisons move the gene by the same amount — for a
 rescue experiment, that the rescue put the gene back where the knockout took it
-from. `components.csv` reports the interaction next to both component effects so
-a large value can be traced to whichever pair moved.
+from. Negative means it fell short, positive that it overshot. `components.csv`
+reports the interaction next to both component effects so a large value can be
+traced to whichever pair moved.
+
+**Mind the direction of `group_B`.** For a rescue you want the restoration
+target (`[wildtype, mutant]`), not the perturbation (`[mutant, wildtype]`).
+Flipping it reports the sum of the two effects rather than the residual, and a
+complete rescue scores twice the effect size instead of zero.
+
+Note also what this is *not* needed for. When both sides of a comparison share a
+nuisance factor it cancels on its own: `ATRX_FL` vs `EmptyVector` is already free
+of the vector effect, because subtracting a separately-measured vector effect is
+algebraically identical to using `EmptyVector` as the denominator —
+`(FL − E6) − (EmptyVector − E6) = FL − EmptyVector`. Interactions are for
+crossing a boundary that no shared control spans.
 
 This assumes the nuisance effect is the same size in both pairs. With one group
 per condition that is untestable, so state it in the methods.
