@@ -152,23 +152,33 @@ def get_bam_files(_):
     """Return all sorted BAM files for featureCounts."""
     return expand("align/{sample}/{sample}.Aligned.sortedByCoord.out.bam", sample=SAMPLES)
 
-# ─── PCA gene exclusion (transgene / vector features) ────────────────────────
+# ─── PCA views, sample subsets and gene exclusion ────────────────────────────
 # When the reference contains extra contigs for the delivery vector (EGFP,
 # mCherry, a transgene ORF, ...), those features are present in counts.txt and
 # can drive the sample-level PCA on their own: they are zero in untransduced
-# samples and very highly expressed in transduced ones.  The PCA rule therefore
-# emits two plots, and these lists define what the second one drops.
+# samples and very highly expressed in transduced ones.  On top of that, the
+# transgene itself (e.g. ATRX and its vector-borne variants) is by construction
+# the largest difference between the groups, so a PCA that includes it mostly
+# re-plots the experimental design.
+#
+# The PCA module therefore runs a grid of (sample set x gene view):
+#   views       all_genes | no_vector_genes | no_vector_no_transgene
+#   sample sets all + every entry under PCA.subsets
 _pca_cfg = config.get('PCA', {}) or {}
 
 PCA_EXCLUDE_GENES         = [str(g) for g in (_pca_cfg.get('exclude_genes') or [])]
 PCA_EXCLUDE_GENE_PATTERNS = [str(p) for p in (_pca_cfg.get('exclude_gene_patterns') or [])]
 PCA_EXCLUDE_CONTIGS       = [str(c) for c in (_pca_cfg.get('exclude_contigs') or [])]
+PCA_TRANSGENE_GENES       = [str(g) for g in (_pca_cfg.get('transgene_genes') or [])]
 
-# Commas are the delimiter used to pass these lists to pca.R.
+PCA_VIEWS = ["all_genes", "no_vector_genes", "no_vector_no_transgene"]
+
+# Commas are the delimiter used to pass these lists to the R scripts.
 for _lst, _name in (
     (PCA_EXCLUDE_GENES, 'exclude_genes'),
     (PCA_EXCLUDE_GENE_PATTERNS, 'exclude_gene_patterns'),
     (PCA_EXCLUDE_CONTIGS, 'exclude_contigs'),
+    (PCA_TRANSGENE_GENES, 'transgene_genes'),
 ):
     for _entry in _lst:
         if ',' in _entry:
@@ -176,6 +186,161 @@ for _lst, _name in (
                 f"PCA.{_name}: entry '{_entry}' contains a comma, which is used "
                 "as the list delimiter. Split it into separate list entries."
             )
+
+# ── Sample subsets ────────────────────────────────────────────────────────────
+# Restricting the PCA to a subset of conditions is the way to stop one dominant
+# axis (e.g. a different parental clone) from compressing every other effect
+# into the higher PCs.
+_pca_subsets = _pca_cfg.get('subsets') or {}
+
+for _name, _conds in _pca_subsets.items():
+    if _name == 'all':
+        raise ValueError("PCA.subsets: 'all' is reserved for the full sample set.")
+    if not _conds:
+        raise ValueError(f"PCA.subsets['{_name}']: no conditions listed.")
+    for _c in _conds:
+        if _c not in _existing_conditions:
+            raise ValueError(
+                f"PCA.subsets['{_name}']: condition '{_c}' does not match any "
+                "sample's condition. Check your config for typos."
+            )
+    _n = sum(1 for s in SAMPLES if config['samples'][s]['condition'] in _conds)
+    if _n < 3:
+        raise ValueError(
+            f"PCA.subsets['{_name}']: only {_n} sample(s) selected. A PCA needs "
+            "at least 3."
+        )
+
+PCA_SUBSETS     = {str(k): [str(c) for c in v] for k, v in _pca_subsets.items()}
+PCA_SAMPLE_SETS = ['all'] + sorted(PCA_SUBSETS)
+
+def get_pca_samples(sampleset):
+    """Return the "sample:condition" string for a PCA sample set."""
+    if sampleset == 'all':
+        selected = SAMPLES
+    else:
+        conds    = PCA_SUBSETS[sampleset]
+        selected = [s for s in SAMPLES if config['samples'][s]['condition'] in conds]
+    return ",".join(f"{s}:{config['samples'][s]['condition']}" for s in selected)
+
+# ── Visualisation-only batch removal ──────────────────────────────────────────
+# Maps each condition to a batch label.  Used ONLY by limma::removeBatchEffect
+# for a supplementary PCA panel; it never enters a DESeq2 design, because in a
+# design where batch is a deterministic function of condition the batch effect
+# is not identifiable (see docs/design_confounding_plan.md).
+_pca_batch = _pca_cfg.get('batch') or {}
+for _cond in _pca_batch:
+    if _cond not in _existing_conditions:
+        raise ValueError(
+            f"PCA.batch: condition '{_cond}' does not match any sample's "
+            "condition. Check your config for typos."
+        )
+PCA_BATCH = {str(k): str(v) for k, v in _pca_batch.items()}
+
+def get_pca_batch(sampleset):
+    """Return the "sample:batch" string for a PCA sample set (empty when unset)."""
+    if not PCA_BATCH:
+        return ""
+    if sampleset == 'all':
+        selected = SAMPLES
+    else:
+        conds    = PCA_SUBSETS[sampleset]
+        selected = [s for s in SAMPLES if config['samples'][s]['condition'] in conds]
+    return ",".join(
+        f"{s}:{PCA_BATCH.get(config['samples'][s]['condition'], 'unassigned')}"
+        for s in selected
+    )
+
+# ─── Design QC (library-level confounder check) ───────────────────────────────
+# Genes whose per-sample expression is worth plotting explicitly: the reporters,
+# the transgene and its variants.  Defaults to the vector features plus the
+# transgene list so the module is useful without extra configuration.
+_qc_cfg = config.get('DesignQC', {}) or {}
+DESIGN_QC_GENES = [str(g) for g in (_qc_cfg.get('genes') or
+                                    (PCA_EXCLUDE_GENES + PCA_TRANSGENE_GENES))]
+
+# ─── Interaction contrasts (difference of differences) ───────────────────────
+# Each entry estimates (A1 - A2) - (B1 - B2) on the log2 scale from the plain
+# ~ condition fit.  This is the correct way to compare across a boundary whose
+# effect cannot be estimated as a covariate: the nuisance effect cancels in the
+# subtraction instead of being modelled.
+_interactions = config['DESeq2'].get('interactions') or []
+
+for _it in _interactions:
+    for _key in ('name', 'group_A', 'group_B'):
+        if _key not in _it:
+            raise ValueError(f"DESeq2.interactions: entry is missing '{_key}'.")
+    if len(_it['group_A']) != 2 or len(_it['group_B']) != 2:
+        raise ValueError(
+            f"DESeq2.interactions['{_it['name']}']: group_A and group_B must each "
+            "be exactly two condition names [numerator, denominator]."
+        )
+    for _c in list(_it['group_A']) + list(_it['group_B']):
+        if _c not in _existing_conditions:
+            raise ValueError(
+                f"DESeq2.interactions['{_it['name']}']: condition '{_c}' does not "
+                "match any sample's condition. Check your config for typos."
+            )
+    if len(set(list(_it['group_A']) + list(_it['group_B']))) < 4:
+        raise ValueError(
+            f"DESeq2.interactions['{_it['name']}']: the four conditions must be "
+            "distinct; a repeated condition makes the difference of differences "
+            "collapse to a simple contrast."
+        )
+
+INTERACTIONS = [_it['name'] for _it in _interactions]
+
+if set(INTERACTIONS) & set(CONTRASTS):
+    raise ValueError(
+        "DESeq2.interactions: name(s) "
+        f"{sorted(set(INTERACTIONS) & set(CONTRASTS))} collide with a contrast "
+        "name. Interaction results would overwrite the contrast's output."
+    )
+
+def get_interaction_cfg(name):
+    """Return the DESeq2.interactions config block for *name*."""
+    for it in _interactions:
+        if it['name'] == name:
+            return it
+    raise ValueError(f"No DESeq2.interactions entry named '{name}'")
+
+# ─── Signature-reversal comparisons ──────────────────────────────────────────
+# Scores a rescue by asking whether it reverses a knockout signature, using two
+# contrasts that each live entirely inside one genetic background.  Immune to
+# the between-background effect, which never enters either contrast.
+_sig_reversal = config.get('SignatureReversal') or []
+
+for _sr in _sig_reversal:
+    for _key in ('name', 'signature_contrast', 'response_contrast'):
+        if _key not in _sr:
+            raise ValueError(f"SignatureReversal: entry is missing '{_key}'.")
+    for _key in ('signature_contrast', 'response_contrast'):
+        if _sr[_key] not in CONTRASTS:
+            raise ValueError(
+                f"SignatureReversal['{_sr['name']}']: {_key} '{_sr[_key]}' is not "
+                "a DESeq2 contrast name. Add it to DESeq2.contrasts first."
+            )
+    if _sr['signature_contrast'] == _sr['response_contrast']:
+        raise ValueError(
+            f"SignatureReversal['{_sr['name']}']: signature_contrast and "
+            "response_contrast are the same contrast."
+        )
+
+SIGNATURE_REVERSALS = [_sr['name'] for _sr in _sig_reversal]
+
+def get_signature_reversal_cfg(name):
+    """Return the SignatureReversal config block for *name*."""
+    for sr in _sig_reversal:
+        if sr['name'] == name:
+            return sr
+    raise ValueError(f"No SignatureReversal entry named '{name}'")
+
+def get_contrast_sides(contrast_name):
+    """Return (numerator, denominator) for a DESeq2 contrast name."""
+    for c in config['DESeq2']['contrasts']:
+        if c[0] == contrast_name:
+            return c[1], c[2]
+    raise ValueError(f"No DESeq2 contrast named '{contrast_name}'")
 
 # ─── GSEA / GO derived variables ─────────────────────────────────────────────
 

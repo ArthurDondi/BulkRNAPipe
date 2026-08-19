@@ -162,29 +162,93 @@ DESeq2:
       - E6
       - EmptyVector
 
+  # ─── Interaction contrasts (difference of differences) ────────────────────
+  # TP53_vs_ATRX_FL as a plain contrast mixes three things that cannot be
+  # separated: ATRX status, the clonal background, and the transduction step.
+  # The difference of differences removes the last two by cancellation — the
+  # rescue effect is measured inside the transduced E6 background, the knockout
+  # effect inside the untransduced one, and only the difference is reported.
+  interactions:
+    - name: ATRX_FL_rescue_vs_ATRX_loss
+      # (ATRX_FL / EmptyVector) - (E6 / TP53)
+      # ~0 means the rescue moves the gene as far back as the KO moved it.
+      group_A: [ATRX_FL, EmptyVector]
+      group_B: [E6, TP53]
+    - name: ATRX_IFF_rescue_vs_ATRX_loss
+      # Same, for the in-frame fusion.
+      group_A: [ATRX_IFF, EmptyVector]
+      group_B: [E6, TP53]
+
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
 # ─── PCA (sample-level QC) ───────────────────────────────────────────────────
-# Two PCA plots are written to deseq2/: pca.pdf (all genes) and
-# pca_no_vector_genes.pdf (transgene/vector features removed before
-# normalisation), plus pca_excluded_genes.csv reporting the % of each library
-# taken up by the excluded features.
+# Outputs go to pca/{sample_set}/{view}_*.pdf — PC1/PC2, PC3/PC4, scree,
+# coordinates, and a removeBatchEffect panel per combination.
 #
-# The reference here is hg38_plus_vectors, so EGFP / mCherry are real rows in
-# counts.txt: zero in TP53 and E6, very high in EmptyVector / ATRX_FL /
-# ATRX_IFF.  Check the exact IDs used in the custom GTF with
+# The reference is hg38_plus_vectors, so EGFP / mCherry / ATRX_FL / ATRX_IFF are
+# real rows in counts.txt.  Verify the exact IDs against the custom GTF with
 #   grep -o 'gene_id "[^"]*"' hg38_plus_vectors.gtf | sort -u
-# and fix the names below if they differ - pca.R prints a WARNING in
-# logs/PCA/pca.log for any entry that matches nothing.
+# pca.R prints a WARNING to logs/PCA/*.log for any entry that matches nothing.
 PCA:
+  # Reporter features: zero in TP53 and E6, high in the three transduced groups.
   exclude_genes:
     - EGFP
     - mCherry
   exclude_gene_patterns: []
   exclude_contigs: []
+  # The transgene and its variants.  ATRX is the variable under study, so a PCA
+  # that includes it partly re-plots the design; the third view drops it to show
+  # what the ATRX difference does downstream rather than the difference itself.
+  transgene_genes:
+    - ATRX
+    - ATRX_FL
+    - ATRX_IFF
+  ntop: 500
+
+  # ── Sample subsets ─────────────────────────────────────────────────────────
+  # PC1 of the full PCA separates TP53 from everything E6-derived — the clonal
+  # background, which is confounded with the ATRX genotype and cannot be
+  # removed.  Dropping TP53 lets the vector and rescue effects use PC1/PC2
+  # instead of being compressed into the higher components.
+  subsets:
+    E6_derived:
+      - E6
+      - EmptyVector
+      - ATRX_FL
+      - ATRX_IFF
+    # The three transduced groups only: removes the transduction step as well,
+    # leaving the ATRX construct as the only intended difference.
+    transduced_only:
+      - EmptyVector
+      - ATRX_FL
+      - ATRX_IFF
+
+  # ── Visualisation-only batch removal ───────────────────────────────────────
+  # Transduction status.  For LOOKING ONLY — it never enters a DESeq2 design.
+  # Within the full sample set the transduced batch contains three conditions
+  # and the untransduced batch two, so the panel is drawn; within
+  # transduced_only every sample shares one label and the script says so
+  # instead of drawing a meaningless plot.
+  batch:
+    TP53:        untransduced
+    E6:          untransduced
+    EmptyVector: transduced
+    ATRX_FL:     transduced
+    ATRX_IFF:    transduced
+
+# ─── Design QC ───────────────────────────────────────────────────────────────
+DesignQC:
+  # Defaults to PCA.exclude_genes + PCA.transgene_genes; listed explicitly here
+  # so the endogenous ATRX locus is plotted next to the vector-borne variants.
+  genes:
+    - ATRX
+    - ATRX_FL
+    - ATRX_IFF
+    - EGFP
+    - mCherry
 
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:
@@ -237,6 +301,39 @@ GO:
 
 # ─── Contrast comparisons ────────────────────────────────────────────────────
 # "Normalise" IFF-vs-FL by subtracting the IFF-vs-Ctrl baseline.
+# ─── Signature reversal (rescue scoring) ─────────────────────────────────────
+# The primary rescue readout.  Both contrasts in each pair sit inside a single
+# background, so the clonal difference between TP53 and the E6 lineage never
+# enters the comparison.
+#
+# TP53_vs_E6 has E6 as numerator, so its log2FC is "KO relative to ATRX-WT".
+# EmptyVector_vs_ATRX_FL has ATRX_FL as numerator, so its log2FC is "rescue
+# relative to the transduced control".  A working rescue makes the second the
+# mirror image of the first: negative slope, reversal score near 1.
+SignatureReversal:
+  - name: ATRX_FL_reverses_KO_signature
+    signature_contrast: TP53_vs_E6
+    response_contrast:  EmptyVector_vs_ATRX_FL
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+  - name: ATRX_IFF_reverses_KO_signature
+    signature_contrast: TP53_vs_E6
+    response_contrast:  EmptyVector_vs_ATRX_IFF
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+  # Sanity check: the empty vector should NOT reverse the KO signature.  A
+  # reversal score far from zero here means the score is picking up the
+  # transduction step rather than ATRX, and the two rescue scores above have to
+  # be read against this baseline rather than against zero.
+  - name: EmptyVector_reverses_KO_signature_NEGATIVE_CONTROL
+    signature_contrast: TP53_vs_E6
+    response_contrast:  E6_vs_EmptyVector
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+
 ContrastComparisons:
   - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
     contrast_A: ATRX_IFF_vs_ATRX_FL

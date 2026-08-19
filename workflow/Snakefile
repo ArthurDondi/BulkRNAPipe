@@ -5,6 +5,9 @@ include: 'rules/trim.smk'
 include: 'rules/align.smk'
 include: 'rules/quantify.smk'
 include: 'rules/deseq2.smk'
+include: 'rules/pca.smk'
+include: 'rules/design_qc.smk'
+include: 'rules/signature_reversal.smk'
 include: 'rules/gsea.smk'
 include: 'rules/go.smk'
 include: 'rules/compare_contrasts.smk'
@@ -29,9 +32,23 @@ rule BulkRNAPipe_output:
         # ── Differential expression ───────────────────────────────────────────
         expand("deseq2/{contrast}/results.csv", contrast=CONTRASTS) if DESEQ2 else [],
         expand("deseq2/{contrast}/volcano_proteomic.pdf", contrast=PROTEOMICS_CONTRASTS) if DESEQ2 and PROTEOMICS else [],
-        # ── PCA ───────────────────────────────────────────────────────────────
-        "deseq2/pca.pdf" if DESEQ2 else [],
-        "deseq2/pca_no_vector_genes.pdf" if DESEQ2 else [],
+        # ── PCA (sample set x gene view grid) ─────────────────────────────────
+        expand("pca/{sampleset}/{view}_pc12.pdf",
+               sampleset=PCA_SAMPLE_SETS, view=PCA_VIEWS) if DESEQ2 else [],
+        expand("pca/{sampleset}/{view}_pc34.pdf",
+               sampleset=PCA_SAMPLE_SETS, view=PCA_VIEWS) if DESEQ2 else [],
+        expand("pca/{sampleset}/{view}_scree.pdf",
+               sampleset=PCA_SAMPLE_SETS, view=PCA_VIEWS) if DESEQ2 else [],
+        expand("pca/{sampleset}/{view}_pc12_batch_removed.pdf",
+               sampleset=PCA_SAMPLE_SETS, view=PCA_VIEWS) if DESEQ2 else [],
+        # ── Design QC ─────────────────────────────────────────────────────────
+        "design_qc/design_qc_summary.csv" if DESEQ2 else [],
+        # ── Interaction contrasts (difference of differences) ─────────────────
+        expand("deseq2_interaction/{interaction}/results.csv",
+               interaction=INTERACTIONS) if DESEQ2 else [],
+        # ── Signature reversal ────────────────────────────────────────────────
+        expand("signature_reversal/{comparison}/reversal_stats.csv",
+               comparison=SIGNATURE_REVERSALS) if DESEQ2 else [],
         # ── GSEA ─────────────────────────────────────────────────────────────
         expand("gsea/{contrast}/{collection}_results.csv",
                contrast=CONTRASTS, collection=GSEA_COLLECTIONS) if GSEA else [],

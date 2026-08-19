@@ -58,7 +58,10 @@ BulkRNAPipe/
 │   │   └── gsea.yaml               # fgsea + msigdbr + clusterProfiler
 │   └── scripts/
 │       ├── deseq2.R                # DESeq2 differential expression
-│       ├── pca.R                   # PCA plots (all genes + vector-free)
+│       ├── pca.R                   # PCA grid (sample sets x gene views)
+│       ├── design_qc.R              # Library-level confounder QC
+│       ├── deseq2_interaction.R     # Difference-of-differences contrasts
+│       ├── signature_reversal.R     # Rescue scored as signature reversal
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
 │       ├── gsea.R                  # fgsea enrichment per contrast
 │       ├── go.R                    # GO enrichment per contrast
@@ -253,10 +256,31 @@ output_dir/
 ├── trim/{sample}/                            # Trimmed FASTQs
 ├── align/{sample}/                           # BAM files + STAR logs
 ├── quantify/counts.txt                       # Gene × sample count matrix
-├── deseq2/
-│   ├── pca.pdf                               # Sample PCA, all genes
-│   ├── pca_no_vector_genes.pdf               # Sample PCA, transgene/vector features removed
-│   └── pca_excluded_genes.csv                # Excluded features + % of each library
+├── pca/{sample_set}/
+│   ├── {view}_pc12.pdf                       # PC1 vs PC2
+│   ├── {view}_pc34.pdf                       # PC3 vs PC4
+│   ├── {view}_scree.pdf                      # Variance explained per PC
+│   ├── {view}_pc12_batch_removed.pdf         # removeBatchEffect panel (visualisation only)
+│   ├── {view}_coords.csv                     # PC coordinates
+│   └── {view}_excluded_genes.csv             # Features dropped by this view
+├── design_qc/
+│   ├── library_size.pdf                      # Assigned reads per sample
+│   ├── assignment_rates.pdf                  # featureCounts assignment breakdown
+│   ├── genes_detected.pdf                    # Genes with >= 1 count
+│   ├── marker_expression.pdf                 # Reporter / transgene expression
+│   ├── sample_correlation.pdf                # Spearman correlation, all samples
+│   ├── sample_distance.pdf                   # Euclidean distance, all samples
+│   └── design_qc_summary.csv                 # Per-sample summary table
+├── deseq2_interaction/{interaction}/
+│   ├── results.csv                           # Difference-of-differences results
+│   ├── components.csv                        # Interaction next to both component effects
+│   ├── volcano.pdf                           # Volcano plot
+│   └── ma_plot.pdf                           # MA plot
+├── signature_reversal/{comparison}/
+│   ├── reversal_scatter.pdf                  # Response log2FC vs signature log2FC
+│   ├── recovery_distribution.pdf             # Per-gene recovered fraction
+│   ├── reversal_stats.csv                    # Reversal score, rho, % reversed
+│   └── reversal_genes.csv                    # Per-gene table
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
@@ -285,54 +309,146 @@ output_dir/
 └── benchmark/                                # Per-rule benchmark files
 ```
 
-## PCA and transgene / vector features
+## Confounded designs: PCA views, interactions and signature reversal
 
-The `PCA` rule writes two plots into `deseq2/`:
+These four modules exist for experiments where the groups differ by more than
+the intended variable — a different parental clone, an extra transduction step,
+a selection round. In that situation the nuisance effect is a deterministic
+function of the group label, which means it **cannot be estimated as a
+covariate**: the model matrix becomes rank-deficient and DESeq2 refuses to fit
+it. There is no group whose mean would pin the effect down, and replicates do
+not help — they sharpen the group means without adding a new one.
 
-| File | Content |
+`docs/design_confounding_plan.md` works through the arithmetic and explains why
+RUV, ComBat and friends do not rescue this. The short version: the modules below
+avoid the confounding rather than correcting it.
+
+### PCA views and sample subsets
+
+The `PCA` rule runs a grid of (sample set × gene view) into
+`pca/{sample_set}/{view}_*`. For each combination you get PC1/PC2, PC3/PC4, a
+scree plot, the coordinates as CSV and a supplementary batch-removal panel.
+
+Gene views (all three always run):
+
+| View | Genes used |
 | --- | --- |
-| `pca.pdf` | PCA over every gene in `quantify/counts.txt` |
-| `pca_no_vector_genes.pdf` | Same PCA after removing the transgene / vector features configured below |
-| `pca_excluded_genes.csv` | The features that were removed and the % of each library they account for |
+| `all_genes` | every gene in `counts.txt` |
+| `no_vector_genes` | minus `exclude_genes` / `exclude_gene_patterns` / `exclude_contigs` |
+| `no_vector_no_transgene` | minus those, and minus `transgene_genes` |
 
-Both plots use the same recipe as before (counts filtered at ≥ 10 reads total,
-blind VST, `plotPCA` on the top 500 most-variable genes). The exclusion happens
-on the raw count matrix **before** the `DESeqDataSet` is built, so size factors
-and the VST for the second plot are estimated on the human-only matrix — vector
-transcripts driven by strong promoters can take a non-trivial share of the
-library in transduced samples and shift the normalisation itself.
+Features are dropped from the raw counts **before** the `DESeqDataSet` is built,
+so size factors and the VST are re-estimated on the retained genes. This matters:
+a reporter that is absent in one group and highly expressed in another shifts the
+library-size normalisation of every other gene, not just its own row.
 
-This matters when the STAR/featureCounts reference carries extra contigs for a
-delivery vector (EGFP, mCherry, a transgene ORF, a selection marker). Those
-features are structurally zero in untransduced samples and very high in
-transduced ones, so they sit in the top-variance gene set and can pull a
-principal component on their own.
+The third view exists because the transgene is, by construction, the largest
+single difference between the groups. A PCA that includes it partly re-plots the
+experimental design instead of showing its downstream consequences.
 
 ```yaml
 PCA:
-  # Exact gene IDs from the Geneid column of counts.txt (case-insensitive)
-  exclude_genes:
-    - EGFP
-    - mCherry
-  # Regexes matched against gene IDs, for shared naming prefixes
-  exclude_gene_patterns: []
-  # Contig names; a gene is dropped when all of its exons sit on these contigs
-  exclude_contigs: []
+  exclude_genes: [EGFP, mCherry]          # exact IDs from the Geneid column
+  exclude_gene_patterns: []               # regexes, for shared naming prefixes
+  exclude_contigs: []                     # genes whose exons all sit here
+  transgene_genes: [ATRX, ATRX_FL, ATRX_IFF]
+  ntop: 500
+
+  subsets:                                # extra sample sets beyond "all"
+    E6_derived: [E6, EmptyVector, ATRX_FL, ATRX_IFF]
+
+  batch:                                  # visualisation-only, see below
+    TP53:        untransduced
+    EmptyVector: transduced
 ```
 
-Leave the lists empty (the default) for a plain reference — the two plots are
-then identical. Entries that match nothing are **not** an error, but `pca.R`
-prints a `WARNING` line to `logs/PCA/pca.log`; check there if the two plots come
-out identical unexpectedly. The gene IDs must match the `gene_id` attribute in
-your GTF, which you can list with:
+Subsets are how you stop one dominant axis from compressing everything else into
+the higher PCs: drop the group that sits on its own clonal branch and the
+remaining effects get to use PC1/PC2.
+
+Entries matching nothing are not an error, but `pca.R` prints a `WARNING` to
+`logs/PCA/*.log` — check there if two views come out identical unexpectedly.
+List the IDs your GTF actually uses with:
 
 ```bash
 grep -o 'gene_id "[^"]*"' /path/to/genome_plus_vectors.gtf | sort -u
 ```
 
-Note that this exclusion applies to the PCA only. DESeq2, GSEA and GO still see
-the full count matrix; the vector features simply appear as (very significant)
-genes in contrasts that cross the transduction boundary.
+**The batch-removal panel is for looking, not for evidence.** When `PCA.batch`
+varies within at least one condition, `limma::removeBatchEffect` runs with the
+condition means protected. When every condition maps to exactly one batch, the
+batch effect is not estimable at all — limma returns `NA` coefficients if the
+design is supplied — so the script subtracts the batch means outright, which
+produces the tidy figure people expect by deleting the real between-group
+difference along with any technical one. In that case a red warning is printed
+**onto the figure**, because a PDF outlives its log file.
+
+### Interaction contrasts (difference of differences)
+
+`(A1 − A2) − (B1 − B2)`, estimated from the plain `~ condition` fit. Since it is
+a linear combination of group means, it is estimable where a free-standing
+nuisance term is not, and any effect shared by both pairs cancels.
+
+```yaml
+DESeq2:
+  interactions:
+    - name: ATRX_FL_rescue_vs_ATRX_loss
+      group_A: [ATRX_FL, EmptyVector]     # the rescue, inside the transduced background
+      group_B: [E6, TP53]                 # the knockout, inside the untransduced one
+```
+
+`log2FC ≈ 0` means both comparisons move the gene by the same amount — for a
+rescue experiment, that the rescue put the gene back where the knockout took it
+from. `components.csv` reports the interaction next to both component effects so
+a large value can be traced to whichever pair moved.
+
+This assumes the nuisance effect is the same size in both pairs. With one group
+per condition that is untestable, so state it in the methods.
+
+### Signature reversal
+
+Scores an intervention by how far it reverses a perturbation signature, using
+two contrasts that each sit entirely inside one background — so the boundary is
+never crossed and there is nothing to correct.
+
+```yaml
+SignatureReversal:
+  - name: ATRX_FL_reverses_KO_signature
+    signature_contrast: TP53_vs_E6              # defines which genes are scored
+    response_contrast:  EmptyVector_vs_ATRX_FL  # measured on those genes
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+```
+
+`reversal_stats.csv` reports:
+
+| Field | Meaning |
+| --- | --- |
+| `reversal_score` | −slope of the total-least-squares fit; 1 = complete reversal, 0 = no response |
+| `pct_reversed` | % of signature genes moving the opposite way, with a binomial test |
+| `pct_restored` | % recovering at least `restored_fraction` of the perturbation |
+| `spearman_rho` | rank correlation between the two fold-change vectors |
+
+Total least squares rather than ordinary least squares: both axes are estimated
+with comparable noise, and OLS would bias the slope toward zero.
+
+**Always configure a negative control** — an intervention that should not
+reverse the signature (the empty vector against the untransduced parent). Scores
+are mildly attenuated by selecting genes on the signature contrast, so the
+rescue scores should be read against that baseline rather than against zero.
+
+### Design QC
+
+`design_qc/` plots library size, featureCounts assignment rates, genes detected,
+reporter/transgene expression, and the sample–sample correlation and distance
+structure, with all samples on one figure — a group-linked technical shift is
+invisible one sample at a time. Size factors for the marker panel are estimated
+with the reporter/transgene features excluded, so a construct present in half the
+groups cannot shift the normalisation it is being measured against.
+
+Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
+and coverage-uniformity metrics that are not recomputed here.
 
 ## GSEA / GO enrichment modules
 

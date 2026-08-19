@@ -111,25 +111,47 @@ DESeq2:
   # Omit (or leave as {}) to run the pipeline without any condition merging.
   combine_conditions: {}
 
+  # ─── Interaction contrasts (difference of differences) (optional) ─────────
+  # Estimates (A1 - A2) - (B1 - B2) from the plain ~ condition fit.
+  #
+  # Use this when two groups differ by more than the variable you care about
+  # (a different clone, an extra transduction step) and that nuisance effect is
+  # a deterministic function of the group label.  Such an effect cannot be added
+  # to the design as a covariate — the model matrix becomes rank-deficient and
+  # DESeq2 refuses to fit it, because there is no group whose mean would pin the
+  # effect down.  The difference of differences avoids the problem instead of
+  # modelling it: the shared effect cancels in the subtraction.
+  #
+  # Assumes the nuisance effect is the same size in both pairs.  With one group
+  # per condition that assumption is untestable, so state it in the methods.
+  #
+  #   interactions:
+  #     - name: rescue_vs_knockout
+  #       group_A: [rescue, empty_vector]   # [numerator, denominator]
+  #       group_B: [mutant, wildtype]
+  #       # padj_threshold / lfc_threshold optional, default to the values below
+  interactions: []
+
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
 # ─── PCA (sample-level QC) ───────────────────────────────────────────────────
-# The PCA rule always writes two plots to deseq2/:
-#   pca.pdf                 – every gene in counts.txt
-#   pca_no_vector_genes.pdf – the same PCA after dropping the features listed
-#                             below (dropped before normalisation, so size
-#                             factors and the VST are re-estimated without them)
-# It also writes pca_excluded_genes.csv, listing every excluded feature and the
-# % of each library it accounts for.
+# The PCA module runs a grid of (sample set x gene view) and writes the results
+# to pca/{sample_set}/{view}_*.pdf.  For every combination you get PC1/PC2,
+# PC3/PC4, a scree plot, the coordinates as CSV, and a supplementary
+# limma::removeBatchEffect panel.
 #
-# Use this when your reference contains extra contigs for a delivery vector
-# (EGFP, mCherry, a transgene ORF, a selection marker, ...): those features are
-# zero in untransduced samples and very highly expressed in transduced ones, so
-# they can pull the PCA on their own.  Leave the lists empty for a plain
-# reference — both plots are then identical.
+# Gene views (always all three):
+#   all_genes               every gene in counts.txt
+#   no_vector_genes         minus the vector/reporter features below
+#   no_vector_no_transgene  minus those, and minus transgene_genes
+#
+# The third view matters when the transgene is the thing being manipulated: it
+# is by construction the largest difference between the groups, so leaving it in
+# means the PCA partly re-plots the experimental design instead of showing its
+# consequences.
 PCA:
   # Exact gene IDs as they appear in the Geneid column of counts.txt
   # (case-insensitive).  Must match the gene_id used in your GTF.
@@ -140,6 +162,47 @@ PCA:
   # Reference contig names; a gene is dropped when all of its exons sit on
   # these contigs, e.g. ["pLVX_EF1a_ATRX_IRES_mCherry"]
   exclude_contigs: []
+  # The transgene and its variants, dropped additionally by the third view
+  transgene_genes: []
+  # Number of most-variable genes the PCA is computed on
+  ntop: 500
+
+  # ── Sample subsets ─────────────────────────────────────────────────────────
+  # A PCA over all samples is dominated by the largest axis of variation.  When
+  # that axis is something you cannot remove (a different parental clone, say),
+  # every other effect is compressed into the higher PCs.  Restricting the PCA
+  # to the samples that share that background lets the remaining effects
+  # express themselves on PC1/PC2.
+  #
+  #   subsets:
+  #     transduced_only: [empty_vector, rescue, mutant]
+  subsets: {}
+
+  # ── Visualisation-only batch removal ───────────────────────────────────────
+  # Maps each condition to a batch label for a supplementary
+  # limma::removeBatchEffect panel.  This NEVER enters a DESeq2 design: when the
+  # batch label is a deterministic function of the condition, the size of the
+  # batch effect is not identifiable from the data, so the panel shows the
+  # consequence of an assumption rather than a measurement.  Use it to look, not
+  # to justify.  The script refuses to draw the panel when batch and condition
+  # are the same variable.
+  #
+  #   batch:
+  #     control:       untreated
+  #     empty_vector:  transduced
+  #     rescue:        transduced
+  batch: {}
+
+# ─── Design QC ───────────────────────────────────────────────────────────────
+# Library-level checks for things that vary with group but are not biology:
+# library size, featureCounts assignment rate, genes detected, reporter and
+# transgene expression, and the sample-sample correlation/distance structure.
+# All samples are plotted together — that is the only way a group-linked
+# technical shift is visible.
+DesignQC:
+  # Genes to plot individually.  Defaults to PCA.exclude_genes +
+  # PCA.transgene_genes when left empty.
+  genes: []
 
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 # When enabled, an additional volcano file (volcano_proteomic.pdf) is generated
@@ -219,6 +282,34 @@ GO:
   max_gs_size: 500
   # Gene ID type in your results table (SYMBOL is the default for this pipeline)
   gene_id_type: SYMBOL
+
+# ─── Signature reversal (rescue scoring) ─────────────────────────────────────
+# Scores an intervention by how far it reverses a perturbation signature, using
+# two contrasts that each sit entirely inside one genetic background.
+#
+# "Do the rescue samples cluster with the wild-type samples?" is unanswerable
+# when the two sit in different backgrounds — the background difference is
+# larger than the effect and inseparable from it.  "Does the rescue push the
+# knockout-responsive genes back the other way?" is answerable from the same
+# data, because neither contrast crosses the boundary.
+#
+# Each entry:
+#   name:                output directory under signature_reversal/
+#   signature_contrast:  the perturbation (defines which genes are scored)
+#   response_contrast:   the intervention (measured on those genes)
+#   padj_threshold:      cutoff defining the signature (default: DESeq2.padj_threshold)
+#   lfc_threshold:       |log2FC| cutoff defining the signature (default 0)
+#   restored_fraction:   fraction of the perturbation a gene must recover to
+#                        count as restored (default 0.5)
+#   label_n:             genes labelled on the scatter (default 20)
+SignatureReversal: []
+# Example:
+#   SignatureReversal:
+#     - name: rescue_reverses_knockout
+#       signature_contrast: wildtype_vs_mutant
+#       response_contrast:  empty_vector_vs_rescue
+#       padj_threshold: 0.05
+#       lfc_threshold: 0.0
 
 # ─── Contrast comparisons (GSEA ΔNES + residual rank) ───────────────────────
 # Requires Run.gsea: True
