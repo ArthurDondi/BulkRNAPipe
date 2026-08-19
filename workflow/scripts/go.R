@@ -40,6 +40,8 @@ option_list <- list(
               help = "DESeq2 padj threshold [default %default]"),
   make_option("--lfc_thr",     type = "double",   default = 1.0,
               help = "DESeq2 absolute log2FC threshold applied directionally [default %default]"),
+  make_option("--simplify_max_terms", type = "integer", default = 0,
+              help = "Cap the number of GO terms passed to simplify(); 0 = no cap [default %default]"),
   make_option("--gene_id_type", type = "character", default = "SYMBOL",
               help = "Input gene ID type: SYMBOL, ENSEMBL, ENTREZID [default %default]")
 )
@@ -281,8 +283,41 @@ message("GO raw dotplot written to: ", out_pdf_raw)
 
 # Reduce redundancy by semantic similarity (clusterProfiler::simplify)
 # cutoff=0.7, by='p.adjust', select_fun=min are standard conservative defaults.
+# simplify() builds a pairwise semantic-similarity matrix over the terms it is
+# given, so both memory and runtime scale with the SQUARE of that count.
+#
+# enrichGO above is deliberately run with pvalueCutoff=1/qvalueCutoff=1, so `ego`
+# holds every tested term - on the order of ten thousand for BP. Handing that
+# whole object to simplify() means a ~10,000 x 10,000 similarity matrix, which
+# exhausts the job allocation and gets the process killed by the scheduler (a
+# SIGKILL, which the tryCatch below cannot intercept).
+#
+# Restricting it to the significant terms first is not an approximation: the
+# result is filtered to p.adjust <= padj_cutoff immediately afterwards anyway,
+# and since select_fun=min keeps the smallest p.adjust within each redundant
+# group, a non-significant term can never displace a significant one. Same
+# output, a fraction of the work.
+sig_ids   <- raw_df$ID                       # already filtered and p.adjust-sorted
+ego_input <- ego
+ego_input@result <- ego@result[ego@result$ID %in% sig_ids, , drop = FALSE]
+
+message(sprintf("simplify() input | %d significant of %d tested GO terms",
+                nrow(ego_input@result), nrow(ego@result)))
+
+# Safety net for the rare case where the significant set is itself huge.
+cap <- args$simplify_max_terms
+if (cap > 0 && nrow(ego_input@result) > cap) {
+  keep <- head(sig_ids, cap)
+  dropped <- nrow(ego_input@result) - length(keep)
+  ego_input@result <- ego_input@result[ego_input@result$ID %in% keep, , drop = FALSE]
+  message("WARNING: simplify() input capped at ", cap, " terms (most significant ",
+          "kept); ", dropped, " significant term(s) were not considered for ",
+          "redundancy reduction. The raw results file is unaffected. Set ",
+          "GO.simplify_max_terms to 0 to disable the cap.")
+}
+
 ego_simplified <- tryCatch(
-  simplify(ego, cutoff = 0.7, by = "p.adjust", select_fun = min),
+  simplify(ego_input, cutoff = 0.7, by = "p.adjust", select_fun = min),
   error = function(e) {
     warning("simplify() failed: ", conditionMessage(e))
     NULL

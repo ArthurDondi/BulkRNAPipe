@@ -26,10 +26,16 @@ rule GOEnrichment:
         padj_thr     = config['DESeq2']['padj_threshold'],
         lfc_thr      = config['DESeq2']['lfc_threshold'],
         gene_id_type = config.get('GO', {}).get('gene_id_type', 'SYMBOL'),
+        simplify_max_terms = lambda wildcards: int(
+            config.get('GO', {}).get('simplify_max_terms', 0)),
     threads: 2
     resources:
-        mem_mb        = 8000,
-        runtime       = 60,
+        # simplify() cost grows with the square of the number of terms it is
+        # given. go.R now restricts it to the significant terms rather than all
+        # ~10,000 tested ones, which is the real fix; these limits are raised
+        # from 8 GB / 60 min to leave headroom for a broad significant set.
+        mem_mb        = 16000,
+        runtime       = 120,
         cpus_per_task = 2,
     conda:
         "../envs/gsea.yaml"
@@ -51,5 +57,6 @@ rule GOEnrichment:
             --max_gs_size {params.max_gs_size} \
             --padj_thr   {params.padj_thr} \
             --lfc_thr    {params.lfc_thr} \
-            --gene_id_type {params.gene_id_type}
+            --gene_id_type {params.gene_id_type} \
+            --simplify_max_terms {params.simplify_max_terms}
         """
