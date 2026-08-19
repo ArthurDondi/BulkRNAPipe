@@ -203,7 +203,7 @@ submit the controller batch job (it runs Snakemake on `longq` and dispatches
 each rule as its own SLURM job):
 
 ```bash
-sbatch run_BulkRNAPipe_slurm.sh                          # uses config/config.yaml
+sbatch run_BulkRNAPipe_slurm.sh                          # uses config/config_epicode.yaml
 sbatch run_BulkRNAPipe_slurm.sh config/config_myproject.yaml
 ```
 
