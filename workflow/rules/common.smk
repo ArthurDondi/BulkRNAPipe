@@ -259,6 +259,18 @@ _qc_cfg = config.get('DesignQC', {}) or {}
 DESIGN_QC_GENES = [str(g) for g in (_qc_cfg.get('genes') or
                                     (PCA_EXCLUDE_GENES + PCA_TRANSGENE_GENES))]
 
+# Endogenous genes to plot for biological QC.  Unlike the list above these are
+# NOT excluded from size-factor estimation - they are ordinary genes, not
+# constructs that are structurally absent from some groups.
+DESIGN_QC_GOI = [str(g) for g in (_qc_cfg.get('genes_of_interest') or [])]
+
+for _entry in DESIGN_QC_GENES + DESIGN_QC_GOI:
+    if ',' in _entry:
+        raise ValueError(
+            f"DesignQC: entry '{_entry}' contains a comma, which is used as the "
+            "list delimiter. Split it into separate list entries."
+        )
+
 # ─── Interaction contrasts (difference of differences) ───────────────────────
 # Each entry estimates (A1 - A2) - (B1 - B2) on the log2 scale from the plain
 # ~ condition fit.  This is the correct way to compare across a boundary whose

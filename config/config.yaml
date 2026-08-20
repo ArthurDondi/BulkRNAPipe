@@ -207,9 +207,16 @@ PCA:
 # All samples are plotted together — that is the only way a group-linked
 # technical shift is visible.
 DesignQC:
-  # Genes to plot individually.  Defaults to PCA.exclude_genes +
-  # PCA.transgene_genes when left empty.
+  # Reporter / transgene features to plot individually.  These are ALSO excluded
+  # from size-factor estimation, because a construct present in only some groups
+  # would otherwise shift the normalisation of every other gene.  Defaults to
+  # PCA.exclude_genes + PCA.transgene_genes when left empty.
   genes: []
+  # Endogenous genes of interest, plotted in their own panel
+  # (design_qc/goi_expression.pdf).  Unlike `genes` these stay in the size-factor
+  # estimation - dropping real genes from the normalisation would be wrong.
+  #   genes_of_interest: [MYCN, GATA2]
+  genes_of_interest: []
 
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 # When enabled, an additional volcano file (volcano_proteomic.pdf) is generated

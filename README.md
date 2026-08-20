@@ -268,6 +268,7 @@ output_dir/
 │   ├── assignment_rates.pdf                  # featureCounts assignment breakdown
 │   ├── genes_detected.pdf                    # Genes with >= 1 count
 │   ├── marker_expression.pdf                 # Reporter / transgene expression
+│   ├── goi_expression.pdf                    # Endogenous genes of interest
 │   ├── sample_correlation.pdf                # Spearman correlation, all samples
 │   ├── sample_distance.pdf                   # Euclidean distance, all samples
 │   └── design_qc_summary.csv                 # Per-sample summary table
@@ -470,11 +471,27 @@ the signature to genes with a substantial effect.
 ### Design QC
 
 `design_qc/` plots library size, featureCounts assignment rates, genes detected,
-reporter/transgene expression, and the sample–sample correlation and distance
+per-gene expression panels, and the sample–sample correlation and distance
 structure, with all samples on one figure — a group-linked technical shift is
-invisible one sample at a time. Size factors for the marker panel are estimated
-with the reporter/transgene features excluded, so a construct present in half the
-groups cannot shift the normalisation it is being measured against.
+invisible one sample at a time.
+
+Two gene panels, configured separately because they are normalised differently:
+
+```yaml
+DesignQC:
+  genes:              [ATRX, ATRX_FL, ATRX_IFF, EGFP, mCherry]   # marker_expression.pdf
+  genes_of_interest:  [HOXB2, HOXB4, HOXB6, HOXB7, IGF2BP1]      # goi_expression.pdf
+```
+
+`genes` are the reporter and transgene features. They are **excluded from
+size-factor estimation**, because a construct present in only some groups would
+otherwise shift the normalisation of every other gene. `genes_of_interest` are
+ordinary endogenous genes and **stay in** the size factors — dropping real genes
+from the normalisation would be wrong. Both panels are drawn from the same
+normalised matrix, so the two are directly comparable.
+
+Genes absent from the count matrix are reported as a `WARNING` in
+`logs/DesignQC/design_qc.log` and skipped; the panel still renders.
 
 Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
 and coverage-uniformity metrics that are not recomputed here.

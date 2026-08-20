@@ -275,6 +275,15 @@ DesignQC:
     - ATRX_IFF
     - EGFP
     - mCherry
+  # Endogenous genes of interest, plotted in their own panel
+  # (design_qc/goi_expression.pdf).  These stay in the size-factor estimation -
+  # they are ordinary genes, not constructs absent from some groups.
+  genes_of_interest:
+    - HOXB2
+    - HOXB4
+    - HOXB6
+    - HOXB7
+    - IGF2BP1
 
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:

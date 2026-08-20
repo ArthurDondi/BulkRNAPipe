@@ -14,6 +14,8 @@ rule DesignQC:
         genes_det    = "design_qc/genes_detected.pdf",
         markers      = "design_qc/marker_expression.pdf",
         markers_csv  = "design_qc/marker_expression.csv",
+        goi          = "design_qc/goi_expression.pdf",
+        goi_csv      = "design_qc/goi_expression.csv",
         correlation  = "design_qc/sample_correlation.pdf",
         distance     = "design_qc/sample_distance.pdf",
         summary_csv  = "design_qc/design_qc_summary.csv",
@@ -24,6 +26,7 @@ rule DesignQC:
             f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
         ),
         marker_genes = ",".join(DESIGN_QC_GENES),
+        goi_genes    = ",".join(DESIGN_QC_GOI),
     threads: 1
     resources:
         mem_mb        = 4000,
@@ -44,5 +47,6 @@ rule DesignQC:
             --summary      {input.summary} \
             --outdir       {params.outdir} \
             --samples      {params.samples} \
-            --marker_genes "{params.marker_genes}"
+            --marker_genes "{params.marker_genes}" \
+            --goi_genes    "{params.goi_genes}"
         """

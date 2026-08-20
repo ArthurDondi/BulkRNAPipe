@@ -32,7 +32,9 @@ option_list <- list(
   make_option("--samples", type = "character",
               help = "Comma-separated sample:condition pairs"),
   make_option("--marker_genes", type = "character", default = "",
-              help = "Comma-separated gene IDs to plot individually (reporters, transgene)")
+              help = "Comma-separated reporter/transgene IDs; plotted AND excluded from size factors"),
+  make_option("--goi_genes", type = "character", default = "",
+              help = "Comma-separated endogenous genes of interest; plotted but kept in the size factors")
 )
 
 args   <- parse_args(OptionParser(option_list = option_list))
@@ -82,6 +84,19 @@ for (m in setdiff(marker_genes, markers_present)) {
 # Recover the exact spelling used in the matrix.
 markers_present <- rownames(counts)[tolower(rownames(counts)) %in% tolower(markers_present)]
 
+# Genes of interest are ordinary endogenous genes, so unlike the markers above
+# they stay in the size-factor estimation - dropping real genes from the
+# normalisation would be wrong, and they are not structurally absent in any group.
+resolve_genes <- function(wanted, label) {
+  present <- rownames(counts)[tolower(rownames(counts)) %in% tolower(wanted)]
+  for (g in wanted[!tolower(wanted) %in% tolower(present)]) {
+    message("WARNING: ", label, " '", g, "' is not in the count matrix.")
+  }
+  # Return in the order the user listed them.
+  present[order(match(tolower(present), tolower(wanted)))]
+}
+goi_present <- resolve_genes(split_csv(args$goi_genes), "gene of interest")
+
 # ─── Normalisation (markers excluded from the size factors) ──────────────────
 # Reporter and transgene features are present in some groups and absent in
 # others by construction. Leaving them in the size-factor estimation lets the
@@ -107,11 +122,6 @@ summary_df <- data.frame(
   genes_detected  = colSums(counts > 0),
   stringsAsFactors = FALSE
 )
-if (length(markers_present) > 0) {
-  summary_df$pct_reads_in_markers <-
-    round(100 * colSums(counts[markers_present, , drop = FALSE]) / colSums(counts), 4)
-}
-
 theme_qc <- theme_bw(base_size = 12) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         legend.position = "right")
@@ -169,35 +179,54 @@ if (!is.null(args$summary) && file.exists(args$summary)) {
   message("No featureCounts summary file found - skipping assignment_rates.pdf")
 }
 
-# ─── Reporter / transgene expression ─────────────────────────────────────────
-if (length(markers_present) > 0) {
-  mk <- do.call(rbind, lapply(markers_present, function(g) {
+# ─── Per-gene expression panels ──────────────────────────────────────────────
+gene_panel <- function(genes, title, subtitle, out_pdf, out_csv) {
+  if (length(genes) == 0) {
+    message("No genes to plot for '", title, "' - writing an empty table.")
+    write.csv(data.frame(gene_id = character(0)), out_csv, row.names = FALSE)
+    pdf(out_pdf, width = 7, height = 4); plot.new()
+    text(0.5, 0.5, paste0(title, ": no genes found"), cex = 1.1); dev.off()
+    return(invisible(NULL))
+  }
+  df <- do.call(rbind, lapply(genes, function(g) {
     data.frame(gene = g, sample = colnames(norm), value = as.numeric(norm[g, ]),
                stringsAsFactors = FALSE)
   }))
-  mk$sample    <- factor(mk$sample, levels = sample_levels)
-  mk$condition <- sample_df$condition[match(mk$sample, sample_df$sample)]
-  mk$gene      <- factor(mk$gene, levels = markers_present)
+  df$sample    <- factor(df$sample, levels = sample_levels)
+  df$condition <- sample_df$condition[match(df$sample, sample_df$sample)]
+  df$gene      <- factor(df$gene, levels = genes)
 
-  p <- ggplot(mk, aes(x = sample, y = value + 1, fill = condition)) +
+  p <- ggplot(df, aes(x = sample, y = value + 1, fill = condition)) +
     geom_col() +
     facet_wrap(~ gene, scales = "free_y", ncol = 1) +
     scale_y_log10() +
-    labs(title = "Reporter and transgene expression",
-         subtitle = "normalised counts + 1, log10 scale; size factors exclude these features",
+    labs(title = title, subtitle = subtitle,
          x = NULL, y = "normalised count + 1", fill = "Condition") +
     theme_qc
-  ggsave(file.path(outdir, "marker_expression.pdf"), plot = p,
-         width = 9, height = 2.6 * length(markers_present) + 1.5, limitsize = FALSE)
-  message("Written: ", file.path(outdir, "marker_expression.pdf"))
+  ggsave(out_pdf, plot = p, width = 9,
+         height = 2.6 * length(genes) + 1.5, limitsize = FALSE)
+  message("Written: ", out_pdf)
 
-  wide <- as.data.frame(round(norm[markers_present, , drop = FALSE], 3))
-  wide <- cbind(gene_id = rownames(wide), wide)
-  write.csv(wide, file.path(outdir, "marker_expression.csv"), row.names = FALSE)
-} else {
-  message("No marker genes present - skipping marker_expression.pdf")
-  write.csv(data.frame(gene_id = character(0)),
-            file.path(outdir, "marker_expression.csv"), row.names = FALSE)
+  wide <- as.data.frame(round(norm[genes, , drop = FALSE], 3))
+  write.csv(cbind(gene_id = rownames(wide), wide), out_csv, row.names = FALSE)
+}
+
+gene_panel(markers_present,
+           "Reporter and transgene expression",
+           "normalised counts + 1, log10; these features are excluded from the size factors",
+           file.path(outdir, "marker_expression.pdf"),
+           file.path(outdir, "marker_expression.csv"))
+
+gene_panel(goi_present,
+           "Genes of interest",
+           "normalised counts + 1, log10; endogenous genes, included in the size factors",
+           file.path(outdir, "goi_expression.pdf"),
+           file.path(outdir, "goi_expression.csv"))
+
+if (length(markers_present) > 0) {
+  summary_df$pct_reads_in_markers <-
+    round(100 * colSums(counts[markers_present, , drop = FALSE]) /
+          colSums(counts), 4)[as.character(summary_df$sample)]
 }
 
 # ─── Sample-sample relationships ─────────────────────────────────────────────
