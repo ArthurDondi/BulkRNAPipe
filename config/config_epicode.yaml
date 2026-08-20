@@ -374,7 +374,27 @@ SignatureReversal:
     lfc_threshold: 1.0
     restored_fraction: 0.5
 
-  # NOTE: there is deliberately no EmptyVector negative control here.  The only
+  # ── Negative control ───────────────────────────────────────────────────────
+  # Answers the question the permutation null cannot: is the reversal specific to
+  # ATRX, or would any transduced-vs-untransduced comparison score the same?
+  #
+  # Signature = the vector-transduction effect (EmptyVector / E6).
+  # Response  = the FL-vs-IFF difference, which shares no sample with it
+  #             ({E6, EmptyVector} vs {ATRX_FL, ATRX_IFF}) and has no mechanistic
+  #             reason to reverse a transduction signature.
+  #
+  # Matched to the _lfc1 comparisons above so it calibrates them directly.
+  # Expected result: excess_over_null near 0, perm_p not significant. If instead
+  # it scores like ATRX_FL does, the metric is picking up generic structure
+  # rather than ATRX biology, and the rescue scores mean much less.
+  - name: NEGATIVE_CONTROL_vector_signature_vs_FL_IFF
+    signature_contrast: E6_vs_EmptyVector
+    response_contrast:  ATRX_FL_vs_ATRX_IFF
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
+    restored_fraction: 0.5
+
+  # NOTE: there is deliberately no EmptyVector-vs-E6 negative control here.  The only
   # candidate, TP53_vs_E6 against E6_vs_EmptyVector, shares the E6 group: E6
   # enters the signature as the numerator and the response as the denominator,
   # so its sampling noise appears with opposite signs on the two axes and
