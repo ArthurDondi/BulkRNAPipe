@@ -169,6 +169,7 @@ stats <- data.frame(
   ols_slope             = round(ols[2], 4),
   spearman_rho          = round(rho, 4),
   pearson_r             = round(pear, 4),
+  r_squared             = round(pear^2, 4),
   n_reversed            = n_rev,
   pct_reversed          = round(100 * n_rev / nrow(sel), 2),
   binom_p               = signif(bt$p.value, 3),
@@ -213,6 +214,17 @@ verdict <- if (shares) {
   "weak reversal"
 }
 
+# Stats are drawn inside the panel rather than only in the subtitle: a long
+# subtitle is silently clipped when the figure is embedded or scaled, and these
+# numbers are the point of the plot.
+stat_box <- paste(
+  sprintf("slope     %+.2f", slope),
+  sprintf("R\u00b2        %.3f", pear^2),
+  sprintf("rho       %+.2f", rho),
+  sprintf("reversed  %.0f%% (null %.0f%%)", stats$pct_reversed, stats$null_pct_reversed),
+  sprintf("perm p    %s", format(signif(perm_p, 2))),
+  sep = "\n")
+
 p <- ggplot(sel, aes(x = lfc_sig, y = lfc_resp)) +
   annotate("rect", xmin = 0, xmax = lim,  ymin = -lim, ymax = 0,
            fill = "#4DAF4A", alpha = 0.07) +
@@ -225,28 +237,32 @@ p <- ggplot(sel, aes(x = lfc_sig, y = lfc_resp)) +
   geom_abline(slope = slope, intercept = 0, colour = "#E41A1C", linewidth = 0.8) +
   geom_text_repel(aes(label = label), size = 2.6, max.overlaps = 30,
                   segment.size = 0.2, show.legend = FALSE) +
+  annotate("label", x = lim, y = lim, hjust = 1, vjust = 1, label = stat_box,
+           size = 2.9, family = "mono", lineheight = 1.15,
+           fill = grDevices::adjustcolor("white", alpha.f = 0.88),
+           label.size = 0.25, colour = "grey15") +
   scale_colour_manual(values = c("FALSE" = "grey65", "TRUE" = "#377EB8"),
                       name = paste0("padj < ", args$padj, "\nin response")) +
   coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
   labs(
     title = paste0("Signature reversal: ", args$name),
-    subtitle = sprintf(
-      "%d signature genes | %.0f%% reversed vs %.0f%% null (%+.0f pts, perm p = %s) | rho = %.2f | %s",
-      nrow(sel), stats$pct_reversed, stats$null_pct_reversed, excess,
-      format(signif(perm_p, 2)), rho, verdict),
+    subtitle = sprintf("%d signature genes (padj < %s, |log2FC| >= %s)\n%s",
+                       nrow(sel), args$padj, args$lfc, verdict),
     x = paste0("log2FC  ", args$signature_label, "   (the perturbation)"),
     y = paste0("log2FC  ", args$response_label, "   (the intervention)"),
     caption = if (shares) paste0(
       "NOT INTERPRETABLE: these contrasts share condition(s) ",
-      paste(shared_groups, collapse = ", "),
-      ", whose shared noise creates negative correlation on its own.") else paste0(
-      "shaded quadrants = reversal | dashed line = complete reversal (slope -1) | ",
+      paste(shared_groups, collapse = ", "), ",\nwhose shared noise creates ",
+      "negative correlation on its own.") else paste0(
+      "shaded quadrants = reversal | dashed line = complete reversal (slope -1)\n",
       "red line = fitted slope (total least squares) | null from ",
       args$n_perm, " permutations")
   ) +
-  theme_bw(base_size = 12)
+  theme_bw(base_size = 12) +
+  theme(plot.subtitle = element_text(lineheight = 1.2),
+        plot.caption  = element_text(hjust = 0, size = 8, lineheight = 1.2))
 
-ggsave(file.path(outdir, "reversal_scatter.pdf"), plot = p, width = 8, height = 7.5)
+ggsave(file.path(outdir, "reversal_scatter.pdf"), plot = p, width = 9, height = 9)
 message("Written: ", file.path(outdir, "reversal_scatter.pdf"))
 
 # ─── Recovered-fraction distribution ─────────────────────────────────────────

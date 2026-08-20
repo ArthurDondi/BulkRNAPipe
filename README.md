@@ -460,10 +460,15 @@ SignatureReversal:
 | `null_pct_reversed` / `excess_over_null` / `perm_p` | permutation baseline, the excess over it, and its empirical p-value |
 | `shares_condition` / `interpretable` | flags a pair whose contrasts share a group, which invalidates the score |
 | `pct_restored` | % recovering at least `restored_fraction` of the perturbation |
-| `spearman_rho` | rank correlation between the two fold-change vectors |
+| `spearman_rho` | rank correlation between the two fold-change vectors — is the reversal *consistent* (rank-based, ignores magnitude) |
+| `r_squared` | squared Pearson correlation — how much of the response variance the signature explains |
 
 Total least squares rather than ordinary least squares: both axes are estimated
-with comparable noise, and OLS would bias the slope toward zero.
+with comparable noise, and OLS would bias the slope toward zero. The slope
+answers "how far back did it go", `spearman_rho` answers "how consistently" —
+they are different questions, so both are reported, and both are drawn in a box
+inside the plot panel rather than only in the subtitle, which gets clipped once
+the figure is embedded or scaled.
 
 **The two contrasts must not share a condition.** If they do, that group's
 sampling noise enters one log2FC positively and the other negatively, creating a

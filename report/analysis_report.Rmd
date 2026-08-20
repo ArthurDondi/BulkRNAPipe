@@ -118,6 +118,21 @@ volcano <- function(res, title, num, den) {
          y = expression(-log[10] ~ "adjusted p"))
 }
 
+# Ranking by padj alone floats high-count genes with tiny fold-changes to the
+# top. This ranks significant genes by -log10(padj) * |log2FC| so both matter,
+# and reports the two directions separately so one cannot crowd out the other.
+top_genes <- function(res, n = 10) {
+  res %>% filter(!is.na(padj), padj < params$padj,
+                 abs(log2FoldChange) >= params$lfc) %>%
+    mutate(direction = ifelse(log2FoldChange > 0, "up", "down"),
+           score = -log10(padj) * abs(log2FoldChange)) %>%
+    group_by(direction) %>% slice_max(score, n = n) %>% ungroup() %>%
+    arrange(direction, desc(score)) %>%
+    transmute(gene_id, direction, baseMean = round(baseMean),
+              log2FC = round(log2FoldChange, 2), padj = signif(padj, 3),
+              score = round(score, 1))
+}
+
 de_counts <- function(res) {
   r <- res %>% filter(!is.na(padj), padj < params$padj,
                       abs(log2FoldChange) >= params$lfc)
@@ -277,6 +292,42 @@ for (v in pca_views) {
 
 ---
 
+# How TP53 differs from the E6 lineage
+
+Before narrowing to the constructs, this is the size of the difference we are
+setting aside. `TP53` is a different clone from everything E6-derived, and that
+difference is confounded with the ATRX genotype: no comparison can separate them.
+
+```{r tp53-vs-e6, fig.height = 5}
+r_tp53 <- grab("deseq2", "TP53_vs_E6", "results.csv")
+if (is.null(r_tp53)) missing_note("deseq2", "TP53_vs_E6", "results.csv") else {
+  print(volcano(r_tp53, "TP53_vs_E6", num = "E6", den = "TP53"))
+}
+```
+
+```{r tp53-scale}
+if (!is.null(r_tp53)) {
+  n <- de_counts(r_tp53)
+  cat(sprintf(paste("\n> **%s genes** change between TP53 and E6 at padj < %s and",
+                    "|log2FC| >= %s (%s up in E6, %s down) - roughly %.0f%% of the",
+                    "genes tested. That is the clone plus the ATRX knockout",
+                    "together, and it dwarfs everything that follows.\n\n"),
+              format(sum(n), big.mark = ","), params$padj, params$lfc,
+              format(n["up"], big.mark = ","), format(n["down"], big.mark = ","),
+              100 * sum(n) / sum(!is.na(r_tp53$padj))))
+}
+```
+
+```{r tp53-top}
+if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes")
+```
+
+> *(Say what the TP53-vs-E6 difference looks like biologically, and state
+> explicitly that from here on TP53 is set aside because the clonal background
+> cannot be separated from the ATRX genotype.)*
+
+---
+
 # Differential expression
 
 ## `r params$headline_contrast` — the primary comparison
@@ -295,10 +346,9 @@ if (is.null(res)) missing_note("deseq2", hc, "results.csv") else {
 
 ```{r de-headline-top}
 if (!is.null(res)) {
-  res %>% filter(!is.na(padj)) %>% arrange(padj) %>% head(20) %>%
-    transmute(gene_id, baseMean = round(baseMean),
-              log2FC = round(log2FoldChange, 2), padj = signif(padj, 3)) %>%
-    kable(caption = "Top 20 genes by adjusted p-value")
+  kable(top_genes(res),
+        caption = paste("Top 10 up and 10 down, ranked by -log10(padj) x |log2FC|",
+                        "among genes passing both thresholds"))
 }
 ```
 
@@ -352,7 +402,7 @@ contrasts <- list(
   c("EmptyVector_vs_ATRX_FL",  "ATRX_FL",     "EmptyVector"),
   c("EmptyVector_vs_ATRX_IFF", "ATRX_IFF",    "EmptyVector"),
   c("E6_vs_EmptyVector",       "EmptyVector", "E6"),
-  c("TP53_vs_E6",              "E6",          "TP53"),
+  # TP53_vs_E6 has its own section above.
   c("TP53_vs_ATRX_FL",         "ATRX_FL",     "TP53"),
   c("TP53_vs_ATRX_IFF",        "ATRX_IFF",    "TP53")
 )
@@ -454,22 +504,38 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
   cat("\n\n###", nm, "\n\n")
   if (is.null(g)) { missing_note("signature_reversal", nm, "reversal_genes.csv"); next }
   lim <- max(abs(c(g$lfc_sig, g$lfc_resp)), na.rm = TRUE)
-  print(
-    ggplot(g, aes(lfc_sig, lfc_resp)) +
-      annotate("rect", xmin = 0, xmax = lim, ymin = -lim, ymax = 0,
-               fill = "#4DAF4A", alpha = .07) +
-      annotate("rect", xmin = -lim, xmax = 0, ymin = 0, ymax = lim,
-               fill = "#4DAF4A", alpha = .07) +
-      geom_hline(yintercept = 0, colour = "grey60", linewidth = .3) +
-      geom_vline(xintercept = 0, colour = "grey60", linewidth = .3) +
-      geom_abline(slope = -1, linetype = "dashed", colour = "grey45") +
-      geom_point(size = 1, alpha = .5, colour = "#2166AC") +
-      coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
-      labs(title = nm,
-           subtitle = "shaded = reversal | dashed = complete reversal (slope -1)",
-           x = "log2FC knockout (the damage)",
-           y = "log2FC rescue (the repair)")
-  )
+  st  <- grab("signature_reversal", nm, "reversal_stats.csv")
+  # Stats go inside the panel: a long subtitle is silently clipped once the
+  # figure is embedded or scaled, and these numbers are the point of the plot.
+  box <- if (!is.null(st)) paste(
+    sprintf("slope     %+.2f", st$tls_slope[1]),
+    sprintf("R\u00b2        %.3f", if ("r_squared" %in% names(st))
+              st$r_squared[1] else st$pearson_r[1]^2),
+    sprintf("rho       %+.2f", st$spearman_rho[1]),
+    sprintf("reversed  %.0f%% (null %.0f%%)", st$pct_reversed[1],
+            st$null_pct_reversed[1]),
+    sprintf("perm p    %s", format(signif(st$perm_p[1], 2))), sep = "\n") else NULL
+  p <- ggplot(g, aes(lfc_sig, lfc_resp)) +
+    annotate("rect", xmin = 0, xmax = lim, ymin = -lim, ymax = 0,
+             fill = "#4DAF4A", alpha = .07) +
+    annotate("rect", xmin = -lim, xmax = 0, ymin = 0, ymax = lim,
+             fill = "#4DAF4A", alpha = .07) +
+    geom_hline(yintercept = 0, colour = "grey60", linewidth = .3) +
+    geom_vline(xintercept = 0, colour = "grey60", linewidth = .3) +
+    geom_abline(slope = -1, linetype = "dashed", colour = "grey45") +
+    geom_point(size = 1, alpha = .5, colour = "#2166AC") +
+    coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
+    labs(title = nm,
+         subtitle = "shaded = reversal | dashed line = complete reversal (slope -1)",
+         x = "log2FC knockout (the damage)",
+         y = "log2FC rescue (the repair)")
+  if (!is.null(box)) {
+    p <- p + annotate("label", x = lim, y = lim, hjust = 1, vjust = 1, label = box,
+                      size = 2.9, family = "mono", lineheight = 1.15,
+                      fill = grDevices::adjustcolor("white", alpha.f = .88),
+                      label.size = .25, colour = "grey15")
+  }
+  print(p)
 }
 ```
 
@@ -490,6 +556,96 @@ for (nm in c("ATRX_FL_rescue_shortfall", "ATRX_IFF_rescue_shortfall")) {
   print(volcano(r, nm, num = "overshoot", den = "shortfall"))
 }
 ```
+
+---
+
+# The E6 lineage alone
+
+With `TP53` excluded, every remaining group shares one clone and one
+transduction step. Differences here are attributable to the construct — the two
+effects we could not separate above are now held constant by design rather than
+corrected for.
+
+## PCA, E6-derived samples only
+
+```{r e6-pca, fig.height = 5}
+co <- grab("pca", "E6_derived", "no_vector_no_transgene_coords.csv")
+ve <- grab("pca", "E6_derived", "no_vector_no_transgene_variance_explained.csv")
+if (is.null(co)) {
+  missing_note("pca", "E6_derived", "no_vector_no_transgene_coords.csv")
+} else {
+  pv <- if (!is.null(ve)) setNames(ve$percent_variance, ve$PC) else c(PC1=NA, PC2=NA)
+  print(
+    co %>% mutate(condition = cond_factor(condition)) %>%
+      ggplot(aes(PC1, PC2, colour = condition, label = sample)) +
+      geom_point(size = 3) +
+      ggrepel::geom_text_repel(size = 2.6, show.legend = FALSE, max.overlaps = 20) +
+      scale_colour_manual(values = PAL) +
+      labs(title = "E6-derived samples, reporter and ATRX features removed",
+           subtitle = "clone and transduction held constant; the construct is the only intended difference",
+           x = sprintf("PC1: %.1f%% variance", pv[["PC1"]]),
+           y = sprintf("PC2: %.1f%% variance", pv[["PC2"]]),
+           colour = "Condition")
+  )
+}
+```
+
+## The three construct comparisons
+
+```{r e6-three, fig.height = 4.5, results = "asis"}
+trio <- list(
+  c("EmptyVector_vs_ATRX_FL",  "ATRX_FL",  "EmptyVector",
+    "Full-length rescue against its own transduced control"),
+  c("EmptyVector_vs_ATRX_IFF", "ATRX_IFF", "EmptyVector",
+    "In-frame fusion against the same control"),
+  c("ATRX_FL_vs_ATRX_IFF",     "ATRX_IFF", "ATRX_FL",
+    "The two constructs against each other")
+)
+trio_tally <- list()
+for (t4 in trio) {
+  r <- grab("deseq2", t4[1], "results.csv")
+  cat("\n\n###", t4[4], "\n\n")
+  if (is.null(r)) { missing_note("deseq2", t4[1], "results.csv"); next }
+  trio_tally[[t4[1]]] <- de_counts(r)
+  print(volcano(r, t4[1], num = t4[2], den = t4[3]))
+  cat("\n\n")
+  print(kable(top_genes(r, n = 8)))
+  cat("\n\n")
+}
+```
+
+```{r e6-trio-tally}
+if (length(trio_tally)) {
+  do.call(rbind, trio_tally) %>% as.data.frame() %>%
+    tibble::rownames_to_column("contrast") %>% mutate(total = up + down) %>%
+    kable(caption = "Differentially expressed genes within the E6 lineage")
+}
+```
+
+## Genes of interest, E6 lineage only
+
+```{r e6-goi, fig.height = 4}
+if (!is.null(goi)) {
+  print(
+    goi %>% filter(condition != "TP53") %>%
+      group_by(gene_id, condition) %>%
+      summarise(mean = mean(value), sd = sd(value), .groups = "drop") %>%
+      ggplot(aes(condition, mean, fill = condition)) +
+      geom_col() +
+      geom_errorbar(aes(ymin = pmax(mean - sd, 0), ymax = mean + sd),
+                    width = .25, linewidth = .3) +
+      facet_wrap(~ gene_id, scales = "free_y", nrow = 1) +
+      scale_fill_manual(values = PAL, guide = "none") +
+      labs(title = "Genes of interest, TP53 excluded", x = NULL,
+           y = "normalised count") +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  )
+}
+```
+
+> *(This is the section your conclusion should rest on. Which construct moves
+> the genes of interest, in which direction, and by how much — with everything
+> that could confound it held constant rather than corrected.)*
 
 ---
 
