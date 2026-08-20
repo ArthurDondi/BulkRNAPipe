@@ -66,6 +66,8 @@ BulkRNAPipe/
 │       ├── gsea.R                  # fgsea enrichment per contrast
 │       ├── go.R                    # GO enrichment per contrast
 │       └── gsea_compare.R          # ΔNES + residual-rank comparison
+├── report/
+│   └── analysis_report.Rmd         # Rendered analysis report template
 ├── run_BulkRNAPipe.sh              # Local (non-SLURM) run script
 └── run_BulkRNAPipe_slurm.sh        # SLURM cluster run script
 ```
@@ -509,6 +511,45 @@ Genes absent from the count matrix are reported as a `WARNING` in
 
 Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
 and coverage-uniformity metrics that are not recomputed here.
+
+## Analysis report
+
+`report/analysis_report.Rmd` renders a single self-contained HTML (or PDF)
+summarising a whole run, for people who will not open the pipeline directory.
+It reads the CSV files the pipeline writes and **rebuilds every figure**, rather
+than embedding the PDFs — so the styling is consistent, the HTML needs no
+external assets, and any plot can be edited in one place.
+
+```bash
+snakemake -s workflow/Snakefile --configfile config/config_epicode.yaml \
+    --use-conda --conda-frontend conda --cores 1 report/analysis_report.html
+```
+
+or directly, which is usually easier while editing:
+
+```bash
+Rscript -e 'rmarkdown::render("report/analysis_report.Rmd",
+            params = list(outdir = "/path/to/output_dir"),
+            output_file = "analysis_report.html")'
+```
+
+It is **not** part of the default target. The report is a document you edit by
+hand, and rebuilding it on every run would overwrite that work.
+
+Sections: experimental design → QC (library metrics, sample correlation, ATRX
+and vector markers) → PCA → differential expression (headline contrast first,
+then genes of interest, then the rest) → GSEA → rescue assessment (signature
+reversal and interaction contrasts) → summary.
+
+Two things worth knowing when you edit it:
+
+- **Every section degrades gracefully.** A missing pipeline output produces a
+  visible note and the report still renders, so it can be built before a run
+  finishes.
+- **Blockquoted text is placeholder interpretation.** Each figure is followed by
+  a `>` paragraph saying what to look for — rewrite those; they are prompts, not
+  conclusions. The `params` block at the top sets `outdir`, thresholds, the
+  condition order and palette, and which contrast leads.
 
 ## GSEA / GO enrichment modules
 

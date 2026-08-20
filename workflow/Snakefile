@@ -12,6 +12,7 @@ include: 'rules/gsea.smk'
 include: 'rules/gsea_interaction.smk'
 include: 'rules/go.smk'
 include: 'rules/compare_contrasts.smk'
+include: 'rules/report.smk'
 
 # Define the pipeline working directory
 workdir: config['User']['output_dir']
