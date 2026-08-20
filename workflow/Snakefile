@@ -44,6 +44,10 @@ rule BulkRNAPipe_output:
                sampleset=PCA_SAMPLE_SETS, view=PCA_VIEWS) if DESEQ2 else [],
         # ── Design QC ─────────────────────────────────────────────────────────
         "design_qc/design_qc_summary.csv" if DESEQ2 else [],
+        # Same rule as the summary above, listed explicitly so the panels are
+        # requested by name rather than only as a side effect of that one file.
+        "design_qc/marker_expression.pdf" if DESEQ2 else [],
+        "design_qc/goi_expression.pdf" if DESEQ2 else [],
         # ── Interaction contrasts (difference of differences) ─────────────────
         expand("deseq2_interaction/{interaction}/results.csv",
                interaction=INTERACTIONS) if DESEQ2 else [],
