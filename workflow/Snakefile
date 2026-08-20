@@ -9,6 +9,7 @@ include: 'rules/pca.smk'
 include: 'rules/design_qc.smk'
 include: 'rules/signature_reversal.smk'
 include: 'rules/gsea.smk'
+include: 'rules/gsea_interaction.smk'
 include: 'rules/go.smk'
 include: 'rules/compare_contrasts.smk'
 
@@ -52,6 +53,10 @@ rule BulkRNAPipe_output:
         # ── GSEA ─────────────────────────────────────────────────────────────
         expand("gsea/{contrast}/{collection}_results.csv",
                contrast=CONTRASTS, collection=GSEA_COLLECTIONS) if GSEA else [],
+        # ── GSEA on the interaction contrasts ────────────────────────────────
+        expand("gsea_interaction/{interaction}/{collection}_results.csv",
+               interaction=INTERACTIONS,
+               collection=GSEA_COLLECTIONS) if GSEA and DESEQ2 else [],
         # ── GO enrichment ─────────────────────────────────────────────────────
         expand("go/{contrast}/go_{ont}_{dir}_results.csv",
                contrast=CONTRASTS,

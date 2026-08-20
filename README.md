@@ -290,6 +290,9 @@ output_dir/
 │   └── ma_plot.pdf                           # MA plot (direction-annotated)
 ├── resources/generated_gmts/
 │   └── hox.gmt                              # Auto-generated HOX gene sets
+├── gsea_interaction/{interaction}/
+│   ├── {collection}_results.csv             # fgsea on the difference-of-differences
+│   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 ├── gsea/{contrast}/
 │   ├── {collection}_results.csv             # fgsea results per collection
 │   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
@@ -418,6 +421,17 @@ crossing a boundary that no shared control spans.
 
 This assumes the nuisance effect is the same size in both pairs. With one group
 per condition that is untestable, so state it in the methods.
+
+**GSEA on the interaction.** When `Run.gsea` is on, each interaction also gets
+its own enrichment run in `gsea_interaction/{interaction}/`, via a rule separate
+from the per-contrast `GSEA` so it cannot disturb results already on disk. This
+matters because a plain contrast crossing a confounded boundary is dominated by
+whatever separates those groups — typically the proliferation/inflammation axis,
+which Hallmark reports through many heavily overlapping sets, making one latent
+variable look like a dozen findings. Ranking on the interaction cancels the
+nuisance effects instead, so the enrichment answers which pathways the
+intervention failed to restore (`NES < 0`) or overshot (`NES > 0`). The dotplot
+labels both halves explicitly, e.g. `ATRX_FL/EmptyVector > TP53/E6`.
 
 ### Signature reversal
 
