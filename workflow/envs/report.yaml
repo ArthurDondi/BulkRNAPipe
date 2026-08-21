@@ -5,11 +5,17 @@ channels:
   - nodefaults
 dependencies:
   - r-base=4.4.2
-  - r-rmarkdown=2.29
-  - r-knitr=1.49
-  - r-ggplot2=3.5.1
-  - r-ggrepel=0.9.6
-  - r-dplyr=1.1.4
-  - r-tidyr=1.3.1
-  - r-tibble=3.2.1
-  - pandoc=3.5
+  # xfun must be pinned alongside knitr: knitr >= 1.47 calls xfun::attr(), which
+  # only exists from xfun 0.48. Leaving it to the solver produced an older xfun
+  # and the render died with
+  #   Error: object 'attr' is not exported by 'namespace:xfun'
+  - r-knitr>=1.49
+  - r-xfun>=0.49
+  - r-rmarkdown>=2.29
+  - r-evaluate>=1.0
+  - r-ggplot2>=3.5.1
+  - r-ggrepel>=0.9.6
+  - r-dplyr>=1.1.4
+  - r-tidyr>=1.3.1
+  - r-tibble>=3.2.1
+  - pandoc>=3.1
