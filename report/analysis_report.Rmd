@@ -382,18 +382,17 @@ for (v in pca_views) {
 }
 ```
 
-> PC1 of the full PCA separates TP53 from everything E6-derived: that is the
-> clonal background, confounded with the ATRX genotype and not correctable.
+> PC1 (78%) of the full PCA separates TP53 from everything E6-derived with :
+> heavy clonal background, as seen with the sample-sample variance, confounded with the ATRX genotype and not correctable.
 > Restricting to the E6 lineage lets the construct effects use PC1/PC2.
-> *(Rewrite with what you see.)*
 
 ---
 
 # How TP53 differs from the E6 lineage
 
-Before narrowing to the constructs, this is the size of the difference we are
+Before narrowing to the E6 samples only, this is the size of the difference we are
 setting aside. `TP53` is a different clone from everything E6-derived, and that
-difference is confounded with the ATRX genotype: no comparison can separate them.
+difference is confounded with the ATRX genotype.
 
 ```{r tp53-vs-e6, fig.height = 5}
 r_tp53 <- de_results("deseq2", "TP53_vs_E6", "results.csv")
@@ -419,15 +418,15 @@ if (!is.null(r_tp53)) {
 if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes")
 ```
 
-> *(Say what the TP53-vs-E6 difference looks like biologically, and state
-> explicitly that from here on TP53 is set aside because the clonal background
-> cannot be separated from the ATRX genotype.)*
+> With 18% of the genes teste being significantly differently expressed between TP53 and E6, 
+> we can see thet either the clonal drift or the ATRX knockout led to huge shifts in expression.
+> Our current set up does not ena
 
 ---
 
 # Differential expression
 
-## `r params$headline_contrast` — the primary comparison
+## `r params$headline_contrast`
 
 Both groups share the clone and carry a vector, so the clonal and transduction
 effects cancel. This is the cleanest contrast in the dataset.
@@ -455,9 +454,12 @@ if (!is.null(res)) {
 }
 ```
 
-> *(Your interpretation of the FL vs IFF difference.)*
+> HOXB genes are overexpressed in `ATRX_IFF`. They are canonical targets of Polycomb Repressive Complex 2 (PRC2). 
+> `ATRX_IFF` lacks its EZH2-interacting domain (PRC2 member) interacting domain, so one hypothesis would be
+>  that `ATRX_IFF` fails recruiting PRC2 at the HOXB locus, therefore not repressing its expression.
 
-## Genes of interest
+
+## Genes of interest (HOXB and IGF1BP2)
 
 The point of this panel is the **pattern across groups**, not any single gene.
 
@@ -482,9 +484,9 @@ if (is.null(goi)) missing_note("design_qc", "goi_expression.csv") else {
 }
 ```
 
-> *(Describe the pattern: which groups move together, and where TP53 sits
-> relative to them. Note that TP53 is a different clone, so a difference there is
-> not by itself evidence about ATRX.)*
+> Genes significantly enriched in `ATRX_IFF` compared to `ATRX_FL` are also highly expressed 
+> in TP53. This is counter-intuitive, as we would expect `TP53` cells to be more similar 
+> to `ATRX_FL` (full rescue) than `ATRX_FF` (partial rescue via truncated protein)
 
 ## Remaining contrasts
 
@@ -556,16 +558,14 @@ for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
 }
 ```
 
-> Hallmark sets overlap heavily, and the proliferation sets (E2F, G2M, MYC) and
-> the inflammatory/interferon sets are two ends of one axis that dominates most
-> cell-line RNA-seq. Read them as one signal, not as many independent findings.
-> *(Rewrite with your conclusion.)*
+> Hallmark proliferation sets (E2F, G2M, MYC) are enriched in `ATRX_IFF` compared to `ATRX_FL`, and
+> the inflammatory/interferon sets are enriched in `ATRX_FL`. 
 
 ---
 
 # Rescue assessment
 
-Whether the rescue worked is **not** answerable by asking if `ATRX_FL` clusters
+Whether the rescue worked is not answerable by asking if `ATRX_FL` clusters
 with `TP53` — different clone, different transduction status. Instead: does the
 intervention push the knockout-responsive genes back the other way? Both
 contrasts used here sit inside a single genetic background, so the clonal
@@ -645,9 +645,10 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
 }
 ```
 
-> A gene the knockout pushed up should be pushed back down: points in the shaded
+> If a gene was pushed up by the knockout it should be pushed back down when reintroducing ATRX: points in the shaded
 > quadrants, along the dashed line. Slope −1 is a complete rescue, 0 is no
-> response. *(Rewrite with the numbers from the table above.)*
+> response. We see a slightly higher recovery in `ATRX_FL` compared to `ATRX_IFF`,
+> however, both are very close to zero.
 
 ## Interaction contrasts
 
@@ -729,10 +730,6 @@ if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
 }
 ```
 
-> *(Do the replicates of each construct still form the tightest blocks once the
-> clonal outlier is removed? If a construct's replicates correlate no better with
-> each other than with another construct's, treat its contrasts cautiously.)*
-
 ## The three construct comparisons
 
 ```{r e6-three, fig.height = 4.5, results = "asis"}
@@ -786,17 +783,16 @@ if (!is.null(goi)) {
 }
 ```
 
-> *(This is the section your conclusion should rest on. Which construct moves
-> the genes of interest, in which direction, and by how much — with everything
-> that could confound it held constant rather than corrected.)*
+> Here, we got more coherent results in both HOXB genes:
+> taking E6 as baseline, we can see that HOXB expression is always lower in `ATRX_FL` 
+> than `E6`, while it is much higher in `ATRX_IFF`. Interestingly, this could mean that `ATRX_IFF` has an acitve role in disturbing PRC2
+> 
 
 ---
 
 # Summary
 
-> *(Three or four sentences. What the rescue did, what it did not, and the one
-> caveat a reader must keep: one clone and one transduced pool per condition, so
-> construct effects and pool effects cannot be fully separated.)*
+TBD
 
 ```{r session, results = "asis"}
 cat("\n<details><summary>Session info</summary>\n\n```\n")
