@@ -1,5 +1,5 @@
 ---
-title: "ATRX rescue in an ATRX-KO neuroblastoma line"
+title: "Epicode: ATRX rescue in an ATRX-KO neuroblastoma line"
 subtitle: "Bulk RNA-seq analysis"
 author: "Arthur Dondi"
 date: "`r format(Sys.Date(), '%d %B %Y')`"
@@ -12,6 +12,14 @@ params:
   condition_levels: !r c("TP53", "E6", "EmptyVector", "ATRX_FL", "ATRX_IFF")
   # The contrast the report leads with.
   headline_contrast: "ATRX_FL_vs_ATRX_IFF"
+  # Vector and transgene features. They are rows in the count matrix because the
+  # reference carries the vector contigs, but they are constructs rather than
+  # biology, so they are dropped from every differential-expression figure and
+  # table below. Removed here in the report only - the pipeline's own outputs
+  # still contain them.
+  exclude_genes: !r c("ATRX", "ATRX_FL", "ATRX_IFF", "EGFP", "mCherry")
+  # Labelled on the headline volcano.
+  highlight_genes: !r c("HOXB2", "HOXB4", "HOXB6", "HOXB7", "IGF2BP1")
 output:
   html_document:
     toc: true
@@ -100,10 +108,24 @@ meta <- if (!is.null(qc)) {
     mutate(condition = cond_factor(condition))
 } else NULL
 
-volcano <- function(res, title, num, den) {
+# DESeq results with the vector/transgene features dropped. They are guaranteed
+# to be the most significant genes in any contrast that crosses a construct
+# boundary, and they say nothing about the cells' biology.
+de_results <- function(...) {
+  r <- grab(...)
+  if (is.null(r)) return(NULL)
+  n0 <- nrow(r)
+  r  <- r[!tolower(r$gene_id) %in% tolower(params$exclude_genes), , drop = FALSE]
+  attr(r, "n_dropped") <- n0 - nrow(r)
+  r
+}
+
+volcano <- function(res, title, num, den, highlight = NULL) {
   res <- res %>% filter(!is.na(padj)) %>%
     mutate(sig = padj < params$padj & abs(log2FoldChange) >= params$lfc)
-  ggplot(res, aes(log2FoldChange, -log10(padj), colour = sig)) +
+  n <- c(up = sum(res$sig & res$log2FoldChange > 0),
+         down = sum(res$sig & res$log2FoldChange < 0))
+  p <- ggplot(res, aes(log2FoldChange, -log10(padj), colour = sig)) +
     geom_point(size = 0.8, alpha = 0.5) +
     geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed",
                linewidth = 0.3) +
@@ -111,11 +133,34 @@ volcano <- function(res, title, num, den) {
                linewidth = 0.3) +
     scale_colour_manual(values = c("FALSE" = "grey70", "TRUE" = "#B2182B"),
                         guide = "none") +
-    labs(title = title,
-         subtitle = sprintf("%s significant | right = up in %s, left = up in %s",
-                            sum(res$sig), num, den),
-         x = sprintf("log2FC (%s / %s)", num, den),
-         y = expression(-log[10] ~ "adjusted p"))
+    labs(
+      title = title,
+      # Spell the direction out on both axes: "up in X" is ambiguous unless the
+      # reader already knows which group is the numerator.
+      subtitle = sprintf(
+        paste0("%s significant (padj < %s, |log2FC| >= %s)\n",
+               "RIGHT, log2FC > 0: %s genes HIGHER in %s   |   ",
+               "LEFT, log2FC < 0: %s genes HIGHER in %s"),
+        format(sum(res$sig), big.mark = ","), params$padj, params$lfc,
+        format(n["up"], big.mark = ","), num,
+        format(n["down"], big.mark = ","), den),
+      x = sprintf("log2FC  (%s / %s)   \u2014   positive = higher in %s", num, den, num),
+      y = expression(-log[10] ~ "adjusted p")) +
+    theme(plot.subtitle = element_text(lineheight = 1.2))
+  if (!is.null(highlight)) {
+    h <- res %>% filter(tolower(gene_id) %in% tolower(highlight))
+    if (nrow(h)) {
+      p <- p +
+        geom_point(data = h, colour = "#1B7837", size = 2.4) +
+        ggrepel::geom_text_repel(
+          data = h, aes(label = gene_id), colour = "#1B7837", fontface = "bold",
+          size = 3.1, min.segment.length = 0, box.padding = 0.6,
+          segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE)
+    }
+    miss <- setdiff(tolower(highlight), tolower(res$gene_id))
+    if (length(miss)) message("highlight not found: ", paste(miss, collapse = ", "))
+  }
+  p
 }
 
 # Ranking by padj alone floats high-count genes with tiny fold-changes to the
@@ -147,15 +192,15 @@ data.frame(
   Group = c("TP53", "E6", "EmptyVector", "ATRX_FL", "ATRX_IFF"),
   Description = c("TP53 KO", "TP53 KO + ATRX KO",
                   "E6 + empty EGFP/mCherry vector",
-                  "E6 + ATRX full length (rescue)",
-                  "E6 + ATRX in-frame fusion (semi-rescue)"),
+                  "E6 + vector w/ ATRX full length (rescue)",
+                  "E6 + vector w/ ATRX in-frame fusion (semi-rescue)"),
   `Parental clone` = c("TP53", "E6", "E6", "E6", "E6"),
   Vector = c("none", "none", "empty", "ATRX-FL", "ATRX-IFF"),
   n = c(3, 3, 3, 3, 3), check.names = FALSE
 ) %>% kable()
 ```
 
-> **Read this before the figures.** Every group is a single clone, and each
+> Every group is a single clone, and each
 > construct is a single transduced pool. The TP53 line and the E6 lineage differ
 > by clonal background as well as by ATRX genotype, and those two cannot be
 > separated in this design. Comparisons **within** the E6 lineage
@@ -169,59 +214,83 @@ data.frame(
 
 ## Library-level metrics
 
-```{r qc-lib, fig.height = 4}
+```{r qc-lib, fig.height = 6}
 if (is.null(qc)) missing_note("design_qc", "design_qc_summary.csv") else {
+  # "Reads assigned" alone has no denominator - a low bar could mean a small
+  # library or a poor assignment rate. featureCounts' own total is recovered
+  # from assigned_reads and pct_assigned so both are on the page.
   d <- qc %>% mutate(condition = cond_factor(condition),
-                     sample = factor(sample, levels = meta$sample))
+                     sample = factor(sample, levels = meta$sample),
+                     total_reads = if ("pct_assigned" %in% names(qc))
+                       assigned_reads / (pct_assigned / 100) else NA_real_)
+  lvls <- c("Total reads (featureCounts input)", "Reads assigned to genes",
+            "% reads assigned", "Genes detected")
   print(
-    d %>% select(sample, condition, assigned_reads, genes_detected, pct_assigned) %>%
-      pivot_longer(c(assigned_reads, genes_detected, pct_assigned)) %>%
-      mutate(name = recode(name, assigned_reads = "Reads assigned to genes",
-                           genes_detected = "Genes detected",
-                           pct_assigned = "% reads assigned")) %>%
+    d %>% select(sample, condition, total_reads, assigned_reads,
+                 pct_assigned, genes_detected) %>%
+      pivot_longer(c(total_reads, assigned_reads, pct_assigned, genes_detected)) %>%
+      mutate(name = recode(name,
+                           total_reads = "Total reads (featureCounts input)",
+                           assigned_reads = "Reads assigned to genes",
+                           pct_assigned = "% reads assigned",
+                           genes_detected = "Genes detected"),
+             name = factor(name, levels = lvls)) %>%
+      filter(!is.na(value)) %>%
       ggplot(aes(sample, value, fill = condition)) +
       geom_col() +
       facet_wrap(~ name, scales = "free_y", ncol = 1) +
       scale_fill_manual(values = PAL) +
+      scale_y_continuous(labels = function(x)
+        format(x, big.mark = ",", scientific = FALSE, trim = TRUE)) +
       labs(x = NULL, y = NULL, fill = "Condition") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
 }
 ```
 
-> No group-linked shift in depth, complexity or assignment rate — the libraries
-> are comparable. *(Check and rewrite.)*
-
-## Sample–sample correlation
-
-```{r qc-cor, fig.height = 6}
-cm <- grab("design_qc", "sample_correlation.csv")
-if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
-  m <- as.matrix(cm[, -1]); rownames(m) <- cm$sample
-  ord <- meta$sample[meta$sample %in% rownames(m)]
-  m <- m[ord, ord]
-  print(
-    as.data.frame(as.table(m)) %>%
-      setNames(c("x", "y", "rho")) %>%
-      mutate(x = factor(x, ord), y = factor(y, rev(ord))) %>%
-      ggplot(aes(x, y, fill = rho)) +
-      geom_tile(colour = "white", linewidth = 0.3) +
-      scale_fill_gradient(low = "white", high = "#2166AC") +
-      coord_fixed() +
-      labs(title = "Spearman correlation (VST)", x = NULL, y = NULL) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1),
-            panel.grid = element_blank())
-  )
-}
-```
-
-> Replicates form tight blocks on the diagonal. *(Check and rewrite.)*
+> No group-linked shift in either depth, complexity or assignment rate. The libraries
+> are comparable.
 
 ## ATRX and vector markers
 
-Reporter and transgene features are rows in the count matrix because the
-reference includes the vector contigs. They confirm the constructs are where
-they should be, and nowhere else.
+Three ATRX features are quantified separately:
+
+- **`ATRX`** — the endogenous locus in hg38, including its 5'/3'UTRs and introns.
+- **`ATRX_FL`** — vector-borne full-length ATRX cDNA (no UTRs, no introns), fused
+  N-terminally to a Twin-Strep-tag + 10xHis tag.
+- **`ATRX_IFF`** — vector-borne in-frame-fusion ATRX cDNA carrying the *same*
+  N-terminal tag, with exons 4–10 deleted (exon 3 joined directly to exon 10).
+
+### What the figures actually count
+
+Both constructs are cDNA copies of a gene already present in hg38, so most of
+their sequence exists in **two or three copies** in the reference (vector
+contigs + chrX). STAR flags such alignments as multi-mapping (`NH` ≥ 2,
+MAPQ ≤ 3) and featureCounts is run with `-Q 10` and without `-M`, so these
+fragments are **discarded, not distributed**. Only fragments placeable at
+exactly one locus are counted:
+
+- **`ATRX`** — fragments in the 5'/3'UTR (absent from the constructs), and
+  fragments straddling an exon–intron boundary (introns are absent from the
+  constructs). Fragments lying entirely within an intron are assigned to no
+  gene; fragments lying entirely within coding exons are ambiguous with the
+  constructs and discarded. `ATRX` therefore reports roughly the UTR-plus-
+  boundary fraction of endogenous ATRX (~30% of the transcript), not its total
+  expression — and it does so in *every* sample, since both vector contigs are
+  in the reference regardless of which construct a sample carries.
+- **`ATRX_FL`** — read *pairs* with one mate in the tag (absent from hg38) and
+  the other mate extending past CDS position 133 into exons 4–10 (absent from
+  `ATRX_IFF`). Neither mate is unique on its own; only the pair is.
+- **`ATRX_IFF`** — fragments spanning the exon3–exon11 fusion breakpoint, which
+  exists neither in hg38 nor in `ATRX_FL`.
+
+> **Bar heights are not comparable between features.** The uniquely mappable
+> window is ~100 nt wide for `ATRX_FL` and ~250–300 nt for `ATRX_IFF`, so
+> `ATRX_FL` yields roughly 3× fewer counts than `ATRX_IFF` at equal expression.
+> The FL/IFF difference in these plots is a mappability artefact, not
+> differential transgene expression. Comparisons of the *same* feature across
+> samples remain valid; comparisons *between* features do not.
+
 
 ```{r qc-markers, fig.height = 8}
 mk <- gene_long(grab("design_qc", "marker_expression.csv"), meta)
@@ -256,15 +325,43 @@ if (!is.null(mk2) && "ATRX" %in% mk2$gene_id && !is.null(meta)) {
 > detected only in its own group. *(Add your read of the ATRX levels: is the
 > rescue at a physiological dose? Is one construct variable across replicates?)*
 
+## Sample–sample correlation
+
+```{r qc-cor, fig.height = 6}
+cm <- grab("design_qc", "sample_correlation.csv")
+if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
+  m <- as.matrix(cm[, -1]); rownames(m) <- cm$sample
+  ord <- meta$sample[meta$sample %in% rownames(m)]
+  m <- m[ord, ord]
+  print(
+    as.data.frame(as.table(m)) %>%
+      setNames(c("x", "y", "rho")) %>%
+      mutate(x = factor(x, ord), y = factor(y, rev(ord))) %>%
+      ggplot(aes(x, y, fill = rho)) +
+      geom_tile(colour = "white", linewidth = 0.3) +
+      scale_fill_gradient(low = "white", high = "#2166AC") +
+      coord_fixed() +
+      labs(title = "Spearman correlation (VST)", x = NULL, y = NULL) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1),
+            panel.grid = element_blank())
+  )
+}
+```
+
+> Replicates should form tight blocks on the diagonal. There is a very strong clonal effect between TP53 and E6 samples, that almost obfuscate the replicates correlation.
+
 ---
 
 # Global structure (PCA)
 
 ```{r pca, fig.height = 5, results = "asis"}
+# One view only: the E6-derived PCA has its own section at the end of the report.
+# The ATRX features are removed here as well as the reporters - ATRX is the
+# variable under study, so leaving it in makes the PCA partly re-plot the design
+# rather than its downstream consequences.
 pca_views <- list(
-  c("all", "no_vector_genes", "All samples, reporter features removed"),
-  c("E6_derived", "no_vector_no_transgene",
-    "E6-derived only, reporter + ATRX removed")
+  c("all", "no_vector_no_transgene",
+    "All samples, reporter and ATRX features removed")
 )
 for (v in pca_views) {
   co <- grab("pca", v[1], paste0(v[2], "_coords.csv"))
@@ -299,7 +396,7 @@ setting aside. `TP53` is a different clone from everything E6-derived, and that
 difference is confounded with the ATRX genotype: no comparison can separate them.
 
 ```{r tp53-vs-e6, fig.height = 5}
-r_tp53 <- grab("deseq2", "TP53_vs_E6", "results.csv")
+r_tp53 <- de_results("deseq2", "TP53_vs_E6", "results.csv")
 if (is.null(r_tp53)) missing_note("deseq2", "TP53_vs_E6", "results.csv") else {
   print(volcano(r_tp53, "TP53_vs_E6", num = "E6", den = "TP53"))
 }
@@ -335,12 +432,18 @@ if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes"
 Both groups share the clone and carry a vector, so the clonal and transduction
 effects cancel. This is the cleanest contrast in the dataset.
 
+`r sprintf("The vector and transgene features (%s) are excluded from every differential-expression figure and table in this report. They are constructs rather than biology, and in any contrast crossing a construct boundary they would otherwise top the list.", paste(params$exclude_genes, collapse = ", "))`
+
+Genes of interest (`r paste(params$highlight_genes, collapse = ", ")`) are
+labelled in green on the volcano below.
+
 ```{r de-headline, fig.height = 5}
 hc  <- params$headline_contrast
-res <- grab("deseq2", hc, "results.csv")
+res <- de_results("deseq2", hc, "results.csv")
 if (is.null(res)) missing_note("deseq2", hc, "results.csv") else {
-  # EDIT these two if you change the headline contrast.
-  print(volcano(res, hc, num = "ATRX_IFF", den = "ATRX_FL"))
+  # EDIT the numerator/denominator if you change the headline contrast.
+  print(volcano(res, hc, num = "ATRX_IFF", den = "ATRX_FL",
+                highlight = params$highlight_genes))
 }
 ```
 
@@ -358,23 +461,12 @@ if (!is.null(res)) {
 
 The point of this panel is the **pattern across groups**, not any single gene.
 
-```{r goi, fig.height = 8}
+```{r goi-load, include = FALSE}
 goi <- gene_long(grab("design_qc", "goi_expression.csv"), meta)
-if (is.null(goi)) missing_note("design_qc", "goi_expression.csv") else {
-  print(
-    ggplot(goi, aes(sample, value + 1, fill = condition)) +
-      geom_col() +
-      facet_wrap(~ gene_id, scales = "free_y", ncol = 1) +
-      scale_y_log10() + scale_fill_manual(values = PAL) +
-      labs(title = "Genes of interest", subtitle = "normalised counts + 1, log10",
-           x = NULL, y = "normalised count + 1", fill = "Condition") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  )
-}
 ```
 
 ```{r goi-means, fig.height = 4}
-if (!is.null(goi)) {
+if (is.null(goi)) missing_note("design_qc", "goi_expression.csv") else {
   print(
     goi %>% group_by(gene_id, condition) %>%
       summarise(mean = mean(value), sd = sd(value), .groups = "drop") %>%
@@ -408,7 +500,7 @@ contrasts <- list(
 )
 tally <- list()
 for (c3 in contrasts) {
-  r <- grab("deseq2", c3[1], "results.csv")
+  r <- de_results("deseq2", c3[1], "results.csv")
   cat("\n\n###", c3[1], "\n\n")
   if (is.null(r)) { missing_note("deseq2", c3[1], "results.csv"); next }
   tally[[c3[1]]] <- de_counts(r)
@@ -435,16 +527,23 @@ gsea_dot <- function(df, title, top = 12) {
   df <- df %>% filter(!is.na(padj)) %>% arrange(desc(abs(NES)))
   df <- bind_rows(head(filter(df, NES > 0), top), head(filter(df, NES < 0), top))
   if (!nrow(df)) return(invisible(NULL))
+  num <- df$numerator[1]; den <- df$denominator[1]
+  up   <- sprintf("NES > 0: pathway genes HIGHER in %s", num)
+  down <- sprintf("NES < 0: pathway genes HIGHER in %s", den)
   df <- df %>% mutate(
     pathway = gsub("^HALLMARK_", "", pathway),
     pathway = factor(pathway, levels = pathway[order(df$NES)]),
-    side = ifelse(NES > 0, paste("Enriched in", df$numerator[1]),
-                  paste("Enriched in", df$denominator[1])))
+    side = factor(ifelse(NES > 0, up, down), levels = c(up, down)))
   print(
     ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
-      geom_point() + geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+      geom_point() +
+      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+      facet_grid(side ~ ., scales = "free_y", space = "free_y") +
       scale_colour_gradient(low = "#B2182B", high = "grey75", limits = c(0, 0.25)) +
-      labs(title = title, y = NULL, colour = "padj", size = "Set size")
+      labs(title = title,
+           subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
+           y = NULL, colour = "padj", size = "Set size") +
+      theme(strip.text.y = element_text(angle = 0, size = 8))
   )
 }
 # EDIT: which contrasts to show enrichment for.
@@ -509,7 +608,7 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
   # figure is embedded or scaled, and these numbers are the point of the plot.
   box <- if (!is.null(st)) paste(
     sprintf("slope     %+.2f", st$tls_slope[1]),
-    sprintf("R\u00b2        %.3f", if ("r_squared" %in% names(st))
+    sprintf("R2        %.3f", if ("r_squared" %in% names(st))
               st$r_squared[1] else st$pearson_r[1]^2),
     sprintf("rho       %+.2f", st$spearman_rho[1]),
     sprintf("reversed  %.0f%% (null %.0f%%)", st$pct_reversed[1],
@@ -526,9 +625,16 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
     geom_point(size = 1, alpha = .5, colour = "#2166AC") +
     coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
     labs(title = nm,
-         subtitle = "shaded = reversal | dashed line = complete reversal (slope -1)",
+         subtitle = paste0("shaded = reversal | dashed = complete reversal (slope -1)\n",
+                           "red = fitted slope (total least squares)"),
          x = "log2FC knockout (the damage)",
          y = "log2FC rescue (the repair)")
+  # The fitted slope is the statistic being reported, so draw it rather than
+  # leaving the reader to infer it from the box.
+  if (!is.null(st) && "tls_slope" %in% names(st) && is.finite(st$tls_slope[1])) {
+    p <- p + geom_abline(slope = st$tls_slope[1], intercept = 0,
+                         colour = "#E41A1C", linewidth = .8)
+  }
   if (!is.null(box)) {
     p <- p + annotate("label", x = lim, y = lim, hjust = 1, vjust = 1, label = box,
                       size = 2.9, family = "mono", lineheight = 1.15,
@@ -550,7 +656,7 @@ how far it needed to move. Zero is a complete rescue; negative is a shortfall.
 
 ```{r rescue-interaction, fig.height = 4.5, results = "asis"}
 for (nm in c("ATRX_FL_rescue_shortfall", "ATRX_IFF_rescue_shortfall")) {
-  r <- grab("deseq2_interaction", nm, "results.csv")
+  r <- de_results("deseq2_interaction", nm, "results.csv")
   cat("\n\n###", nm, "\n\n")
   if (is.null(r)) { missing_note("deseq2_interaction", nm, "results.csv"); next }
   print(volcano(r, nm, num = "overshoot", den = "shortfall"))
@@ -640,7 +746,7 @@ trio <- list(
 )
 trio_tally <- list()
 for (t4 in trio) {
-  r <- grab("deseq2", t4[1], "results.csv")
+  r <- de_results("deseq2", t4[1], "results.csv")
   cat("\n\n###", t4[4], "\n\n")
   if (is.null(r)) { missing_note("deseq2", t4[1], "results.csv"); next }
   trio_tally[[t4[1]]] <- de_counts(r)

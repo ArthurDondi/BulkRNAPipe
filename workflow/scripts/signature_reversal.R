@@ -219,7 +219,7 @@ verdict <- if (shares) {
 # numbers are the point of the plot.
 stat_box <- paste(
   sprintf("slope     %+.2f", slope),
-  sprintf("R\u00b2        %.3f", pear^2),
+  sprintf("R2        %.3f", pear^2),
   sprintf("rho       %+.2f", rho),
   sprintf("reversed  %.0f%% (null %.0f%%)", stats$pct_reversed, stats$null_pct_reversed),
   sprintf("perm p    %s", format(signif(perm_p, 2))),
