@@ -325,6 +325,7 @@ GSEA:
   collections:
     - H
     - C2:CP:REACTOME
+    - C2:CP:KEGG
     - C5:GO:BP
   min_size: 9
   max_size: 500

@@ -260,11 +260,21 @@ GSEA:
   # Each entry can be:
   #   - "H"              (Hallmark)
   #   - "C2:CP:REACTOME" (Reactome curated pathways)
+  #   - "C2:CP:KEGG"     (KEGG pathways)
+  #   - "C2:CP:BIOCARTA" / "C2:CP:PID" / "C2:CP:WIKIPATHWAYS"
   #   - "C5:GO:BP"       (GO Biological Process)
-  # Format: "CATEGORY" or "CATEGORY:SUBCATEGORY"
+  # Format: "CATEGORY" or "CATEGORY:SUBCATEGORY", passed to msigdbr().
+  #
+  # Subcategory names are tied to the msigdbr version pinned in
+  # workflow/envs/gsea.yaml (currently 7.5.1, which mirrors MSigDB 7.5.1).  KEGG
+  # is "C2:CP:KEGG" there; MSigDB 2023.1 and later renamed it to
+  # "C2:CP:KEGG_LEGACY" and added "C2:CP:KEGG_MEDICUS", so if you bump msigdbr
+  # this entry has to change with it.  List what your version actually has:
+  #   Rscript -e 'print(msigdbr::msigdbr_collections(), n = 50)'
   collections:
     - H
     - C2:CP:REACTOME
+    - C2:CP:KEGG
     - C5:GO:BP
   # Minimum gene set size (genes in the ranked list)
   min_size: 15

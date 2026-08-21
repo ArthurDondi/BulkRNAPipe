@@ -590,6 +590,43 @@ if (is.null(co)) {
 }
 ```
 
+## Sample–sample correlation, E6-derived only
+
+Pairwise correlations are unchanged by dropping TP53 — but the colour scale
+rescales to the range that remains, so differences compressed by the clonal
+outlier become visible.
+
+```{r e6-cor, fig.height = 5.5}
+if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
+  m <- as.matrix(cm[, -1]); rownames(m) <- cm$sample
+  keep <- meta$sample[meta$condition != "TP53" & meta$sample %in% rownames(m)]
+  if (length(keep) < 3) {
+    cat("\n> Fewer than 3 non-TP53 samples — nothing to plot.\n\n")
+  } else {
+    m <- m[keep, keep]
+    print(
+      as.data.frame(as.table(m)) %>%
+        setNames(c("x", "y", "rho")) %>%
+        mutate(x = factor(x, keep), y = factor(y, rev(keep))) %>%
+        ggplot(aes(x, y, fill = rho)) +
+        geom_tile(colour = "white", linewidth = 0.3) +
+        geom_text(aes(label = sprintf("%.3f", rho)), size = 2.1, colour = "grey20") +
+        scale_fill_gradient(low = "white", high = "#2166AC") +
+        coord_fixed() +
+        labs(title = "Spearman correlation (VST), TP53 excluded",
+             subtitle = "scale rescaled to the E6 lineage",
+             x = NULL, y = NULL) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1),
+              panel.grid = element_blank())
+    )
+  }
+}
+```
+
+> *(Do the replicates of each construct still form the tightest blocks once the
+> clonal outlier is removed? If a construct's replicates correlate no better with
+> each other than with another construct's, treat its contrasts cautiously.)*
+
 ## The three construct comparisons
 
 ```{r e6-three, fig.height = 4.5, results = "asis"}
