@@ -656,6 +656,15 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
             st$null_pct_reversed[1]),
     sprintf("perm p    %s", format(signif(st$perm_p[1], 2))), sep = "\n") else NULL
   is_control <- nm == "NEGATIVE_CONTROL_vector_signature_vs_FL_IFF"
+  # Name the actual contrast on each axis, e.g. "E6 / TP53", not a generic
+  # "the damage" - matching the pipeline's own reversal_scatter.pdf. Read from
+  # reversal_stats.csv (signature_contrast / response_contrast) rather than
+  # hardcoding, since that is the one place the exact label is guaranteed to
+  # match what the stats box above was computed from.
+  sig_label  <- if (!is.null(st) && "signature_contrast" %in% names(st))
+    st$signature_contrast[1] else "signature"
+  resp_label <- if (!is.null(st) && "response_contrast" %in% names(st))
+    st$response_contrast[1] else "response"
   p <- ggplot(g, aes(lfc_sig, lfc_resp)) +
     annotate("rect", xmin = 0, xmax = lim, ymin = -lim, ymax = 0,
              fill = "#4DAF4A", alpha = .07) +
@@ -669,10 +678,10 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
     labs(title = heading,
          subtitle = paste0("shaded = reversal | dashed = complete reversal (slope -1)\n",
                            "red = fitted slope (total least squares)"),
-         x = if (is_control) "log2FC transduction (E6 / EmptyVector)"
-             else "log2FC knockout (the damage)",
-         y = if (is_control) "log2FC FL vs IFF (unrelated comparison)"
-             else "log2FC rescue (the repair)")
+         x = sprintf("log2FC  %s%s", sig_label,
+                     if (is_control) "" else "   (the perturbation)"),
+         y = sprintf("log2FC  %s%s", resp_label,
+                     if (is_control) "" else "   (the intervention)"))
   # The fitted slope is the statistic being reported, so draw it rather than
   # leaving the reader to infer it from the box.
   if (!is.null(st) && "tls_slope" %in% names(st) && is.finite(st$tls_slope[1])) {
