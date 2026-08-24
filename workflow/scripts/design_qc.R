@@ -316,18 +316,13 @@ gene_panel <- function(genes, title, subtitle, out_pdf, out_csv,
   }
 }
 
-marker_subtitle <- "normalised counts + 1, log10; excluded from the size factors"
-if (length(extra_rows) > 0) {
-  marker_subtitle <- paste0(
-    marker_subtitle, "\n",
-    paste(names(extra_rows), collapse = " and "),
-    ": every alignment weighted 1/NH, multimappers included \u2014 ",
-    "not on the same footing as the unique-only rows below")
-}
-
+# No subtitle on these panels: the caveats that belong with them (unique-only
+# mappability, the length bias on the pooled row, functional vs total message)
+# need more room than a strip of small type under the title, and live in the
+# report text instead. The y-axis label still states the scale.
 gene_panel(marker_panel_genes,
            "Reporter and transgene expression",
-           marker_subtitle,
+           NULL,
            file.path(outdir, "marker_expression.pdf"),
            file.path(outdir, "marker_expression.csv"))
 
@@ -335,8 +330,7 @@ gene_panel(marker_panel_genes,
 # differences; linear is what shows their real size.
 gene_panel(marker_panel_genes,
            "Reporter and transgene expression (linear scale)",
-           sub("^normalised counts \\+ 1, log10",
-               "normalised counts, linear axis", marker_subtitle),
+           NULL,
            file.path(outdir, "marker_expression_linear.pdf"),
            out_csv = NULL, log_scale = FALSE)
 
