@@ -218,6 +218,58 @@ DesignQC:
   #   genes_of_interest: [MYCN, GATA2]
   genes_of_interest: []
 
+  # ─── Facet-strip renaming (optional) ────────────────────────────────────────
+  # Display-only: renames what appears on the panel facet strips in
+  # marker_expression.pdf and goi_expression.pdf. The count matrix, the CSVs and
+  # every other output keep the real feature IDs, so this cannot change what is
+  # counted - only what the plot calls it.
+  #   plot_labels:
+  #     ATRX: ATRX_wt
+  plot_labels: {}
+
+  # ─── Pooled "total" feature (optional) ──────────────────────────────────────
+  # When the reference carries cDNA copies of a gene that also exists in the
+  # genome, most of that gene's reads align equally well to two or three places.
+  # STAR marks them NH >= 2 and the main matrix (-Q 10, no -M) drops them, so
+  # neither the endogenous feature nor the construct features report the gene's
+  # real output.
+  #
+  # Listing the gene_ids here adds ONE extra row to marker_expression.pdf that
+  # pools them: the same BAMs are re-counted with -Q 0 -M --fraction, so every
+  # alignment of an ambiguous fragment falls inside the same meta-feature and
+  # contributes 1/NH.  The fragment is counted exactly once, whichever copy it
+  # came from.  No re-alignment, and the main count matrix is not touched.
+  #
+  # Counts are fractional and NOT valid DESeq2 input - this is a QC row only.
+  # Leave `genes` empty to disable.
+  total_feature:
+    name: ATRX_Total
+    genes: []
+    #   genes: [ATRX, ATRX_FL, ATRX_IFF]
+
+  # ─── Tag-only feature (optional) ────────────────────────────────────────────
+  # A coordinate window shared by the vector contigs - typically the N-terminal
+  # purification tag, which is identical across constructs and absent from the
+  # genome.  Counted the same way (-Q 0 -M --fraction), so a fragment matching
+  # every tagged construct is still counted once.  Because the sequence is not
+  # in the genome, this measures transgene output regardless of which construct
+  # a sample carries; it does not distinguish between them.
+  #
+  # WARNING: this is a coordinate range, not a sequence match.  It is only
+  # correct if the contigs begin at the construct's first base.  Check start/end
+  # against the reference FASTA before trusting the row.
+  #
+  # min_overlap is the number of bases a fragment must share with the window
+  # (summed over both mates) to be counted, so fragments that merely graze it
+  # are not called tag-derived.  Leave `regions` empty to disable.
+  tag:
+    name: Tag
+    regions: []
+    #   regions:
+    #     - {contig: ATRX_FL,  start: 1, end: 117, strand: "+"}
+    #     - {contig: ATRX_IFF, start: 1, end: 117, strand: "+"}
+    min_overlap: 25
+
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 # When enabled, an additional volcano file (volcano_proteomic.pdf) is generated
 # per contrast using DESeq2 results restricted to genes that are significant in

@@ -11,6 +11,8 @@
 #   assignment_rates.pdf        featureCounts assignment breakdown, % of reads
 #   genes_detected.pdf          number of genes with >= 1 count
 #   marker_expression.pdf       normalised expression of reporter/transgene features
+#                               (optionally topped by a pooled total and a tag-only
+#                               row, counted with -M --fraction over the same BAMs)
 #   marker_expression.csv       the same numbers as a table
 #   sample_correlation.pdf      Spearman correlation between all samples (VST)
 #   sample_distance.pdf         Euclidean distance between all samples (VST)
@@ -34,7 +36,17 @@ option_list <- list(
   make_option("--marker_genes", type = "character", default = "",
               help = "Comma-separated reporter/transgene IDs; plotted AND excluded from size factors"),
   make_option("--goi_genes", type = "character", default = "",
-              help = "Comma-separated endogenous genes of interest; plotted but kept in the size factors")
+              help = "Comma-separated endogenous genes of interest; plotted but kept in the size factors"),
+  make_option("--total_counts", type = "character", default = "",
+              help = "featureCounts output for the pooled total feature (optional)"),
+  make_option("--total_name", type = "character", default = "ATRX_Total",
+              help = "Feature name inside --total_counts"),
+  make_option("--tag_counts", type = "character", default = "",
+              help = "featureCounts output for the tag-only feature (optional)"),
+  make_option("--tag_name", type = "character", default = "Tag",
+              help = "Feature name inside --tag_counts"),
+  make_option("--gene_labels", type = "character", default = "",
+              help = "Comma-separated ID=Label pairs; renames facet strips only")
 )
 
 args   <- parse_args(OptionParser(option_list = option_list))
@@ -76,6 +88,27 @@ sample_levels <- rownames(sample_df)[order(match(sample_df$condition,
 sample_df$sample    <- factor(rownames(sample_df), levels = sample_levels)
 sample_df$condition <- factor(sample_df$condition, levels = unique(sample_df$condition))
 
+# Display-only relabelling for the panels. Everything downstream - the CSVs, the
+# count matrix, the summary table - keeps the real feature IDs, so renaming here
+# cannot silently change what is being counted.
+gene_labels <- local({
+  pairs <- split_csv(args$gene_labels)
+  out   <- character(0)
+  for (p in pairs) {
+    kv <- strsplit(p, "=", fixed = TRUE)[[1]]
+    if (length(kv) != 2 || !nzchar(kv[1]) || !nzchar(kv[2])) {
+      message("WARNING: ignoring malformed gene label '", p, "' (expected ID=Label).")
+      next
+    }
+    out[kv[1]] <- kv[2]
+  }
+  out
+})
+display_label <- function(x) {
+  hit <- match(x, names(gene_labels))
+  ifelse(is.na(hit), x, gene_labels[hit])
+}
+
 marker_genes <- split_csv(args$marker_genes)
 markers_present <- marker_genes[tolower(marker_genes) %in% tolower(rownames(counts))]
 for (m in setdiff(marker_genes, markers_present)) {
@@ -112,6 +145,62 @@ norm <- sweep(counts, 2, sf, "/")     # applied to the FULL matrix, markers incl
 
 vsd <- vst(dds[rowSums(counts(dds)) >= 10, ], blind = TRUE)
 mat <- assay(vsd)
+
+# ─── Pooled and tag-only features (counted separately, no re-alignment) ──────
+# These come from their own featureCounts runs over the same BAMs, with
+# -Q 0 -M --fraction, so a fragment that aligns equally well to the endogenous
+# locus and to one or more vector contigs is counted once instead of dropped.
+# They are stacked onto `norm` for the marker panel only: they never enter
+# `counts`, so size factors, the VST and pct_reads_in_markers are untouched.
+read_feature <- function(path, feature, label) {
+  if (is.null(path) || !nzchar(path)) return(NULL)
+  if (!file.exists(path)) {
+    message("WARNING: ", label, " count file '", path, "' not found - skipping.")
+    return(NULL)
+  }
+  tb <- read.table(path, header = TRUE, sep = "\t", comment.char = "#",
+                   check.names = FALSE)
+  m  <- as.matrix(tb[, 7:ncol(tb), drop = FALSE])
+  rownames(m) <- tb[[1]]
+  colnames(m) <- clean_sample_names(colnames(m))
+  if (!feature %in% rownames(m)) {
+    message("WARNING: feature '", feature, "' is not in ", path, " - skipping.")
+    return(NULL)
+  }
+  absent <- setdiff(colnames(norm), colnames(m))
+  if (length(absent) > 0) {
+    message("WARNING: ", label, " is missing sample(s) ",
+            paste(absent, collapse = ", "), " - skipping.")
+    return(NULL)
+  }
+  v <- m[feature, colnames(norm), drop = FALSE]
+  if (all(v == 0)) {
+    message("WARNING: ", label, " ('", feature, "') is zero in every sample. ",
+            "Check that the annotation it was counted from matches the reference.")
+  }
+  v
+}
+
+extra_rows <- list()
+for (spec in list(
+       list(path = args$total_counts, feature = args$total_name,
+            label = "pooled total feature"),
+       list(path = args$tag_counts, feature = args$tag_name,
+            label = "tag feature"))) {
+  v <- read_feature(spec$path, spec$feature, spec$label)
+  if (!is.null(v)) extra_rows[[spec$feature]] <- v
+}
+
+marker_panel_genes <- markers_present
+if (length(extra_rows) > 0) {
+  extra <- do.call(rbind, extra_rows)
+  rownames(extra) <- names(extra_rows)
+  # Same size factors as everything else in the panel, so the bars sit on a
+  # comparable scale even though the counting rule differs.
+  extra <- sweep(extra, 2, sf[colnames(extra)], "/")
+  norm  <- rbind(extra, norm)
+  marker_panel_genes <- c(rownames(extra), markers_present)
+}
 
 # ─── Per-sample summary ──────────────────────────────────────────────────────
 summary_df <- data.frame(
@@ -194,7 +283,8 @@ gene_panel <- function(genes, title, subtitle, out_pdf, out_csv) {
   }))
   df$sample    <- factor(df$sample, levels = sample_levels)
   df$condition <- sample_df$condition[match(df$sample, sample_df$sample)]
-  df$gene      <- factor(df$gene, levels = genes)
+  # Facet strips only; `genes` and the CSV below stay on the real IDs.
+  df$gene      <- factor(display_label(df$gene), levels = display_label(genes))
 
   p <- ggplot(df, aes(x = sample, y = value + 1, fill = condition)) +
     geom_col() +
@@ -211,9 +301,18 @@ gene_panel <- function(genes, title, subtitle, out_pdf, out_csv) {
   write.csv(cbind(gene_id = rownames(wide), wide), out_csv, row.names = FALSE)
 }
 
-gene_panel(markers_present,
+marker_subtitle <- "normalised counts + 1, log10; excluded from the size factors"
+if (length(extra_rows) > 0) {
+  marker_subtitle <- paste0(
+    marker_subtitle, "\n",
+    paste(names(extra_rows), collapse = " and "),
+    ": every alignment weighted 1/NH, multimappers included \u2014 ",
+    "not on the same footing as the unique-only rows below")
+}
+
+gene_panel(marker_panel_genes,
            "Reporter and transgene expression",
-           "normalised counts + 1, log10; these features are excluded from the size factors",
+           marker_subtitle,
            file.path(outdir, "marker_expression.pdf"),
            file.path(outdir, "marker_expression.csv"))
 

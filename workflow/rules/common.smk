@@ -271,6 +271,90 @@ for _entry in DESIGN_QC_GENES + DESIGN_QC_GOI:
             "list delimiter. Split it into separate list entries."
         )
 
+# ─── Design QC: pooled and tag-only transgene features ───────────────────────
+# The features above are counted the way the main matrix counts everything:
+# unique alignments only.  When the reference carries cDNA copies of a gene that
+# also exists in the genome (a transgene and its endogenous locus), most of that
+# gene's reads align equally well to two or three places, are flagged NH >= 2 by
+# STAR, and are dropped.  Neither the endogenous feature nor the construct
+# features then report the gene's real output.
+#
+# These two optional features recover it from the SAME BAMs, no re-alignment:
+#
+#   total_feature  one meta-feature spanning several gene_ids.  Counted with
+#                  -M --fraction, every alignment of an ambiguous fragment lands
+#                  inside the same meta-feature and contributes 1/NH, so the
+#                  fragment is counted exactly once no matter which copy it came
+#                  from.  This is the gene's total output across all sources.
+#   tag            one meta-feature over a coordinate range shared by the vector
+#                  contigs (the purification tag).  Same -M --fraction trick, so
+#                  a fragment that maps to every construct carrying the tag is
+#                  still counted once.  Sequence absent from the genome, so this
+#                  measures transgene output regardless of which construct a
+#                  sample carries.
+# Display-only renaming for the design QC panels.  The count matrix, the CSVs
+# and every other output keep the real feature IDs - this maps an ID to the name
+# shown on the facet strip, nothing more.
+_qc_labels = _qc_cfg.get('plot_labels') or {}
+DESIGN_QC_LABELS = ",".join(f"{k}={v}" for k, v in _qc_labels.items())
+
+for _k, _v in _qc_labels.items():
+    if any(c in f"{_k}{_v}" for c in (',', '=')):
+        raise ValueError(
+            f"DesignQC.plot_labels: '{_k}: {_v}' must not contain ',' or '=' - "
+            "both are used as delimiters."
+        )
+
+_qc_total = _qc_cfg.get('total_feature') or {}
+DESIGN_QC_TOTAL_NAME  = str(_qc_total.get('name', 'ATRX_Total'))
+DESIGN_QC_TOTAL_GENES = [str(g) for g in (_qc_total.get('genes') or [])]
+
+_qc_tag = _qc_cfg.get('tag') or {}
+DESIGN_QC_TAG_NAME    = str(_qc_tag.get('name', 'Tag'))
+DESIGN_QC_TAG_REGIONS = list(_qc_tag.get('regions') or [])
+DESIGN_QC_TAG_MIN_OV  = int(_qc_tag.get('min_overlap', 25))
+
+for _name in (DESIGN_QC_TOTAL_NAME, DESIGN_QC_TAG_NAME):
+    if ',' in _name or '"' in _name:
+        raise ValueError(
+            f"DesignQC: feature name '{_name}' must not contain a comma or a "
+            'double quote.'
+        )
+
+for _r in DESIGN_QC_TAG_REGIONS:
+    for _key in ('contig', 'start', 'end'):
+        if _key not in _r:
+            raise ValueError(
+                f"DesignQC.tag.regions: entry {_r} is missing '{_key}'. Each "
+                "region needs contig, start and end (1-based, inclusive)."
+            )
+    if int(_r['start']) < 1 or int(_r['end']) < int(_r['start']):
+        raise ValueError(
+            f"DesignQC.tag.regions: entry {_r} has an empty or negative range. "
+            "Coordinates are 1-based and inclusive, so start >= 1 and end >= start."
+        )
+
+# The tag range is a coordinate window, not a sequence match: it is only correct
+# if the contigs really do begin at the construct's first base. Check it against
+# the FASTA before trusting the numbers.
+#
+# Passed to the rule as one flat string rather than a ready-made SAF file, so no
+# tab or newline ever has to survive a trip through the shell; awk expands it.
+DESIGN_QC_TAG_SPEC = ";".join(
+    "{},{},{},{},{}".format(
+        DESIGN_QC_TAG_NAME, _r['contig'], int(_r['start']), int(_r['end']),
+        _r.get('strand', '+'),
+    )
+    for _r in DESIGN_QC_TAG_REGIONS
+)
+
+for _r in DESIGN_QC_TAG_REGIONS:
+    if ';' in str(_r['contig']) or ',' in str(_r['contig']):
+        raise ValueError(
+            f"DesignQC.tag.regions: contig '{_r['contig']}' must not contain "
+            "',' or ';' - both are used as delimiters."
+        )
+
 # ─── Interaction contrasts (difference of differences) ───────────────────────
 # Each entry estimates (A1 - A2) - (B1 - B2) on the log2 scale from the plain
 # ~ condition fit.  This is the correct way to compare across a boundary whose

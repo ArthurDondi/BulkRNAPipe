@@ -270,6 +270,8 @@ output_dir/
 │   ├── assignment_rates.pdf                  # featureCounts assignment breakdown
 │   ├── genes_detected.pdf                    # Genes with >= 1 count
 │   ├── marker_expression.pdf                 # Reporter / transgene expression
+│   ├── total_feature_counts.txt              # Pooled gene_ids, -M --fraction (optional)
+│   ├── tag_counts.txt                        # Vector tag window, -M --fraction (optional)
 │   ├── goi_expression.pdf                    # Endogenous genes of interest
 │   ├── sample_correlation.pdf                # Spearman correlation, all samples
 │   ├── sample_distance.pdf                   # Euclidean distance, all samples
@@ -513,6 +515,51 @@ normalised matrix, so the two are directly comparable.
 
 Genes absent from the count matrix are reported as a `WARNING` in
 `logs/DesignQC/design_qc.log` and skipped; the panel still renders.
+
+#### Recovering reads the unique-only rule throws away
+
+Both panels above count what the main matrix counts: unique alignments. When the
+reference carries cDNA copies of a gene that also exists in the genome — a
+transgene next to its endogenous locus — most of that gene's reads align equally
+well to two or three places. STAR marks them `NH >= 2` (MAPQ 3), and
+`featureCounts` with `-Q 10` and no `-M` discards them. Neither the endogenous
+feature nor the construct features then report the gene's real output, and the
+bar heights between them are not comparable: each one reflects how wide its
+uniquely-mappable window happens to be.
+
+Two optional rows recover it from the **same BAMs, with no re-alignment**. Both
+re-count with `-Q 0 -M --fraction`, so every alignment of an ambiguous fragment
+lands in the same meta-feature and contributes `1/NH` — the fragment is counted
+exactly once, whichever copy it came from.
+
+```yaml
+DesignQC:
+  total_feature:                    # one row: the gene's output from every source
+    name: ATRX_Total
+    genes: [ATRX, ATRX_FL, ATRX_IFF]
+  tag:                              # one row: a window shared by the vector contigs
+    name: Tag
+    regions:
+      - {contig: ATRX_FL,  start: 1, end: 117, strand: "+"}
+      - {contig: ATRX_IFF, start: 1, end: 117, strand: "+"}
+    min_overlap: 25
+```
+
+They are drawn at the **top** of `marker_expression.pdf`, above the unique-only
+rows, and normalised with the same size factors. The tag window is sequence that
+is absent from the genome, so it measures transgene output regardless of which
+construct a sample carries — it deliberately does not distinguish between them.
+
+Leave `genes` / `regions` empty to disable either one. Three caveats:
+
+- **The tag is a coordinate range, not a sequence match.** It is only correct if
+  the contigs begin at the construct's first base — check `start`/`end` against
+  the reference FASTA.
+- **Counts are fractional** and are not valid DESeq2 input. These rows never
+  enter `quantify/counts.txt`, so size factors, the VST and the correlation
+  heatmaps are untouched.
+- **The pooled row is not on the same footing as the rows below it**, since it
+  includes multimappers and they do not. The panel subtitle says so.
 
 Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
 and coverage-uniformity metrics that are not recomputed here.

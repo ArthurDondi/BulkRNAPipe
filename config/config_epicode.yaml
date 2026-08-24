@@ -285,6 +285,34 @@ DesignQC:
     - HOXB7
     - IGF2BP1
 
+  # Facet-strip renaming for the design QC panels only. The count matrix, the
+  # CSVs and every other output keep the real feature IDs.
+  plot_labels:
+    ATRX: ATRX_wt
+
+  # Total ATRX output from every source: the endogenous locus plus both
+  # vector-borne constructs, pooled into one meta-feature and counted with
+  # -M --fraction so the fragments that are ambiguous between them (most of the
+  # ATRX coding sequence) are counted once rather than discarded.
+  total_feature:
+    name: ATRX_Total
+    genes:
+      - ATRX
+      - ATRX_FL
+      - ATRX_IFF
+
+  # Twin-Strep-tag + 10xHis, nt 1-117 of both construct contigs (39 codons:
+  # StrepII + GGGSx3 linker + StrepII + 10xHis), immediately followed by the
+  # ATRX start codon.  Identical in ATRX_FL and ATRX_IFF and absent from hg38,
+  # so it reports transgene expression without distinguishing the two - which is
+  # fine here, since each condition carries a known single construct.
+  tag:
+    name: Tag
+    regions:
+      - {contig: ATRX_FL,  start: 1, end: 117, strand: "+"}
+      - {contig: ATRX_IFF, start: 1, end: 117, strand: "+"}
+    min_overlap: 25
+
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:
   enabled: True
