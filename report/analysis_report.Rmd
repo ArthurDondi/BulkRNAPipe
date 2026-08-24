@@ -306,10 +306,8 @@ reads:
   included. Much higher than the sum of the three rows above, which discard
   multimapped reads. Counts scale with transcript length, so the shorter IFF
   construct is under-represented 1.87-fold.
-- `Tag`: reads on the Twin-Strep/10His tag only. The tag is identical in both
-  vectors and absent from the genome, so this measures transgene expression
-  without telling FL and IFF apart — which is fine, each condition carries a known
-  single vector.
+- `Tag`: reads on the Twin-Strep/10His tag only. Most reliable `ATRX_IFF` vs
+  `ATRX_FL` expression comparison.
 
 ```{r qc-markers, fig.height = 11}
 mk <- gene_long(grab("design_qc", "marker_expression.csv"), meta)
@@ -320,12 +318,12 @@ if (is.null(mk)) missing_note("design_qc", "marker_expression.csv") else {
   relabel <- function(x) ifelse(x == "ATRX", "ATRX_wt", x)
   mk$gene_id <- factor(relabel(mk$gene_id), levels = relabel(unique(mk$gene_id)))
   print(
-    ggplot(mk, aes(sample, value + 1, fill = condition)) +
+    ggplot(mk, aes(sample, value, fill = condition)) +
       geom_col() +
       facet_wrap(~ gene_id, scales = "free_y", ncol = 1) +
-      scale_y_log10() + scale_fill_manual(values = PAL) +
+      scale_fill_manual(values = PAL) +
       labs(title = "Reporter and transgene expression",
-           x = NULL, y = "normalised count + 1", fill = "Condition") +
+           x = NULL, y = "normalised count", fill = "Condition") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
 }
@@ -344,9 +342,14 @@ if (!is.null(mk2) && "ATRX" %in% mk2$gene_id && !is.null(meta)) {
 }
 ```
 
-> EGFP/mCherry are present only in the transduced groups; each ATRX construct is
-> detected only in its own group. *(Add your read of the ATRX levels: is the
-> rescue at a physiological dose? Is one construct variable across replicates?)*
+> `EGFP`/`mCherry` are present only in the transduced groups, although with large
+> variations; each ATRX construct is detected only in its own group. `E6` seems to
+> have a reduced expression compared to `TP53`, possibly because the CRISPR
+> modification in ATRX introduced a premature stop codon leading to
+> nonsense-mediated decay. `ATRX_wt` and `ATRX_Total` show very similar profiles,
+> which is expected for `TP53` and `E6`; however for `ATRX_FL` and `ATRX_IFF` one
+> would expect a bump in expression due to multimapped construct reads. Via the
+> `Tag` expression, we see that `ATRX_IFF` is much more expressed than `ATRX_FL`.
 
 ## Sample–sample correlation
 
@@ -456,16 +459,12 @@ effects cancel. This is the cleanest contrast in the dataset.
 
 `r sprintf("The vector and transgene features (%s) are excluded from every differential-expression figure and table in this report. They are constructs rather than biology, and in any contrast crossing a construct boundary they would otherwise top the list.", paste(params$exclude_genes, collapse = ", "))`
 
-Genes of interest (`r paste(params$highlight_genes, collapse = ", ")`) are
-labelled in green on the volcano below.
-
 ```{r de-headline, fig.height = 5}
 hc  <- params$headline_contrast
 res <- de_results("deseq2", hc, "results.csv")
 if (is.null(res)) missing_note("deseq2", hc, "results.csv") else {
   # EDIT the numerator/denominator if you change the headline contrast.
-  print(volcano(res, hc, num = "ATRX_IFF", den = "ATRX_FL",
-                highlight = params$highlight_genes))
+  print(volcano(res, hc, num = "ATRX_IFF", den = "ATRX_FL"))
 }
 ```
 
