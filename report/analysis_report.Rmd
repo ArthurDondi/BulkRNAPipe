@@ -286,55 +286,45 @@ if (is.null(qc)) missing_note("design_qc", "design_qc_summary.csv") else {
 
 ## ATRX and vector markers
 
-Three ATRX features are quantified separately:
+ATRX_wt is the wild-type version, it includes introns, 3'UTR and 5'UTR. ATRX_FL
+(7482 bp) and ATRX_IFF (3993 bp) include a Twin-Strep-tag and 10xHis tag, and are
+cDNAs (no 3'/5'UTR, no introns).
 
-- **`ATRX`** — the endogenous locus in hg38, including its 5'/3'UTRs and introns.
-- **`ATRX_FL`** — vector-borne full-length ATRX cDNA (no UTRs, no introns), fused
-  N-terminally to a Twin-Strep-tag + 10xHis tag.
-- **`ATRX_IFF`** — vector-borne in-frame-fusion ATRX cDNA carrying the *same*
-  N-terminal tag, with exons 4–10 deleted (exon 3 joined directly to exon 10).
+ATRX_wt, ATRX_FL and ATRX_IFF only account for uniquely mappable reads: reads that
+are unambiguously assigned to one of the 3 possible references. That is:
 
-### What the figures actually count
+- Reads mapping to either ATRX 3'/5'UTR and reads overlapping exons and introns
+  (reads only spanning introns are not counted) are reported as `ATRX_wt`.
+- Read pairs with one mate on the Twin-Strep/10His tag and the other past the
+  FL/IFF divergence point (nt 250) are reported as `ATRX_FL`.
+- Read pairs spanning the fusion breakpoint are reported as `ATRX_IFF`.
 
-Both constructs are cDNA copies of a gene already present in hg38, so most of
-their sequence exists in **two or three copies** in the reference (vector
-contigs + chrX). STAR flags such alignments as multi-mapping (`NH` ≥ 2,
-MAPQ ≤ 3) and featureCounts is run with `-Q 10` and without `-M`, so these
-fragments are **discarded, not distributed**. Only fragments placeable at
-exactly one locus are counted:
+Two further rows are counted from the same alignments but keep the multi-mapping
+reads:
 
-- **`ATRX`** — fragments in the 5'/3'UTR (absent from the constructs), and
-  fragments straddling an exon–intron boundary (introns are absent from the
-  constructs). Fragments lying entirely within an intron are assigned to no
-  gene; fragments lying entirely within coding exons are ambiguous with the
-  constructs and discarded. `ATRX` therefore reports roughly the UTR-plus-
-  boundary fraction of endogenous ATRX (~30% of the transcript), not its total
-  expression — and it does so in *every* sample, since both vector contigs are
-  in the reference regardless of which construct a sample carries.
-- **`ATRX_FL`** — read *pairs* with one mate in the tag (absent from hg38) and
-  the other mate extending past CDS position 133 into exons 4–10 (absent from
-  `ATRX_IFF`). Neither mate is unique on its own; only the pair is.
-- **`ATRX_IFF`** — fragments spanning the exon3–exon11 fusion breakpoint, which
-  exists neither in hg38 nor in `ATRX_FL`.
+- `ATRX_Total`: all reads from any ATRX source — wild-type, FL and IFF pooled, tag
+  included. Much higher than the sum of the three rows above, which discard
+  multimapped reads. Counts scale with transcript length, so the shorter IFF
+  construct is under-represented 1.87-fold.
+- `Tag`: reads on the Twin-Strep/10His tag only. The tag is identical in both
+  vectors and absent from the genome, so this measures transgene expression
+  without telling FL and IFF apart — which is fine, each condition carries a known
+  single vector.
 
-> **Bar heights are not comparable between features.** The uniquely mappable
-> window is ~100 nt wide for `ATRX_FL` and ~250–300 nt for `ATRX_IFF`, so
-> `ATRX_FL` yields roughly 3× fewer counts than `ATRX_IFF` at equal expression.
-> The FL/IFF difference in these plots is a mappability artefact, not
-> differential transgene expression. Comparisons of the *same* feature across
-> samples remain valid; comparisons *between* features do not.
-
-
-```{r qc-markers, fig.height = 8}
+```{r qc-markers, fig.height = 11}
 mk <- gene_long(grab("design_qc", "marker_expression.csv"), meta)
 if (is.null(mk)) missing_note("design_qc", "marker_expression.csv") else {
+  # Keep the CSV's row order (ATRX_Total and Tag first) instead of letting
+  # ggplot sort the facets alphabetically, and match the pipeline's ATRX_wt
+  # label. The CSV itself keeps the real feature IDs.
+  relabel <- function(x) ifelse(x == "ATRX", "ATRX_wt", x)
+  mk$gene_id <- factor(relabel(mk$gene_id), levels = relabel(unique(mk$gene_id)))
   print(
     ggplot(mk, aes(sample, value + 1, fill = condition)) +
       geom_col() +
       facet_wrap(~ gene_id, scales = "free_y", ncol = 1) +
       scale_y_log10() + scale_fill_manual(values = PAL) +
       labs(title = "Reporter and transgene expression",
-           subtitle = "normalised counts + 1, log10; these features are excluded from the size factors",
            x = NULL, y = "normalised count + 1", fill = "Condition") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
@@ -350,7 +340,7 @@ if (!is.null(mk2) && "ATRX" %in% mk2$gene_id && !is.null(meta)) {
               max = round(max(value)), .groups = "drop") %>%
     mutate(`% of TP53` = round(100 * mean / mean[condition == "TP53"]),
            `fold spread` = sprintf("%.1fx", max / pmax(min, 1))) %>%
-    kable(caption = "Endogenous ATRX locus, normalised counts")
+    kable(caption = "ATRX_wt (endogenous locus), normalised counts")
 }
 ```
 
