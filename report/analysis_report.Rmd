@@ -20,6 +20,12 @@ params:
   exclude_genes: !r c("ATRX", "ATRX_FL", "ATRX_IFF", "EGFP", "mCherry")
   # Labelled on the headline volcano.
   highlight_genes: !r c("HOXB2", "HOXB4", "HOXB6", "HOXB7", "IGF2BP1")
+  # Every volcano additionally labels its N most significant genes (by
+  # -log10(padj) x |log2FC|, the same ranking as the top-genes tables), the way
+  # the pipeline's own volcano.pdf labels every significant gene. The report
+  # caps it at a fixed N instead, since some contrasts have thousands of
+  # significant genes and labelling all of them is unreadable at report scale.
+  volcano_label_top: 12
 output:
   html_document:
     toc: true
@@ -31,6 +37,11 @@ output:
     fig_width: 9
     fig_height: 5
     df_print: kable
+    # Every chunk's code is included but folded behind a "Show" toggle, so the
+    # report reads as figures and tables by default while staying fully
+    # reproducible one click away. Requires echo = TRUE in the setup chunk below
+    # - code_folding only folds code that would otherwise be printed.
+    code_folding: hide
   pdf_document:
     toc: true
     number_sections: true
@@ -58,7 +69,9 @@ HOW THIS WORKS
 -->
 
 ```{r setup, include = FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+# echo = TRUE + code_folding: hide (in the YAML header) is the "Show" toggle
+# per chunk - code is present in the HTML but folded away by default.
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                       dpi = 150, fig.align = "center")
 
 suppressPackageStartupMessages({
@@ -120,7 +133,8 @@ de_results <- function(...) {
   r
 }
 
-volcano <- function(res, title, num, den, highlight = NULL) {
+volcano <- function(res, title, num, den, highlight = NULL,
+                    label_top = params$volcano_label_top) {
   res <- res %>% filter(!is.na(padj)) %>%
     mutate(sig = padj < params$padj & abs(log2FoldChange) >= params$lfc)
   n <- c(up = sum(res$sig & res$log2FoldChange > 0),
@@ -147,9 +161,28 @@ volcano <- function(res, title, num, den, highlight = NULL) {
       x = sprintf("log2FC  (%s / %s)   \u2014   positive = higher in %s", num, den, num),
       y = expression(-log[10] ~ "adjusted p")) +
     theme(plot.subtitle = element_text(lineheight = 1.2))
+  # Label the most significant genes, ranked the same way as top_genes():
+  # -log10(padj) x |log2FC|, so the labelled genes match the accompanying table.
+  # The pipeline's own volcano.pdf labels every significant gene; capped here
+  # because report-scale figures become unreadable once a contrast has more
+  # than a few dozen significant genes (TP53_vs_E6 has thousands).
+  hl_lower <- if (is.null(highlight)) character(0) else tolower(highlight)
+  if (label_top > 0) {
+    lbl <- res %>% filter(sig, !tolower(gene_id) %in% hl_lower) %>%
+      mutate(score = -log10(padj) * abs(log2FoldChange)) %>%
+      slice_max(score, n = label_top, with_ties = FALSE)
+    if (nrow(lbl)) {
+      p <- p + ggrepel::geom_text_repel(
+        data = lbl, aes(label = gene_id), colour = "grey20", size = 2.4,
+        max.overlaps = 30, segment.size = 0.2, segment.colour = "grey50",
+        show.legend = FALSE)
+    }
+  }
   if (!is.null(highlight)) {
-    h <- res %>% filter(tolower(gene_id) %in% tolower(highlight))
+    h <- res %>% filter(tolower(gene_id) %in% hl_lower)
     if (nrow(h)) {
+      # Drawn after the general labels so the highlighted genes and their
+      # labels sit on top rather than being obscured by them.
       p <- p +
         geom_point(data = h, colour = "#1B7837", size = 2.4) +
         ggrepel::geom_text_repel(
@@ -157,7 +190,7 @@ volcano <- function(res, title, num, den, highlight = NULL) {
           size = 3.1, min.segment.length = 0, box.padding = 0.6,
           segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE)
     }
-    miss <- setdiff(tolower(highlight), tolower(res$gene_id))
+    miss <- setdiff(hl_lower, tolower(res$gene_id))
     if (length(miss)) message("highlight not found: ", paste(miss, collapse = ", "))
   }
   p
@@ -596,11 +629,19 @@ if (!length(srs)) missing_note("signature_reversal", "*", "reversal_stats.csv") 
 ```
 
 ```{r rescue-scatter, fig.height = 6, results = "asis"}
-# EDIT: which comparison to draw in full.
+# EDIT: which comparison to draw in full. The negative control pairs the vector-
+# transduction signature (E6 vs EmptyVector) against the FL-vs-IFF difference -
+# two groups that share no sample with the signature and have no mechanistic
+# reason to reverse it. It calibrates the two rescue scores above: if it scores
+# near the permutation null, the FL/IFF reversal is ATRX-specific; if it scores
+# like ATRX_FL does, the metric is picking up generic structure instead.
 for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
-             "ATRX_IFF_reverses_KO_signature_lfc1")) {
+             "ATRX_IFF_reverses_KO_signature_lfc1",
+             "NEGATIVE_CONTROL_vector_signature_vs_FL_IFF")) {
   g <- grab("signature_reversal", nm, "reversal_genes.csv")
-  cat("\n\n###", nm, "\n\n")
+  heading <- if (nm == "NEGATIVE_CONTROL_vector_signature_vs_FL_IFF")
+    paste(nm, "(negative control)") else nm
+  cat("\n\n###", heading, "\n\n")
   if (is.null(g)) { missing_note("signature_reversal", nm, "reversal_genes.csv"); next }
   lim <- max(abs(c(g$lfc_sig, g$lfc_resp)), na.rm = TRUE)
   st  <- grab("signature_reversal", nm, "reversal_stats.csv")
@@ -614,6 +655,7 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
     sprintf("reversed  %.0f%% (null %.0f%%)", st$pct_reversed[1],
             st$null_pct_reversed[1]),
     sprintf("perm p    %s", format(signif(st$perm_p[1], 2))), sep = "\n") else NULL
+  is_control <- nm == "NEGATIVE_CONTROL_vector_signature_vs_FL_IFF"
   p <- ggplot(g, aes(lfc_sig, lfc_resp)) +
     annotate("rect", xmin = 0, xmax = lim, ymin = -lim, ymax = 0,
              fill = "#4DAF4A", alpha = .07) +
@@ -624,11 +666,13 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
     geom_abline(slope = -1, linetype = "dashed", colour = "grey45") +
     geom_point(size = 1, alpha = .5, colour = "#2166AC") +
     coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
-    labs(title = nm,
+    labs(title = heading,
          subtitle = paste0("shaded = reversal | dashed = complete reversal (slope -1)\n",
                            "red = fitted slope (total least squares)"),
-         x = "log2FC knockout (the damage)",
-         y = "log2FC rescue (the repair)")
+         x = if (is_control) "log2FC transduction (E6 / EmptyVector)"
+             else "log2FC knockout (the damage)",
+         y = if (is_control) "log2FC FL vs IFF (unrelated comparison)"
+             else "log2FC rescue (the repair)")
   # The fitted slope is the statistic being reported, so draw it rather than
   # leaving the reader to infer it from the box.
   if (!is.null(st) && "tls_slope" %in% names(st) && is.finite(st$tls_slope[1])) {
