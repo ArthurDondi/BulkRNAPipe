@@ -13,6 +13,7 @@
 #   marker_expression.pdf       normalised expression of reporter/transgene features
 #                               (optionally topped by a pooled total and a tag-only
 #                               row, counted with -M --fraction over the same BAMs)
+#   marker_expression_linear.pdf  the same panel on a linear axis
 #   marker_expression.csv       the same numbers as a table
 #   sample_correlation.pdf      Spearman correlation between all samples (VST)
 #   sample_distance.pdf         Euclidean distance between all samples (VST)
@@ -269,10 +270,18 @@ if (!is.null(args$summary) && file.exists(args$summary)) {
 }
 
 # ─── Per-gene expression panels ──────────────────────────────────────────────
-gene_panel <- function(genes, title, subtitle, out_pdf, out_csv) {
+# log_scale = FALSE draws the same panel on a linear axis. Both views are worth
+# having: log keeps a feature that is near zero in one group and thousands in
+# another on the same strip at all, linear shows how large the differences
+# actually are - on log10 a 10x and a 100x difference look similarly modest.
+# out_csv = NULL writes no table (the linear view reuses the log view's).
+gene_panel <- function(genes, title, subtitle, out_pdf, out_csv,
+                       log_scale = TRUE) {
   if (length(genes) == 0) {
     message("No genes to plot for '", title, "' - writing an empty table.")
-    write.csv(data.frame(gene_id = character(0)), out_csv, row.names = FALSE)
+    if (!is.null(out_csv)) {
+      write.csv(data.frame(gene_id = character(0)), out_csv, row.names = FALSE)
+    }
     pdf(out_pdf, width = 7, height = 4); plot.new()
     text(0.5, 0.5, paste0(title, ": no genes found"), cex = 1.1); dev.off()
     return(invisible(NULL))
@@ -286,19 +295,25 @@ gene_panel <- function(genes, title, subtitle, out_pdf, out_csv) {
   # Facet strips only; `genes` and the CSV below stay on the real IDs.
   df$gene      <- factor(display_label(df$gene), levels = display_label(genes))
 
-  p <- ggplot(df, aes(x = sample, y = value + 1, fill = condition)) +
+  # The +1 offset exists only so zeros survive the log transform; on a linear
+  # axis it would be a silent distortion, so the raw value is plotted instead.
+  df$y <- if (log_scale) df$value + 1 else df$value
+  p <- ggplot(df, aes(x = sample, y = y, fill = condition)) +
     geom_col() +
     facet_wrap(~ gene, scales = "free_y", ncol = 1) +
-    scale_y_log10() +
-    labs(title = title, subtitle = subtitle,
-         x = NULL, y = "normalised count + 1", fill = "Condition") +
+    labs(title = title, subtitle = subtitle, x = NULL,
+         y = if (log_scale) "normalised count + 1" else "normalised count",
+         fill = "Condition") +
     theme_qc
+  if (log_scale) p <- p + scale_y_log10()
   ggsave(out_pdf, plot = p, width = 9,
          height = 2.6 * length(genes) + 1.5, limitsize = FALSE)
   message("Written: ", out_pdf)
 
-  wide <- as.data.frame(round(norm[genes, , drop = FALSE], 3))
-  write.csv(cbind(gene_id = rownames(wide), wide), out_csv, row.names = FALSE)
+  if (!is.null(out_csv)) {
+    wide <- as.data.frame(round(norm[genes, , drop = FALSE], 3))
+    write.csv(cbind(gene_id = rownames(wide), wide), out_csv, row.names = FALSE)
+  }
 }
 
 marker_subtitle <- "normalised counts + 1, log10; excluded from the size factors"
@@ -315,6 +330,15 @@ gene_panel(marker_panel_genes,
            marker_subtitle,
            file.path(outdir, "marker_expression.pdf"),
            file.path(outdir, "marker_expression.csv"))
+
+# Same numbers, linear axis. On log10 the transgene rows read as modest
+# differences; linear is what shows their real size.
+gene_panel(marker_panel_genes,
+           "Reporter and transgene expression (linear scale)",
+           sub("^normalised counts \\+ 1, log10",
+               "normalised counts, linear axis", marker_subtitle),
+           file.path(outdir, "marker_expression_linear.pdf"),
+           out_csv = NULL, log_scale = FALSE)
 
 gene_panel(goi_present,
            "Genes of interest",

@@ -137,6 +137,7 @@ rule DesignQC:
         library_size = "design_qc/library_size.pdf",
         genes_det    = "design_qc/genes_detected.pdf",
         markers      = "design_qc/marker_expression.pdf",
+        markers_lin  = "design_qc/marker_expression_linear.pdf",
         markers_csv  = "design_qc/marker_expression.csv",
         goi          = "design_qc/goi_expression.pdf",
         goi_csv      = "design_qc/goi_expression.csv",

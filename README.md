@@ -269,7 +269,8 @@ output_dir/
 │   ├── library_size.pdf                      # Assigned reads per sample
 │   ├── assignment_rates.pdf                  # featureCounts assignment breakdown
 │   ├── genes_detected.pdf                    # Genes with >= 1 count
-│   ├── marker_expression.pdf                 # Reporter / transgene expression
+│   ├── marker_expression.pdf                 # Reporter / transgene expression (log10)
+│   ├── marker_expression_linear.pdf          # Same panel, linear axis
 │   ├── total_feature_counts.txt              # Pooled gene_ids, -M --fraction (optional)
 │   ├── tag_counts.txt                        # Vector tag window, -M --fraction (optional)
 │   ├── goi_expression.pdf                    # Endogenous genes of interest
@@ -546,7 +547,11 @@ DesignQC:
 ```
 
 They are drawn at the **top** of `marker_expression.pdf`, above the unique-only
-rows, and normalised with the same size factors. The tag window is sequence that
+rows, and normalised with the same size factors. The same panel is written a
+second time on a linear axis as `marker_expression_linear.pdf` — log10 keeps a
+feature that is zero in one group and thousands in another legible at all, but it
+flattens the differences it does show, so the two views answer different
+questions and both are produced. The tag window is sequence that
 is absent from the genome, so it measures transgene output regardless of which
 construct a sample carries — it deliberately does not distinguish between them.
 
