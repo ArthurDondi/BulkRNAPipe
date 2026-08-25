@@ -129,22 +129,38 @@ for (s in selected) {
   hit$pathway <- factor(hit$pathway, levels = hit$pathway[order(hit$NES)])
 
   sub <- paste0(length(wanted) - length(absent), " of ", length(wanted),
-                " gene sets tested")
+                " gene sets tested  \u00b7  hollow: padj \u2265 ", args$padj_cutoff)
   if (nzchar(args$numerator) && nzchar(args$denominator)) {
     sub <- paste0(sub, "  ·  NES > 0: enriched in ", args$numerator,
                   ", NES < 0: enriched in ", args$denominator)
   }
 
-  p <- ggplot(hit, aes(x = NES, y = pathway, colour = padj, size = size)) +
+  # Two layers rather than one shape scale. The colour ramp now spans only
+  # 0..cutoff, so every step of it is a difference between significant results
+  # instead of most of the range being spent on non-significant ones; anything
+  # above the cutoff carries no colour at all and is drawn as a hollow grey
+  # circle. That also drops the third legend.
+  sig_pts <- hit[hit$significant, , drop = FALSE]
+  ns_pts  <- hit[!hit$significant, , drop = FALSE]
+
+  # Size breaks come from the points actually on this panel - min, midpoint and
+  # max - so the key spans the drawn range instead of ggplot's generic ticks,
+  # which often sit outside it entirely.
+  sz <- range(hit$size, na.rm = TRUE)
+  size_breaks <- if (sz[1] == sz[2]) sz[1] else
+    unique(round(c(sz[1], mean(sz), sz[2])))
+
+  p <- ggplot(hit, aes(x = NES, y = pathway)) +
     geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40") +
-    geom_point(aes(shape = significant)) +
-    scale_shape_manual(values = c(`FALSE` = 1, `TRUE` = 19),
-                       name = paste0("padj < ", args$padj_cutoff),
-                       drop = FALSE) +
-    scale_colour_gradient(low = "#E41A1C", high = "grey70",
-                          limits = c(0, 0.25), oob = scales::squish,
-                          name = "padj") +
-    scale_size_continuous(name = "Gene set size", range = c(2, 8)) +
+    geom_point(data = ns_pts, aes(size = size),
+               shape = 21, colour = "grey65", fill = NA, stroke = 0.7) +
+    geom_point(data = sig_pts, aes(size = size, colour = padj), shape = 19) +
+    scale_colour_gradient(low = "#A50F15", high = "#FC9272",
+                          limits = c(0, args$padj_cutoff),
+                          breaks = c(0, args$padj_cutoff / 2, args$padj_cutoff),
+                          oob = scales::squish, name = "padj") +
+    scale_size_continuous(name = "Gene set size", range = c(2, 8),
+                          limits = sz, breaks = size_breaks) +
     labs(title = paste("KEGG:", label), subtitle = sub, x = "NES", y = NULL) +
     theme_bw(base_size = 11) +
     theme(plot.subtitle       = element_text(size = 9, colour = "grey30"),

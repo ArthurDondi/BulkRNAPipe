@@ -130,19 +130,32 @@ for (s in selected) {
                  if (n_matched > nrow(hit))
                    sprintf("top %d of %d matched terms by padj", nrow(hit), n_matched)
                  else sprintf("all %d matched terms", n_matched))
+  sub <- paste0(sub, "  \u00b7  hollow: padj \u2265 ", args$padj_cutoff)
   if (nzchar(args$numerator) && nzchar(args$denominator)) {
     sub <- paste0(sub, "\nNES > 0: enriched in ", args$numerator,
                   ", NES < 0: enriched in ", args$denominator)
   }
 
-  p <- ggplot(hit, aes(x = NES, y = label, colour = padj, size = size)) +
+  # See gsea_kegg.R: colour ramp bounded at the cutoff, non-significant terms
+  # drawn hollow and uncoloured, size breaks taken from the plotted points.
+  sig_pts <- hit[hit$significant, , drop = FALSE]
+  ns_pts  <- hit[!hit$significant, , drop = FALSE]
+
+  sz <- range(hit$size, na.rm = TRUE)
+  size_breaks <- if (sz[1] == sz[2]) sz[1] else
+    unique(round(c(sz[1], mean(sz), sz[2])))
+
+  p <- ggplot(hit, aes(x = NES, y = label)) +
     geom_vline(xintercept = 0, linetype = "dashed", colour = "grey40") +
-    geom_point(aes(shape = significant)) +
-    scale_shape_manual(values = c(`FALSE` = 1, `TRUE` = 19),
-                       name = paste0("padj < ", args$padj_cutoff), drop = FALSE) +
-    scale_colour_gradient(low = "#E41A1C", high = "grey70",
-                          limits = c(0, 0.25), oob = scales::squish, name = "padj") +
-    scale_size_continuous(name = "Gene set size", range = c(2, 8)) +
+    geom_point(data = ns_pts, aes(size = size),
+               shape = 21, colour = "grey65", fill = NA, stroke = 0.7) +
+    geom_point(data = sig_pts, aes(size = size, colour = padj), shape = 19) +
+    scale_colour_gradient(low = "#A50F15", high = "#FC9272",
+                          limits = c(0, args$padj_cutoff),
+                          breaks = c(0, args$padj_cutoff / 2, args$padj_cutoff),
+                          oob = scales::squish, name = "padj") +
+    scale_size_continuous(name = "Gene set size", range = c(2, 8),
+                          limits = sz, breaks = size_breaks) +
     labs(title = paste("GO:", label), subtitle = sub, x = "NES", y = NULL) +
     theme_bw(base_size = 11) +
     theme(plot.subtitle       = element_text(size = 9, colour = "grey30"),
