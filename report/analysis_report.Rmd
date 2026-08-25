@@ -448,140 +448,42 @@ if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes"
 > we can see thet either the clonal drift or the ATRX knockout led to huge shifts in expression.
 > Our current set up does not ena
 
----
 
-# Differential expression
+## Differential expression across contrasts
 
-## `r params$headline_contrast`
-
-Both groups share the clone and carry a vector, so the clonal and transduction
-effects cancel. This is the cleanest contrast in the dataset.
+Gene counts only. The per-contrast volcanoes are in the pipeline output under
+`deseq2/{contrast}/`; what matters here is the relative size of each effect.
 
 `r sprintf("The vector and transgene features (%s) are excluded from every differential-expression figure and table in this report. They are constructs rather than biology, and in any contrast crossing a construct boundary they would otherwise top the list.", paste(params$exclude_genes, collapse = ", "))`
 
-```{r de-headline, fig.height = 5}
-hc  <- params$headline_contrast
-res <- de_results("deseq2", hc, "results.csv")
-if (is.null(res)) missing_note("deseq2", hc, "results.csv") else {
-  # EDIT the numerator/denominator if you change the headline contrast.
-  print(volcano(res, hc, num = "ATRX_IFF", den = "ATRX_FL"))
-}
-```
-
-```{r de-headline-top}
-if (!is.null(res)) {
-  kable(top_genes(res),
-        caption = paste("Top 10 up and 10 down, ranked by -log10(padj) x |log2FC|",
-                        "among genes passing both thresholds"))
-}
-```
-
-> HOXB genes are overexpressed in `ATRX_IFF`. They are canonical targets of Polycomb Repressive Complex 2 (PRC2). 
-> `ATRX_IFF` lacks its EZH2-interacting domain (PRC2 member) interacting domain, so one hypothesis would be
->  that `ATRX_IFF` fails recruiting PRC2 at the HOXB locus, therefore not repressing its expression.
-
-
-## Genes of interest (HOXB and IGF1BP2)
-
-The point of this panel is the **pattern across groups**, not any single gene.
-
-```{r goi-load, include = FALSE}
-goi <- gene_long(grab("design_qc", "goi_expression.csv"), meta)
-```
-
-```{r goi-means, fig.height = 4}
-if (is.null(goi)) missing_note("design_qc", "goi_expression.csv") else {
-  print(
-    goi %>% group_by(gene_id, condition) %>%
-      summarise(mean = mean(value), sd = sd(value), .groups = "drop") %>%
-      ggplot(aes(condition, mean, fill = condition)) +
-      geom_col() +
-      geom_errorbar(aes(ymin = pmax(mean - sd, 0), ymax = mean + sd), width = 0.25,
-                    linewidth = 0.3) +
-      facet_wrap(~ gene_id, scales = "free_y", nrow = 1) +
-      scale_fill_manual(values = PAL, guide = "none") +
-      labs(title = "Group means (± SD)", x = NULL, y = "normalised count") +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1))
-  )
-}
-```
-
-> Genes significantly enriched in `ATRX_IFF` compared to `ATRX_FL` are also highly expressed 
-> in TP53. This is counter-intuitive, as we would expect `TP53` cells to be more similar 
-> to `ATRX_FL` (full rescue) than `ATRX_FF` (partial rescue via truncated protein)
-
-## Remaining contrasts
-
-```{r de-others, fig.height = 4.5, results = "asis"}
-# EDIT: add or reorder. Each entry is c(contrast_dir, numerator, denominator).
-contrasts <- list(
-  c("EmptyVector_vs_ATRX_FL",  "ATRX_FL",     "EmptyVector"),
-  c("EmptyVector_vs_ATRX_IFF", "ATRX_IFF",    "EmptyVector"),
-  c("E6_vs_EmptyVector",       "EmptyVector", "E6"),
-  # TP53_vs_E6 has its own section above.
-  c("TP53_vs_ATRX_FL",         "ATRX_FL",     "TP53"),
-  c("TP53_vs_ATRX_IFF",        "ATRX_IFF",    "TP53")
+```{r de-tally}
+# Self-contained: reads each contrast's results and counts, without drawing
+# anything. The headline ATRX_FL vs ATRX_IFF comparison is included so the
+# cleanest contrast in the design can be sized against the rest.
+tally_contrasts <- c(
+  params$headline_contrast,
+  "EmptyVector_vs_ATRX_FL",
+  "EmptyVector_vs_ATRX_IFF",
+  "E6_vs_EmptyVector",
+  "TP53_vs_E6",
+  "TP53_vs_ATRX_FL",
+  "TP53_vs_ATRX_IFF"
 )
 tally <- list()
-for (c3 in contrasts) {
-  r <- de_results("deseq2", c3[1], "results.csv")
-  cat("\n\n###", c3[1], "\n\n")
-  if (is.null(r)) { missing_note("deseq2", c3[1], "results.csv"); next }
-  tally[[c3[1]]] <- de_counts(r)
-  print(volcano(r, c3[1], num = c3[2], den = c3[3]))
+for (cn in tally_contrasts) {
+  r <- de_results("deseq2", cn, "results.csv")
+  if (!is.null(r)) tally[[cn]] <- de_counts(r)
 }
-```
-
-```{r de-tally}
 if (length(tally)) {
   do.call(rbind, tally) %>% as.data.frame() %>%
     tibble::rownames_to_column("contrast") %>%
     mutate(total = up + down) %>%
     kable(caption = sprintf("Genes with padj < %s and |log2FC| >= %s",
                             params$padj, params$lfc))
+} else {
+  missing_note("deseq2", "*", "results.csv")
 }
 ```
-
----
-
-# Pathway enrichment (GSEA)
-
-```{r gsea, fig.height = 6, results = "asis"}
-gsea_dot <- function(df, title, top = 12) {
-  df <- df %>% filter(!is.na(padj)) %>% arrange(desc(abs(NES)))
-  df <- bind_rows(head(filter(df, NES > 0), top), head(filter(df, NES < 0), top))
-  if (!nrow(df)) return(invisible(NULL))
-  num <- df$numerator[1]; den <- df$denominator[1]
-  up   <- sprintf("NES > 0: pathway genes HIGHER in %s", num)
-  down <- sprintf("NES < 0: pathway genes HIGHER in %s", den)
-  df <- df %>% mutate(
-    pathway = gsub("^HALLMARK_", "", pathway),
-    pathway = factor(pathway, levels = pathway[order(df$NES)]),
-    side = factor(ifelse(NES > 0, up, down), levels = c(up, down)))
-  print(
-    ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
-      geom_point() +
-      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-      facet_grid(side ~ ., scales = "free_y", space = "free_y") +
-      scale_colour_gradient(low = "#B2182B", high = "grey75", limits = c(0, 0.25)) +
-      labs(title = title,
-           subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
-           y = NULL, colour = "padj", size = "Set size") +
-      theme(strip.text.y = element_text(angle = 0, size = 8))
-  )
-}
-# EDIT: which contrasts to show enrichment for.
-for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
-             "EmptyVector_vs_ATRX_IFF")) {
-  g <- grab("gsea", cn, "H_results.csv")
-  cat("\n\n##", cn, "\n\n")
-  if (is.null(g)) { missing_note("gsea", cn, "H_results.csv"); next }
-  gsea_dot(g, paste("Hallmark:", cn))
-}
-```
-
-> Hallmark proliferation sets (E2F, G2M, MYC) are enriched in `ATRX_IFF` compared to `ATRX_FL`, and
-> the inflammatory/interferon sets are enriched in `ATRX_FL`. 
 
 ---
 
@@ -691,20 +593,6 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
 > quadrants, along the dashed line. Slope −1 is a complete rescue, 0 is no
 > response. We see a slightly higher recovery in `ATRX_FL` compared to `ATRX_IFF`,
 > however, both are very close to zero.
-
-## Interaction contrasts
-
-`(rescue / EmptyVector) − (TP53 / E6)`: how far the rescue moved each gene minus
-how far it needed to move. Zero is a complete rescue; negative is a shortfall.
-
-```{r rescue-interaction, fig.height = 4.5, results = "asis"}
-for (nm in c("ATRX_FL_rescue_shortfall", "ATRX_IFF_rescue_shortfall")) {
-  r <- de_results("deseq2_interaction", nm, "results.csv")
-  cat("\n\n###", nm, "\n\n")
-  if (is.null(r)) { missing_note("deseq2_interaction", nm, "results.csv"); next }
-  print(volcano(r, nm, num = "overshoot", den = "shortfall"))
-}
-```
 
 ---
 
@@ -835,6 +723,98 @@ if (!is.null(goi)) {
 # Summary
 
 TBD
+
+---
+
+# Pathway enrichment (GSEA)
+
+```{r gsea, fig.height = 6, results = "asis"}
+gsea_dot <- function(df, title, top = 12) {
+  df <- df %>% filter(!is.na(padj)) %>% arrange(desc(abs(NES)))
+  df <- bind_rows(head(filter(df, NES > 0), top), head(filter(df, NES < 0), top))
+  if (!nrow(df)) return(invisible(NULL))
+  num <- df$numerator[1]; den <- df$denominator[1]
+  up   <- sprintf("NES > 0: pathway genes HIGHER in %s", num)
+  down <- sprintf("NES < 0: pathway genes HIGHER in %s", den)
+  df <- df %>% mutate(
+    pathway = gsub("^HALLMARK_", "", pathway),
+    pathway = factor(pathway, levels = pathway[order(df$NES)]),
+    side = factor(ifelse(NES > 0, up, down), levels = c(up, down)))
+  print(
+    ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
+      geom_point() +
+      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+      facet_grid(side ~ ., scales = "free_y", space = "free_y") +
+      scale_colour_gradient(low = "#B2182B", high = "grey75", limits = c(0, 0.25)) +
+      labs(title = title,
+           subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
+           y = NULL, colour = "padj", size = "Set size") +
+      theme(strip.text.y = element_text(angle = 0, size = 8))
+  )
+}
+# EDIT: which contrasts to show enrichment for.
+for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
+             "EmptyVector_vs_ATRX_IFF")) {
+  g <- grab("gsea", cn, "H_results.csv")
+  cat("\n\n##", cn, "\n\n")
+  if (is.null(g)) { missing_note("gsea", cn, "H_results.csv"); next }
+  gsea_dot(g, paste("Hallmark:", cn))
+}
+```
+
+> Hallmark proliferation sets (E2F, G2M, MYC) are enriched in `ATRX_IFF` compared to `ATRX_FL`, and
+> the inflammatory/interferon sets are enriched in `ATRX_FL`. 
+
+---
+
+# KEGG pathway categories
+
+The five KEGG BRITE categories, drawn from the live KEGG definitions rather than
+MSigDB's frozen snapshot. Unlike the collection dotplot above, **every** pathway
+in a category is shown: a category is a short fixed list, so the pathways that
+did not move are part of the answer. Filled points are `padj < 0.05` and coloured
+across that range; hollow grey points did not reach it.
+
+```{r kegg-categories, fig.height = 4.5, results = "asis"}
+KEGG_CATS <- c(replication_and_repair       = "2.4 Replication and repair",
+               chromosome                   = "2.5 Chromosome",
+               cell_growth_and_death        = "4.2 Cell growth and death",
+               nervous_system               = "5.6 Nervous system",
+               development_and_regeneration = "5.8 Development and regeneration")
+
+kegg_cat_dot <- function(df, title) {
+  if (is.null(df) || !nrow(df)) return(invisible(NULL))
+  cut <- params$padj
+  df$significant <- !is.na(df$padj) & df$padj < cut
+  df$pathway <- factor(df$pathway, levels = df$pathway[order(df$NES)])
+  sz <- range(df$size, na.rm = TRUE)
+  brk <- if (sz[1] == sz[2]) sz[1] else unique(round(c(sz[1], mean(sz), sz[2])))
+  print(
+    ggplot(df, aes(NES, pathway)) +
+      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+      geom_point(data = df[!df$significant, ], aes(size = size),
+                 shape = 21, colour = "grey65", fill = NA, stroke = 0.7) +
+      geom_point(data = df[df$significant, ], aes(size = size, colour = padj),
+                 shape = 19) +
+      scale_colour_gradient(low = "#A50F15", high = "#FC9272",
+                            limits = c(0, cut), oob = scales::squish) +
+      scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
+      labs(title = title, y = NULL, colour = "padj", size = "Set size")
+  )
+}
+
+# EDIT: which contrasts to show category panels for.
+for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
+             "EmptyVector_vs_ATRX_IFF")) {
+  cat("\n\n##", cn, "\n\n")
+  for (slug in names(KEGG_CATS)) {
+    g <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+    cat("\n\n###", KEGG_CATS[[slug]], "\n\n")
+    if (is.null(g)) { missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv")); next }
+    kegg_cat_dot(g, paste(KEGG_CATS[[slug]], "-", cn))
+  }
+}
+```
 
 ```{r session, results = "asis"}
 cat("\n<details><summary>Session info</summary>\n\n```\n")
