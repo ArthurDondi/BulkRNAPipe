@@ -147,10 +147,15 @@ for (s in selected) {
     scale_size_continuous(name = "Gene set size", range = c(2, 8)) +
     labs(title = paste("KEGG:", label), subtitle = sub, x = "NES", y = NULL) +
     theme_bw(base_size = 11) +
-    theme(plot.subtitle = element_text(size = 9, colour = "grey30"))
+    theme(plot.subtitle       = element_text(size = 9, colour = "grey30"),
+          legend.justification = "top")
 
-  ggsave(out_pdf, plot = p, width = 9,
-         height = max(3, nrow(hit) * 0.35 + 2.5), limitsize = FALSE)
+  # Three stacked legends (shape, colour bar, size) need ~6in of height on their
+  # own. Sizing the canvas from the number of rows alone clipped them whenever a
+  # category had few pathways, so the height floor is set by the legend column
+  # rather than by the data, and the width leaves room for the gene-set names.
+  ggsave(out_pdf, plot = p, width = 11,
+         height = max(6, nrow(hit) * 0.4 + 3), limitsize = FALSE)
   message("Written: ", out_pdf, "  (", nrow(hit), " gene sets)")
 }
 
@@ -166,5 +171,25 @@ for (s in selected) {
   for (gs in absent) message("       missing  ", gs, ": ", explain_missing(gs))
 }
 message("===============================")
+
+# Everything absent for the same reason usually means the collection is old, not
+# that the category file is wrong. Say so once, with the command that settles it,
+# instead of leaving the same line repeated per pathway to be read as N problems.
+if (!is.null(audit)) {
+  all_wanted  <- unique(cats$gs_name[cats$slug %in% selected])
+  not_in_coll <- setdiff(all_wanted, audit$pathway)
+  if (length(not_in_coll) > 0) {
+    message("")
+    message("NOTE: ", length(not_in_coll), " of ", length(all_wanted),
+            " requested gene sets are not in this collection at all.")
+    message("      If they are the more recently added KEGG pathways, the cause is ",
+            "the collection's vintage, not the category file: MSigDB's C2:CP:KEGG ",
+            "is a frozen snapshot of KEGG and does not gain new pathways.")
+    message("      Check what you are actually querying with:")
+    message("        msigdbr::msigdbr_collections()")
+    message("        length(unique(msigdbr::msigdbr(species = \"Homo sapiens\", ",
+            "category = \"C2\", subcategory = \"CP:KEGG\")$gs_name))")
+  }
+}
 
 message("KEGG category plots complete.")
