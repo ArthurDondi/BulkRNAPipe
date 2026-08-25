@@ -8,6 +8,25 @@ ALIGN      = config['Run']['align']
 QUANTIFY   = config['Run']['quantify']
 DESEQ2     = config['Run']['deseq2']
 GSEA       = config['Run'].get('gsea', False)
+
+# ─── Wildcard constraints ────────────────────────────────────────────────────
+# Every wildcard below names one path segment, never a path. Snakemake's default
+# `.+` matches "/" too, which lets a nested output be read as an outer rule's
+# wildcard: gsea/{contrast}/kegg/{slug}_dotplot.pdf also matches the GSEA rule
+# with contrast="{contrast}/kegg", and the two rules come out ambiguous. Pinning
+# them to a single segment removes the ambiguity at the source, rather than
+# papering over it with ruleorder.
+wildcard_constraints:
+    sample     = r"[^/]+",
+    contrast   = r"[^/]+",
+    collection = r"[^/]+",
+    interaction = r"[^/]+",
+    comparison = r"[^/]+",
+    sampleset  = r"[^/]+",
+    view       = r"[^/]+",
+    slug       = r"[^/]+",
+    ont        = r"[^/]+",
+    dir        = r"[^/]+",
 GOENRICH   = config['Run'].get('go', False)
 PROTEOMICS = config.get('Proteomics', {}).get('enabled', False)
 
