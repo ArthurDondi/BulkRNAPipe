@@ -370,6 +370,25 @@ GSEA:
   # `collections` above -- to slice a GMT fetched from the live KEGG API
   # instead. That fetch needs outbound HTTPS to rest.kegg.jp at run time.
   kegg_source_collection: C2:CP:KEGG
+
+  # ─── GO keyword category panels (optional) ──────────────────────────────────
+  # The same groupings applied to GO, under gsea/{contrast}/go/. GO has no
+  # BRITE-style categories, so each group is a REGEX MATCHED ON TERM NAMES, not
+  # an ontology traversal: it catches terms sharing a word and misses terms that
+  # say the same thing differently. Read a panel as "GO terms whose names mention
+  # X", never as "everything GO knows about X". Categories overlap by design.
+  #
+  # Slugs come from the first column of go_categories_file (default:
+  # workflow/resources/go_categories.tsv), which holds the include/exclude
+  # regexes. A keyword can match hundreds of terms, so the figure is truncated to
+  # go_categories_top_n by padj -- the CSV keeps all of them and the log says how
+  # many were dropped. Leave empty to disable.
+  #   go_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+  #                   nervous_system, development_and_regeneration]
+  go_categories: []
+  # go_categories_file: /path/to/your_go_categories.tsv
+  go_source_collection: C5:GO:BP
+  go_categories_top_n: 25
   # kegg_categories_file: /path/to/your_categories.tsv
   kegg_padj_cutoff: 0.05
 

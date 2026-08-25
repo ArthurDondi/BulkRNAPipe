@@ -1,0 +1,23 @@
+# Keyword groupings of GO terms, mirroring the KEGG BRITE categories.
+#
+# THESE ARE NOT AN ONTOLOGY. GO has no equivalent of KEGG's BRITE categories, so
+# each group here is a regular expression matched against the GO term NAME. That
+# is a text search, not a graph traversal: it will pull in terms that merely
+# share a word and miss terms that describe the same biology in other words.
+# Treat a panel as "GO terms whose names mention X", never as "everything GO
+# knows about X". The plot subtitle says so too.
+#
+# Categories overlap by design - GOBP_NEURON_DIFFERENTIATION matches both
+# nervous_system and development_and_regeneration - and a term may appear in
+# several panels.
+#
+# Columns: slug <TAB> label <TAB> include <TAB> exclude
+#   include  case-insensitive regex; a term is in the group if it matches
+#   exclude  case-insensitive regex; matching terms are dropped again (may be
+#            empty, written as "-")
+slug	label	include	exclude
+replication_and_repair	2.4 Replication and repair	DNA_REPLICATION|DNA_REPAIR|MISMATCH_REPAIR|EXCISION_REPAIR|DOUBLE_STRAND_BREAK|HOMOLOGOUS_RECOMBINATION|END_JOINING|REPLICATION_FORK|TRANSLESION|POSTREPLICATION|DNA_DAMAGE_CHECKPOINT|DNA_INTEGRITY	-
+chromosome	2.5 Chromosome	CHROMATIN|CHROMOSOM|NUCLEOSOME|HISTONE|HETEROCHROMATIN|EUCHROMATIN|CENTROMER|KINETOCHORE|TELOMER|COHESIN|CONDENSIN|SISTER_CHROMATID|DNA_PACKAGING|POLYCOMB	-
+cell_growth_and_death	4.2 Cell growth and death	CELL_CYCLE|MITOTIC|MEIOTIC|MEIOSIS|APOPTOT|APOPTOSIS|NECROPTO|FERROPTO|PYROPTO|CELL_DEATH|SENESCENCE|CELL_PROLIFERATION|GROWTH_ARREST|G1_S_TRANSITION|G2_M_TRANSITION|SPINDLE_CHECKPOINT	-
+nervous_system	5.6 Nervous system	NEURON|NEURAL|NEURO|SYNAP|AXON|DENDRIT|GLIAL|ASTROCYTE|OLIGODENDROCYTE|NEUROTRANSMITTER|NERVE|FOREBRAIN|HINDBRAIN|MIDBRAIN|LONG_TERM_POTENTIATION|LONG_TERM_SYNAPTIC	-
+development_and_regeneration	5.8 Development and regeneration	DEVELOPMENT|MORPHOGENESIS|REGENERATION|PATTERN_SPECIFICATION|ORGANOGENESIS|CELL_FATE|AXIS_SPECIFICATION|STEM_CELL_DIFFERENTIATION|TISSUE_REMODELING	-

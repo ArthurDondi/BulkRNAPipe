@@ -61,6 +61,9 @@ rule BulkRNAPipe_output:
         # ── KEGG BRITE category panels ───────────────────────────────────────
         expand("gsea/{contrast}/kegg/{slug}_dotplot.pdf",
                contrast=CONTRASTS, slug=KEGG_CATEGORIES) if KEGG_PANELS else [],
+        # ── GO keyword category panels ───────────────────────────────────────
+        expand("gsea/{contrast}/go/{slug}_dotplot.pdf",
+               contrast=CONTRASTS, slug=GO_CATEGORIES) if GO_PANELS else [],
         # ── GSEA on the interaction contrasts ────────────────────────────────
         expand("gsea_interaction/{interaction}/{collection}_results.csv",
                interaction=INTERACTIONS,

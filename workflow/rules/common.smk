@@ -506,6 +506,36 @@ for _slug in KEGG_CATEGORIES:
             "first column of the category file - it becomes a filename."
         )
 
+# ─── GO keyword category panels ──────────────────────────────────────────────
+# The same five groupings applied to GO. GO has no BRITE-style categories, so
+# these are REGEX MATCHES ON TERM NAMES, not an ontology traversal - they catch
+# terms that share a word and miss terms that say it differently. The panels and
+# the log both state this; do not read one as "everything GO knows about X".
+GO_CATEGORIES_FILE = _gsea_cfg.get(
+    'go_categories_file',
+    f"{workflow.basedir}/resources/go_categories.tsv",
+)
+GO_CATEGORIES  = [str(c) for c in (_gsea_cfg.get('go_categories') or [])]
+GO_SOURCE_SLUG = _collection_to_slug(
+    str(_gsea_cfg.get('go_source_collection', 'C5:GO:BP')))
+GO_CAT_TOP_N   = int(_gsea_cfg.get('go_categories_top_n', 25))
+GO_PANELS = bool(GSEA and GO_CATEGORIES and GO_SOURCE_SLUG in GSEA_COLLECTIONS)
+
+if GO_CATEGORIES and GSEA and GO_SOURCE_SLUG not in GSEA_COLLECTIONS:
+    raise ValueError(
+        f"GSEA.go_categories is set but its source collection "
+        f"'{GO_SOURCE_SLUG}' is not in GSEA.collections. The panels slice that "
+        "collection's results, so add it, point go_source_collection at one you "
+        "do run, or clear go_categories."
+    )
+
+for _slug in GO_CATEGORIES:
+    if '/' in _slug or _slug != _slug.strip():
+        raise ValueError(
+            f"GSEA.go_categories: '{_slug}' must be a bare slug matching the "
+            "first column of the GO category file - it becomes a filename."
+        )
+
 
 # Contrast comparison pairs
 _contrast_comparisons = config.get('ContrastComparisons') or []

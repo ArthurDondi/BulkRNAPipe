@@ -375,6 +375,17 @@ GSEA:
     - development_and_regeneration    # 5.8 Development and regeneration
   kegg_padj_cutoff: 0.05
 
+  # Same five groupings applied to GO, under gsea/{contrast}/go/. These are
+  # keyword matches on GO term names, not an ontology grouping - see the README.
+  go_source_collection: C5:GO:BP
+  go_categories_top_n: 25
+  go_categories:
+    - replication_and_repair
+    - chromosome
+    - cell_growth_and_death
+    - nervous_system
+    - development_and_regeneration
+
 # ─── GO enrichment parameters ────────────────────────────────────────────────
 GO:
   ontology:

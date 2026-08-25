@@ -187,3 +187,54 @@ rule GSEAKeggCategories:
             --denominator "{params.denominator}" \
             --padj_cutoff {params.padj_cutoff}
         """
+
+
+# ── Step 4: GO keyword panels (same categories, matched on term names) ───────
+
+rule GSEAGoCategories:
+    """Group GO terms by keyword into the KEGG categories and plot each."""
+    input:
+        results    = f"gsea/{{contrast}}/{GO_SOURCE_SLUG}_results.csv",
+        categories = GO_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/go/{slug}_dotplot.pdf",
+                      slug=GO_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/go/{slug}_results.csv",
+                      slug=GO_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_go_categories.R",
+        outdir      = "gsea/{contrast}/go",
+        select      = ",".join(GO_CATEGORIES),
+        top_n       = GO_CAT_TOP_N,
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAGoCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAGoCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --top_n       {params.top_n} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
+        """

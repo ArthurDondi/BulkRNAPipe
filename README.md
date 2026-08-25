@@ -66,6 +66,7 @@ BulkRNAPipe/
 │       ├── gsea.R                  # fgsea enrichment per contrast
 │       ├── gsea_kegg.R             # KEGG BRITE category panels
 │       ├── generate_kegg_gmt.R     # Current KEGG pathways from the KEGG API
+│       ├── gsea_go_categories.R    # GO keyword category panels
 │       ├── go.R                    # GO enrichment per contrast
 │       └── gsea_compare.R          # ΔNES + residual-rank comparison
 ├── report/
@@ -304,9 +305,12 @@ output_dir/
 │   ├── {collection}_results.csv             # fgsea results per collection
 │   ├── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 │   ├── {collection}_pathway_audit.csv       # Every set: size, detected, testable
-│   └── kegg/
-│       ├── {category}_results.csv           # KEGG BRITE category slice
-│       └── {category}_dotplot.pdf           # Every pathway in that category
+│   ├── kegg/
+│   │   ├── {category}_results.csv           # KEGG BRITE category slice
+│   │   └── {category}_dotplot.pdf           # Every pathway in that category
+│   └── go/
+│       ├── {category}_results.csv           # All GO terms matching the category
+│       └── {category}_dotplot.pdf           # Top terms, keyword-matched
 ├── go/{contrast}/
 │   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
 │   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
@@ -600,6 +604,47 @@ why the rest were not.
 One thing the log cannot catch: gene-set names are uppercase, so `grep
 osteoclast` over the results finds nothing even when the pathway is there. Use
 `grep -i`.
+
+### GO keyword category panels
+
+The same five groupings applied to GO, under `gsea/{contrast}/go/`.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  go_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                  nervous_system, development_and_regeneration]
+  go_source_collection: C5:GO:BP
+  go_categories_top_n: 25
+```
+
+**These are not an ontology grouping.** GO has no equivalent of KEGG's BRITE
+categories, so each group is a **regular expression matched against the GO term
+name** — a text search, not a graph traversal. It pulls in terms that merely
+share a word and misses terms that describe the same biology differently. Read a
+panel as *"GO terms whose names mention X"*, never as *"everything GO knows about
+X"*. The plot subtitle and the log both say so. Categories overlap by design:
+`GOBP_NEURON_DIFFERENTIATION` matches `nervous_system` and could equally match
+`development_and_regeneration`.
+
+The include/exclude regexes live in `workflow/resources/go_categories.tsv`, one
+row per category — that is the file to tune, and tuning it is expected rather
+than exceptional.
+
+A keyword can match hundreds of terms, so **the figure is truncated** to
+`go_categories_top_n` ranked by `padj`. The truncation is never silent: the
+subtitle reads *"top 25 of 143 matched terms by padj"*, the log names how many
+were dropped, and `{category}_results.csv` keeps **all** matched terms
+untruncated. The log summary reports matched / significant / plotted per
+category:
+
+```
+==== GO category summary ====
+  (keyword matches on GO term names - not an ontology grouping)
+  replication_and_repair             87 matched,   31 significant,  25 plotted
+  chromosome                        112 matched,   44 significant,  25 plotted
+=============================
+```
 
 ### Design QC
 
