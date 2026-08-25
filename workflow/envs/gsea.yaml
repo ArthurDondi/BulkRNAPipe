@@ -16,3 +16,6 @@ dependencies:
   - bioconductor-clusterprofiler=4.14.0
   - bioconductor-org.hs.eg.db=3.20.0
   - bioconductor-enrichplot>=1.26.0
+  # Fetches the current KEGG pathway definitions (GenerateKeggGmt); needs
+  # outbound HTTPS to rest.kegg.jp at run time.
+  - bioconductor-keggrest

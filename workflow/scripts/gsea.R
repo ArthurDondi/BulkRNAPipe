@@ -38,6 +38,8 @@ option_list <- list(
   make_option("--min_size",    type = "integer",   default = 15L),
   make_option("--max_size",    type = "integer",   default = 500L),
   make_option("--nperm",       type = "integer",   default = 1000L),
+  make_option("--kegg_gmt", type = "character", default = "",
+              help = "GMT of current KEGG pathways; used when --collection is KEGG_CURRENT"),
   make_option("--custom_gmts", type = "character", default = "",
               help = "Comma-separated paths to extra GMT files"),
   make_option("--contrast_name", type = "character", default = "",
@@ -85,22 +87,34 @@ parse_collection_slug <- function(slug) {
   }
 }
 
-coll <- parse_collection_slug(args$collection)
-
-message(sprintf("Fetching msigdbr sets: category=%s subcategory=%s",
-                coll$category, coll$subcategory %||% ""))
-
-msig_df <- if (!is.null(coll$subcategory)) {
-  msigdbr(species = "Homo sapiens",
-          category    = coll$category,
-          subcategory = coll$subcategory)
+# KEGG_CURRENT is not an MSigDB collection: it is the GMT built by
+# GenerateKeggGmt from the live KEGG API. MSigDB's own C2:CP:KEGG is a frozen
+# ~2011 snapshot, so anything KEGG has added since is only reachable this way.
+if (identical(args$collection, "KEGG_CURRENT")) {
+  if (!nzchar(args$kegg_gmt) || !file.exists(args$kegg_gmt)) {
+    stop("collection KEGG_CURRENT requires --kegg_gmt pointing at an existing GMT")
+  }
+  message("Loading current KEGG gene sets from ", args$kegg_gmt)
+  pathways_msig <- gmtPathways(args$kegg_gmt)
+  message(sprintf("  %d gene sets", length(pathways_msig)))
 } else {
-  msigdbr(species = "Homo sapiens",
-          category = coll$category)
-}
+  coll <- parse_collection_slug(args$collection)
 
-# Convert to named list of gene vectors
-pathways_msig <- split(msig_df$gene_symbol, msig_df$gs_name)
+  message(sprintf("Fetching msigdbr sets: category=%s subcategory=%s",
+                  coll$category, coll$subcategory %||% ""))
+
+  msig_df <- if (!is.null(coll$subcategory)) {
+    msigdbr(species = "Homo sapiens",
+            category    = coll$category,
+            subcategory = coll$subcategory)
+  } else {
+    msigdbr(species = "Homo sapiens",
+            category = coll$category)
+  }
+
+  # Convert to named list of gene vectors
+  pathways_msig <- split(msig_df$gene_symbol, msig_df$gs_name)
+}
 
 # Load HOX GMT
 pathways_hox <- gmtPathways(args$hox_gmt)

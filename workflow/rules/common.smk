@@ -484,13 +484,19 @@ KEGG_CATEGORIES_FILE = _gsea_cfg.get(
     f"{workflow.basedir}/resources/kegg_categories.tsv",
 )
 KEGG_CATEGORIES = [str(c) for c in (_gsea_cfg.get('kegg_categories') or [])]
-KEGG_PANELS = bool(GSEA and KEGG_CATEGORIES and 'C2_CP_KEGG' in GSEA_COLLECTIONS)
+# Which collection the panels slice. MSigDB's C2:CP:KEGG is a frozen ~2011
+# snapshot of KEGG, so every pathway added since is missing from it; KEGG_CURRENT
+# is the GMT GenerateKeggGmt fetches from the live KEGG API instead.
+KEGG_SOURCE_SLUG = _collection_to_slug(
+    str(_gsea_cfg.get('kegg_source_collection', 'C2:CP:KEGG')))
+KEGG_PANELS = bool(GSEA and KEGG_CATEGORIES and KEGG_SOURCE_SLUG in GSEA_COLLECTIONS)
 
-if KEGG_CATEGORIES and GSEA and 'C2_CP_KEGG' not in GSEA_COLLECTIONS:
+if KEGG_CATEGORIES and GSEA and KEGG_SOURCE_SLUG not in GSEA_COLLECTIONS:
     raise ValueError(
-        "GSEA.kegg_categories is set but 'C2:CP:KEGG' is not in GSEA.collections. "
-        "The category panels re-plot that collection's results, so add it or "
-        "clear kegg_categories."
+        f"GSEA.kegg_categories is set but its source collection "
+        f"'{KEGG_SOURCE_SLUG}' is not in GSEA.collections. The panels slice that "
+        "collection's results, so add it, point kegg_source_collection at one "
+        "you do run, or clear kegg_categories."
     )
 
 for _slug in KEGG_CATEGORIES:

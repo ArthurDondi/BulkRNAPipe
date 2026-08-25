@@ -354,6 +354,7 @@ GSEA:
     - H
     - C2:CP:REACTOME
     - C2:CP:KEGG
+    - KEGG_CURRENT        # fetched from the KEGG REST API, not MSigDB
     - C5:GO:BP
   min_size: 9
   max_size: 500
@@ -363,6 +364,9 @@ GSEA:
 
   # One panel per KEGG BRITE category, under gsea/{contrast}/kegg/, drawing every
   # pathway in the category rather than the collection dotplot's top 15.
+  # C2:CP:KEGG is frozen at ~2011 and lacks 17 of the 32 pathways in these
+  # categories, so slice the live KEGG definitions instead (see collections).
+  kegg_source_collection: KEGG_CURRENT
   kegg_categories:
     - replication_and_repair          # 2.4 Replication and repair
     - chromosome                      # 2.5 Chromosome

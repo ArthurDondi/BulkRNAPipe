@@ -65,6 +65,7 @@ BulkRNAPipe/
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
 │       ├── gsea.R                  # fgsea enrichment per contrast
 │       ├── gsea_kegg.R             # KEGG BRITE category panels
+│       ├── generate_kegg_gmt.R     # Current KEGG pathways from the KEGG API
 │       ├── go.R                    # GO enrichment per contrast
 │       └── gsea_compare.R          # ΔNES + residual-rank comparison
 ├── report/
@@ -514,9 +515,38 @@ GSEA:
   kegg_padj_cutoff: 0.05
 ```
 
-These **re-plot** the `C2:CP:KEGG` results rather than re-running fgsea, so they
-are cheap and cannot disagree with the collection-level figure. The rule fails
-fast if `C2:CP:KEGG` is missing from `collections`.
+These **re-plot** an existing collection's results rather than re-running fgsea,
+so they are cheap and cannot disagree with the collection-level figure. The rule
+fails fast if `kegg_source_collection` is missing from `collections`.
+
+#### Use current KEGG, not the frozen snapshot
+
+MSigDB's `C2:CP:KEGG` is a **snapshot of KEGG from around 2011** and never gains
+new pathways. In practice that means 17 of the 32 pathways in the five categories
+above are simply absent — everything KEGG added from 2011 on, including both
+pathways in `2.5 Chromosome`, all five synapse pathways, `Ferroptosis`,
+`Cellular senescence` and `Axon regeneration`.
+
+`KEGG_CURRENT` is a pseudo-collection that fetches the live definitions from the
+KEGG REST API instead, via `GenerateKeggGmt` →
+`resources/generated_gmts/kegg_current.gmt`:
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  kegg_source_collection: KEGG_CURRENT
+```
+
+Gene-set names reproduce the MSigDB convention (`DNA replication` →
+`KEGG_DNA_REPLICATION`), so a category file written against the legacy names
+resolves unchanged. `kegg_current_pathways.tsv` is written alongside the GMT with
+`kegg_id`/`kegg_name`/`gs_name`/`n_genes` — use it to check a category file
+against real KEGG names.
+
+**Requires outbound HTTPS to `rest.kegg.jp` on whichever node runs the rule.**
+The rule is retried twice and only runs when `KEGG_CURRENT` is in `collections`,
+so the other collections never pull a network call into their dependency graph.
+KEGG is free for academic use; see <https://www.kegg.jp/kegg/legal.html>.
 
 Slugs come from the first column of `workflow/resources/kegg_categories.tsv`,
 which maps [KEGG BRITE categories](https://www.genome.jp/kegg/pathway.html) to

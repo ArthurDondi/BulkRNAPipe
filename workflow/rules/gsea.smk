@@ -36,6 +36,39 @@ rule GenerateHoxGmt:
         """
 
 
+# ── Step 1b: fetch the CURRENT KEGG pathway definitions ──────────────────────
+# Only built when 'KEGG_CURRENT' is among GSEA.collections. Needs outbound HTTPS
+# to rest.kegg.jp; see workflow/scripts/generate_kegg_gmt.R for why the frozen
+# MSigDB collection is not enough.
+
+rule GenerateKeggGmt:
+    """Build a GMT of current human KEGG pathways from the KEGG REST API."""
+    output:
+        gmt      = "resources/generated_gmts/kegg_current.gmt",
+        pathways = "resources/generated_gmts/kegg_current_pathways.tsv",
+    params:
+        script = f"{workflow.basedir}/scripts/generate_kegg_gmt.R",
+        outdir = "resources/generated_gmts",
+    threads: 1
+    retries: 2
+    resources:
+        mem_mb        = 4000,
+        runtime       = 30,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GenerateKeggGmt/kegg.log"
+    benchmark:
+        "benchmark/GenerateKeggGmt/kegg.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} --outdir {params.outdir}
+        """
+
+
 # ── Step 2: run fgsea per contrast and per collection ─────────────────────────
 rule GSEA:
     """Run fgsea (fgseaMultilevel) for one contrast and one gene-set collection.
@@ -45,6 +78,12 @@ rule GSEA:
     input:
         results = "deseq2/{contrast}/results.csv",
         hox_gmt = "resources/generated_gmts/hox.gmt",
+        # Only the KEGG_CURRENT collection needs the fetched GMT, so the other
+        # collections do not drag the network call into their dependency graph.
+        kegg_gmt = lambda wildcards: (
+            "resources/generated_gmts/kegg_current.gmt"
+            if wildcards.collection == "KEGG_CURRENT" else []
+        ),
     output:
         csv     = "gsea/{contrast}/{collection}_results.csv",
         dotplot = "gsea/{contrast}/{collection}_dotplot.pdf",
@@ -85,6 +124,7 @@ rule GSEA:
         Rscript {params.script} \
             --results        {input.results} \
             --hox_gmt        {input.hox_gmt} \
+            --kegg_gmt       "{input.kegg_gmt}" \
             --outdir         {params.outdir} \
             --collection     {params.collection} \
             --contrast_name  "{params.contrast_name}" \
@@ -103,8 +143,8 @@ rule GSEA:
 rule GSEAKeggCategories:
     """Slice the KEGG GSEA results by BRITE category and plot every pathway."""
     input:
-        results    = "gsea/{contrast}/C2_CP_KEGG_results.csv",
-        audit      = "gsea/{contrast}/C2_CP_KEGG_pathway_audit.csv",
+        results    = f"gsea/{{contrast}}/{KEGG_SOURCE_SLUG}_results.csv",
+        audit      = f"gsea/{{contrast}}/{KEGG_SOURCE_SLUG}_pathway_audit.csv",
         categories = KEGG_CATEGORIES_FILE,
     output:
         pdfs = expand("gsea/{{contrast}}/kegg/{slug}_dotplot.pdf",

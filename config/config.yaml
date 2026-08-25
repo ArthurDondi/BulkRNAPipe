@@ -362,6 +362,14 @@ GSEA:
   #   kegg_categories: [replication_and_repair, chromosome, cell_growth_and_death,
   #                     nervous_system, development_and_regeneration]
   kegg_categories: []
+
+  # Which collection the KEGG panels slice. MSigDB's C2:CP:KEGG is a FROZEN
+  # snapshot of KEGG from ~2011: every pathway added since (Ferroptosis,
+  # Cellular senescence, the synapse pathways, the whole Chromosome category) is
+  # absent from it. Set this to KEGG_CURRENT -- and add KEGG_CURRENT to
+  # `collections` above -- to slice a GMT fetched from the live KEGG API
+  # instead. That fetch needs outbound HTTPS to rest.kegg.jp at run time.
+  kegg_source_collection: C2:CP:KEGG
   # kegg_categories_file: /path/to/your_categories.tsv
   kegg_padj_cutoff: 0.05
 
