@@ -325,7 +325,10 @@ Proteomics:
   comparison_column: ""
   fdr_column: "_FDR"
   logfc_column: "_LOG2FC"
-  fdr_threshold: 0.05
+  fdr_threshold: 0.01
+  # Absolute log2 fold-change threshold for proteomics significance (wide
+  # format example column: "S1744_vs_control_LOG2FC").
+  lfc_threshold: 1.0
   # Sample code mapping used below:
   #   S1011 = ATRX_FL  |  S1744 = ATRX_IFF  |  S1760 = EmptyVector
   #   SE6   = E6  |  control = TP53

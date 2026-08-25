@@ -34,6 +34,8 @@ option_list <- list(
               help = "Column name for logFC in proteomics sheet"),
   make_option("--proteomics_fdr_threshold", type = "double", default = 0.05,
               help = "FDR threshold for proteomics significance [default %default]"),
+  make_option("--proteomics_lfc_threshold", type = "double", default = 1.0,
+              help = "Absolute log2 fold-change threshold for proteomics significance [default %default]"),
   make_option("--proteomics_comparison", type = "character", default = "",
               help = "Proteomics comparison mapped to this DESeq2 contrast")
 )
@@ -127,7 +129,7 @@ if (wide_format) {
 
 prot_sig <- prot_sig %>%
   dplyr::filter(!is.na(prot_gene), prot_gene != "", !is.na(prot_fdr), !is.na(prot_logfc)) %>%
-  dplyr::filter(prot_fdr <= args$proteomics_fdr_threshold) %>%
+  dplyr::filter(prot_fdr <= args$proteomics_fdr_threshold, abs(prot_logfc) > args$proteomics_lfc_threshold) %>%
   dplyr::arrange(prot_fdr, dplyr::desc(abs(prot_logfc))) %>%
   dplyr::distinct(prot_gene, .keep_all = TRUE) %>%
   dplyr::mutate(
@@ -175,7 +177,8 @@ p <- ggplot(volcano_df, aes(x = log2FoldChange, y = -log10(padj), colour = signi
   labs(
     title = paste("Volcano (Proteomics):", contrast_num, "vs", contrast_den),
     subtitle = paste0(
-      "Proteomics filtered (", args$proteomics_comparison, ", FDR ≤ ", args$proteomics_fdr_threshold, "). ",
+      "Proteomics filtered (", args$proteomics_comparison, ", FDR ≤ ", args$proteomics_fdr_threshold,
+      ", |log2FC| > ", args$proteomics_lfc_threshold, "). ",
       "log2FC > 0: higher in ", contrast_num, " | log2FC < 0: higher in ", contrast_den
     ),
     x = paste0("log2FC (", contrast_num, " / ", contrast_den, ")"),

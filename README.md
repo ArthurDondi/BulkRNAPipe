@@ -913,7 +913,8 @@ If `Proteomics.enabled: True`, the separate `DESeq2Proteomic` step writes
 in `Proteomics.deseq2_to_proteomics_comparison`**. Contrasts without a mapped
 proteomics comparison are skipped (no overlay is produced for them). The plot is
 restricted to genes that are significant in the mapped proteomics comparison
-from the limma Excel sheet (`FDR <= Proteomics.fdr_threshold`). RNA-significant
+from the limma Excel sheet (`FDR <= Proteomics.fdr_threshold` and
+`|log2FC| > Proteomics.lfc_threshold`, default `0.01` and `1.0`). RNA-significant
 points are all annotated and colored by RNA/protein direction agreement:
 
 - **green**: RNA and proteomics change in the same direction

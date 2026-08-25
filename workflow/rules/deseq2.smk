@@ -135,7 +135,8 @@ rule DESeq2Proteomic:
         proteomics_comparison_column = lambda wildcards: str(config.get('Proteomics', {}).get('comparison_column', "")),
         proteomics_fdr_column = lambda wildcards: str(config.get('Proteomics', {}).get('fdr_column', "")),
         proteomics_logfc_column = lambda wildcards: str(config.get('Proteomics', {}).get('logfc_column', "")),
-        proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.05)),
+        proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.01)),
+        proteomics_lfc_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('lfc_threshold', 1.0)),
         proteomics_comparison = lambda wildcards: str(get_proteomics_comparison(wildcards.contrast)),
     threads: 2
     resources:
@@ -166,5 +167,6 @@ rule DESeq2Proteomic:
             --proteomics_fdr_column "{params.proteomics_fdr_column}" \
             --proteomics_logfc_column "{params.proteomics_logfc_column}" \
             --proteomics_fdr_threshold {params.proteomics_fdr_threshold} \
+            --proteomics_lfc_threshold {params.proteomics_lfc_threshold} \
             --proteomics_comparison "{params.proteomics_comparison}"
         """
