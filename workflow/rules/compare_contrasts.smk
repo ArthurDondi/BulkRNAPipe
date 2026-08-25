@@ -23,6 +23,12 @@ rule CompareContrasts:
             )
         ),
         hox_gmt = "resources/generated_gmts/hox.gmt",
+        # gsea_compare.R resolves the whole collection list itself, so it needs
+        # the fetched GMT whenever KEGG_CURRENT is among them. No extra network
+        # cost: this rule already waits on that collection's GSEA results, which
+        # depend on the same file.
+        kegg_gmt = ("resources/generated_gmts/kegg_current.gmt"
+                    if "KEGG_CURRENT" in GSEA_COLLECTIONS else []),
         # Require that per-contrast GSEA is already complete for contrast_A
         gsea_a = lambda wildcards: expand(
             "gsea/{contrast}/{collection}_results.csv",
@@ -98,6 +104,7 @@ rule CompareContrasts:
             --results_a      {input.results_a} \
             --results_b      {input.results_b} \
             --hox_gmt        {input.hox_gmt} \
+            --kegg_gmt       "{input.kegg_gmt}" \
             --gsea_dir_a     {params.gsea_dir_a} \
             --gsea_dir_b     {params.gsea_dir_b} \
             --outdir         {params.outdir} \
