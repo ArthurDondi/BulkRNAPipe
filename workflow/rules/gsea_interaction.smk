@@ -17,6 +17,13 @@ rule GSEAInteraction:
     input:
         results = "deseq2_interaction/{interaction}/results.csv",
         hox_gmt = "resources/generated_gmts/hox.gmt",
+        # Same conditional wiring as the GSEA rule: this runs the same gsea.R
+        # over the same collection list, so KEGG_CURRENT needs the fetched GMT
+        # here too, and only that collection pulls the network call in.
+        kegg_gmt = lambda wildcards: (
+            "resources/generated_gmts/kegg_current.gmt"
+            if wildcards.collection == "KEGG_CURRENT" else []
+        ),
     output:
         csv     = "gsea_interaction/{interaction}/{collection}_results.csv",
         dotplot = "gsea_interaction/{interaction}/{collection}_dotplot.pdf",
@@ -62,6 +69,7 @@ rule GSEAInteraction:
         Rscript {params.script} \
             --results        {input.results} \
             --hox_gmt        {input.hox_gmt} \
+            --kegg_gmt       "{input.kegg_gmt}" \
             --outdir         {params.outdir} \
             --collection     {params.collection} \
             --contrast_name  "{params.contrast_name}" \
