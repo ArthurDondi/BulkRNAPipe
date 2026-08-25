@@ -519,18 +519,43 @@ fast if `C2:CP:KEGG` is missing from `collections`.
 
 Slugs come from the first column of `workflow/resources/kegg_categories.tsv`,
 which maps [KEGG BRITE categories](https://www.genome.jp/kegg/pathway.html) to
-MSigDB gene-set names (`DNA replication` → `KEGG_DNA_REPLICATION`). Edit that
-file to add, drop or rename entries — nothing else needs changing. Point
-`kegg_categories_file` elsewhere to use your own.
+MSigDB gene-set names (`DNA replication` → `KEGG_DNA_REPLICATION`). Rows are in
+the order KEGG lists them and carry the KEGG pathway number, so the file can be
+diffed against the KEGG page directly. Species-specific pathways (`Cell cycle -
+yeast`, `Apoptosis - fly`, …) are omitted. Edit the file to add, drop or rename
+entries — nothing else needs changing; point `kegg_categories_file` elsewhere to
+use your own.
 
-Gene sets listed in the file but absent from the collection are reported as a
+#### When a pathway is missing from a panel
+
+Gene sets listed in the file but absent from the results are reported as a
 `WARNING` in `logs/GSEAKeggCategories/{contrast}.log` and skipped; the panel
 still renders and its subtitle says how many of the category's sets were tested.
-**Expect some**: the legacy `C2:CP:KEGG` collection is frozen at an older KEGG
-release, so pathways KEGG has added since (`Ferroptosis`, `Cellular senescence`,
-the synapse pathways, `Axon regeneration`, and most of the `Chromosome`
-category) are unlikely to be present. Read that log before drawing conclusions
-from a sparse panel.
+A sparse panel means "not tested", **not** "nothing moved" — check the log before
+reading anything into it. Three things cause it, in the order worth checking:
+
+1. **It is there and the search missed it.** Gene-set names are uppercase, so
+   `grep osteoclast` finds nothing — use `grep -i`.
+2. **It was filtered by size.** `min_size`/`max_size` apply to the number of the
+   pathway's genes actually *detected* in your data, not its nominal size. A
+   pathway whose genes are largely unexpressed in the cell type under study drops
+   out even though the collection contains it.
+3. **The collection does not have it.** `C2:CP:KEGG` is the legacy MSigDB
+   collection, frozen at an older KEGG release, so recently added pathways may be
+   absent. `C2:CP:KEGG_MEDICUS` tracks current KEGG but uses different gene-set
+   names, which this file would have to be rewritten for.
+
+To tell (2) from (3), look for the pathway in the collection itself rather than
+in the results:
+
+```r
+library(msigdbr)
+k <- msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:KEGG")
+grep("OSTEOCLAST", unique(k$gs_name), value = TRUE)
+```
+
+A hit there but not in `{contrast}/C2_CP_KEGG_results.csv` means it was filtered
+by size; no hit means the collection lacks it.
 
 ### Design QC
 
