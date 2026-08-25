@@ -344,6 +344,27 @@ GSEA:
   # Leave empty ([]) to use only msigdbr + HOX sets.
   custom_gmt_files: []
 
+  # ─── KEGG BRITE category panels (optional) ──────────────────────────────────
+  # The collection dotplot shows the top 15 pathways per direction. That is the
+  # wrong shape for "what happened to replication and repair?" - a KEGG category
+  # is a small fixed list, and the pathways that did NOT move are part of the
+  # answer. Listing category slugs here writes one extra panel each, under
+  # gsea/{contrast}/kegg/, drawing EVERY pathway in the category.
+  #
+  # These re-plot the C2:CP:KEGG results rather than re-running fgsea, so
+  # 'C2:CP:KEGG' must be in `collections` above.
+  #
+  # Slugs come from the first column of kegg_categories_file (default:
+  # workflow/resources/kegg_categories.tsv), which maps KEGG BRITE categories to
+  # MSigDB gene-set names. Edit that file to add or correct entries; gene sets
+  # listed there but absent from the collection are logged as a WARNING and
+  # skipped. Leave empty to disable.
+  #   kegg_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+  #                     nervous_system, development_and_regeneration]
+  kegg_categories: []
+  # kegg_categories_file: /path/to/your_categories.tsv
+  kegg_padj_cutoff: 0.05
+
 # ─── GO enrichment parameters ────────────────────────────────────────────────
 # Requires Run.go: True
 GO:

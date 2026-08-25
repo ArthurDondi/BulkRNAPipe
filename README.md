@@ -64,6 +64,7 @@ BulkRNAPipe/
 │       ├── signature_reversal.R     # Rescue scored as signature reversal
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
 │       ├── gsea.R                  # fgsea enrichment per contrast
+│       ├── gsea_kegg.R             # KEGG BRITE category panels
 │       ├── go.R                    # GO enrichment per contrast
 │       └── gsea_compare.R          # ΔNES + residual-rank comparison
 ├── report/
@@ -300,7 +301,10 @@ output_dir/
 │   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 ├── gsea/{contrast}/
 │   ├── {collection}_results.csv             # fgsea results per collection
-│   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+│   ├── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+│   └── kegg/
+│       ├── {category}_results.csv           # KEGG BRITE category slice
+│       └── {category}_dotplot.pdf           # Every pathway in that category
 ├── go/{contrast}/
 │   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
 │   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
@@ -491,6 +495,42 @@ balanced signs in both contrasts and is optimistic when they are skewed.
 differ by more than the intended variable admits genes no intervention could
 reverse, which dilutes the slope toward zero. Raising `lfc_threshold` restricts
 the signature to genes with a substantial effect.
+
+### KEGG BRITE category panels
+
+The collection dotplot shows the top 15 pathways in each direction. That is the
+wrong shape for a question like *"what happened to replication and repair?"* — a
+KEGG category is a small, fixed, pre-specified list, and the pathways that did
+**not** move are part of the answer. Listing category slugs writes one extra
+panel each under `gsea/{contrast}/kegg/`, drawing every pathway in the category,
+with filled points for `padj < kegg_padj_cutoff` and hollow ones for the rest.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, C2:CP:KEGG, C5:GO:BP]   # C2:CP:KEGG required
+  kegg_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                    nervous_system, development_and_regeneration]
+  kegg_padj_cutoff: 0.05
+```
+
+These **re-plot** the `C2:CP:KEGG` results rather than re-running fgsea, so they
+are cheap and cannot disagree with the collection-level figure. The rule fails
+fast if `C2:CP:KEGG` is missing from `collections`.
+
+Slugs come from the first column of `workflow/resources/kegg_categories.tsv`,
+which maps [KEGG BRITE categories](https://www.genome.jp/kegg/pathway.html) to
+MSigDB gene-set names (`DNA replication` → `KEGG_DNA_REPLICATION`). Edit that
+file to add, drop or rename entries — nothing else needs changing. Point
+`kegg_categories_file` elsewhere to use your own.
+
+Gene sets listed in the file but absent from the collection are reported as a
+`WARNING` in `logs/GSEAKeggCategories/{contrast}.log` and skipped; the panel
+still renders and its subtitle says how many of the category's sets were tested.
+**Expect some**: the legacy `C2:CP:KEGG` collection is frozen at an older KEGG
+release, so pathways KEGG has added since (`Ferroptosis`, `Cellular senescence`,
+the synapse pathways, `Axon regeneration`, and most of the `Chromosome`
+category) are unlikely to be present. Read that log before drawing conclusions
+from a sparse panel.
 
 ### Design QC
 

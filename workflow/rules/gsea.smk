@@ -95,3 +95,52 @@ rule GSEA:
             --nperm          {params.nperm} \
             --custom_gmts    "{params.custom_gmt_files}"
         """
+
+
+# ── Step 3: per-KEGG-category panels (re-plots step 2, no fgsea re-run) ───────
+
+rule GSEAKeggCategories:
+    """Slice the KEGG GSEA results by BRITE category and plot every pathway."""
+    input:
+        results    = "gsea/{contrast}/C2_CP_KEGG_results.csv",
+        categories = KEGG_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/kegg/{slug}_dotplot.pdf",
+                      slug=KEGG_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/kegg/{slug}_results.csv",
+                      slug=KEGG_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_kegg.R",
+        outdir      = "gsea/{contrast}/kegg",
+        select      = ",".join(KEGG_CATEGORIES),
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAKeggCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAKeggCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
+        """

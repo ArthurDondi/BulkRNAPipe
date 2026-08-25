@@ -361,6 +361,16 @@ GSEA:
   rank_metric: stat
   custom_gmt_files: []
 
+  # One panel per KEGG BRITE category, under gsea/{contrast}/kegg/, drawing every
+  # pathway in the category rather than the collection dotplot's top 15.
+  kegg_categories:
+    - replication_and_repair          # 2.4 Replication and repair
+    - chromosome                      # 2.5 Chromosome
+    - cell_growth_and_death           # 4.2 Cell growth and death
+    - nervous_system                  # 5.6 Nervous system
+    - development_and_regeneration    # 5.8 Development and regeneration
+  kegg_padj_cutoff: 0.05
+
 # ─── GO enrichment parameters ────────────────────────────────────────────────
 GO:
   ontology:

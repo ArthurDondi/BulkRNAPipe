@@ -450,6 +450,38 @@ GSEA_COLLECTIONS = [
     for c in config.get('GSEA', {}).get('collections', [])
 ] if GSEA else []
 
+# ─── KEGG BRITE category panels ──────────────────────────────────────────────
+# The collection dotplot shows the top 15 pathways in each direction, which is
+# the wrong shape for a question like "what happened to replication and repair?":
+# a category is a small fixed list, and the pathways that did NOT move are part
+# of the answer. These panels slice the KEGG results by BRITE category and draw
+# every pathway in it.
+#
+# Only meaningful when C2:CP:KEGG is among GSEA.collections, since they re-plot
+# that collection's results rather than running fgsea again.
+_gsea_cfg = config.get('GSEA', {}) or {}
+KEGG_CATEGORIES_FILE = _gsea_cfg.get(
+    'kegg_categories_file',
+    f"{workflow.basedir}/resources/kegg_categories.tsv",
+)
+KEGG_CATEGORIES = [str(c) for c in (_gsea_cfg.get('kegg_categories') or [])]
+KEGG_PANELS = bool(GSEA and KEGG_CATEGORIES and 'C2_CP_KEGG' in GSEA_COLLECTIONS)
+
+if KEGG_CATEGORIES and GSEA and 'C2_CP_KEGG' not in GSEA_COLLECTIONS:
+    raise ValueError(
+        "GSEA.kegg_categories is set but 'C2:CP:KEGG' is not in GSEA.collections. "
+        "The category panels re-plot that collection's results, so add it or "
+        "clear kegg_categories."
+    )
+
+for _slug in KEGG_CATEGORIES:
+    if '/' in _slug or _slug != _slug.strip():
+        raise ValueError(
+            f"GSEA.kegg_categories: '{_slug}' must be a bare slug matching the "
+            "first column of the category file - it becomes a filename."
+        )
+
+
 # Contrast comparison pairs
 _contrast_comparisons = config.get('ContrastComparisons') or []
 CONTRAST_COMPARISONS  = [cc['name'] for cc in _contrast_comparisons]

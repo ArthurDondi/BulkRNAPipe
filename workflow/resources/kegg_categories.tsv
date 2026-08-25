@@ -1,0 +1,46 @@
+# KEGG BRITE pathway categories -> MSigDB C2:CP:KEGG gene-set names.
+#
+# Columns: slug <TAB> label <TAB> gs_name
+#   slug     filename stem for the plot, e.g. gsea/{contrast}/kegg/{slug}_dotplot.pdf
+#   label    plot title, keeps the KEGG section number
+#   gs_name  gene-set name as it appears in the collection
+#
+# Names follow the MSigDB convention: "DNA replication" -> KEGG_DNA_REPLICATION.
+# Entries listed here but absent from the collection are reported as a WARNING in
+# logs/GSEAKeggCategories/*.log and skipped - the plot still renders. The legacy
+# C2:CP:KEGG collection is frozen at an older KEGG release, so pathways KEGG has
+# added since (marked below) will usually be missing from it. Edit this file to
+# add, drop or rename entries; nothing else needs changing.
+slug	label	gs_name
+replication_and_repair	2.4 Replication and repair	KEGG_DNA_REPLICATION
+replication_and_repair	2.4 Replication and repair	KEGG_BASE_EXCISION_REPAIR
+replication_and_repair	2.4 Replication and repair	KEGG_NUCLEOTIDE_EXCISION_REPAIR
+replication_and_repair	2.4 Replication and repair	KEGG_MISMATCH_REPAIR
+replication_and_repair	2.4 Replication and repair	KEGG_HOMOLOGOUS_RECOMBINATION
+replication_and_repair	2.4 Replication and repair	KEGG_NON_HOMOLOGOUS_END_JOINING
+replication_and_repair	2.4 Replication and repair	KEGG_FANCONI_ANEMIA_PATHWAY
+chromosome	2.5 Chromosome	KEGG_ATP_DEPENDENT_CHROMATIN_REMODELING
+chromosome	2.5 Chromosome	KEGG_POLYCOMB_REPRESSIVE_COMPLEX
+chromosome	2.5 Chromosome	KEGG_SISTER_CHROMATID_COHESION_AND_SEGREGATION
+chromosome	2.5 Chromosome	KEGG_HOMOLOGOUS_RECOMBINATION
+cell_growth_and_death	4.2 Cell growth and death	KEGG_CELL_CYCLE
+cell_growth_and_death	4.2 Cell growth and death	KEGG_OOCYTE_MEIOSIS
+cell_growth_and_death	4.2 Cell growth and death	KEGG_APOPTOSIS
+cell_growth_and_death	4.2 Cell growth and death	KEGG_P53_SIGNALING_PATHWAY
+cell_growth_and_death	4.2 Cell growth and death	KEGG_CELLULAR_SENESCENCE
+cell_growth_and_death	4.2 Cell growth and death	KEGG_FERROPTOSIS
+cell_growth_and_death	4.2 Cell growth and death	KEGG_NECROPTOSIS
+nervous_system	5.6 Nervous system	KEGG_LONG_TERM_POTENTIATION
+nervous_system	5.6 Nervous system	KEGG_LONG_TERM_DEPRESSION
+nervous_system	5.6 Nervous system	KEGG_NEUROTROPHIN_SIGNALING_PATHWAY
+nervous_system	5.6 Nervous system	KEGG_GLUTAMATERGIC_SYNAPSE
+nervous_system	5.6 Nervous system	KEGG_GABAERGIC_SYNAPSE
+nervous_system	5.6 Nervous system	KEGG_CHOLINERGIC_SYNAPSE
+nervous_system	5.6 Nervous system	KEGG_DOPAMINERGIC_SYNAPSE
+nervous_system	5.6 Nervous system	KEGG_SEROTONERGIC_SYNAPSE
+nervous_system	5.6 Nervous system	KEGG_SYNAPTIC_VESICLE_CYCLE
+nervous_system	5.6 Nervous system	KEGG_RETROGRADE_ENDOCANNABINOID_SIGNALING
+development_and_regeneration	5.8 Development and regeneration	KEGG_AXON_GUIDANCE
+development_and_regeneration	5.8 Development and regeneration	KEGG_DORSO_VENTRAL_AXIS_FORMATION
+development_and_regeneration	5.8 Development and regeneration	KEGG_OSTEOCLAST_DIFFERENTIATION
+development_and_regeneration	5.8 Development and regeneration	KEGG_AXON_REGENERATION
