@@ -720,12 +720,6 @@ if (!is.null(goi)) {
 
 ---
 
-# Summary
-
-TBD
-
----
-
 # Pathway enrichment (GSEA)
 
 ```{r gsea, fig.height = 6, results = "asis"}
@@ -815,6 +809,12 @@ for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
   }
 }
 ```
+
+---
+
+# Summary
+
+TBD
 
 ```{r session, results = "asis"}
 cat("\n<details><summary>Session info</summary>\n\n```\n")
