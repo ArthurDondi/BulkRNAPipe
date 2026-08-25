@@ -302,6 +302,7 @@ output_dir/
 ├── gsea/{contrast}/
 │   ├── {collection}_results.csv             # fgsea results per collection
 │   ├── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+│   ├── {collection}_pathway_audit.csv       # Every set: size, detected, testable
 │   └── kegg/
 │       ├── {category}_results.csv           # KEGG BRITE category slice
 │       └── {category}_dotplot.pdf           # Every pathway in that category
@@ -528,34 +529,47 @@ use your own.
 
 #### When a pathway is missing from a panel
 
-Gene sets listed in the file but absent from the results are reported as a
-`WARNING` in `logs/GSEAKeggCategories/{contrast}.log` and skipped; the panel
-still renders and its subtitle says how many of the category's sets were tested.
-A sparse panel means "not tested", **not** "nothing moved" — check the log before
-reading anything into it. Three things cause it, in the order worth checking:
+Every gene set listed in the file but absent from the results is reported in
+`logs/GSEAKeggCategories/{contrast}.log`, **with the reason**, both inline and as
+a summary block at the end of the run:
 
-1. **It is there and the search missed it.** Gene-set names are uppercase, so
-   `grep osteoclast` finds nothing — use `grep -i`.
-2. **It was filtered by size.** `min_size`/`max_size` apply to the number of the
-   pathway's genes actually *detected* in your data, not its nominal size. A
-   pathway whose genes are largely unexpressed in the cell type under study drops
-   out even though the collection contains it.
-3. **The collection does not have it.** `C2:CP:KEGG` is the legacy MSigDB
-   collection, frozen at an older KEGG release, so recently added pathways may be
-   absent. `C2:CP:KEGG_MEDICUS` tracks current KEGG but uses different gene-set
-   names, which this file would have to be rewritten for.
-
-To tell (2) from (3), look for the pathway in the collection itself rather than
-in the results:
-
-```r
-library(msigdbr)
-k <- msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:KEGG")
-grep("OSTEOCLAST", unique(k$gs_name), value = TRUE)
+```
+==== KEGG category summary ====
+  development_and_regeneration     4/5 plotted
+       missing  KEGG_OSTEOCLAST_DIFFERENTIATION: FILTERED BY SIZE - only 6 of
+                its 128 genes are detected here, below min_size=9
+  chromosome                       0/2 plotted
+       missing  KEGG_POLYCOMB_REPRESSIVE_COMPLEX: NOT IN THE COLLECTION - no
+                gene set by this name. Check the spelling in the category file,
+                or whether this collection version contains it.
+===============================
 ```
 
-A hit there but not in `{contrast}/C2_CP_KEGG_results.csv` means it was filtered
-by size; no hit means the collection lacks it.
+The two verdicts need different fixes, which is why they are separated:
+
+- **`FILTERED BY SIZE`** — the collection has it, but `min_size`/`max_size` apply
+  to the number of its genes actually **detected in your data**, not its nominal
+  size. A pathway whose genes are largely unexpressed in the cell type under
+  study drops out even though it exists. Lower `min_size` if you want it tested.
+- **`NOT IN THE COLLECTION`** — no gene set by that name. Either the category file
+  has a typo, or this collection version lacks it. `C2:CP:KEGG` is the legacy
+  MSigDB collection, frozen at an older KEGG release; `C2:CP:KEGG_MEDICUS` tracks
+  current KEGG but uses different gene-set names, so the category file would have
+  to be rewritten for it.
+
+This works because `gsea.R` writes `{collection}_pathway_audit.csv` next to the
+results — every set in the collection with its nominal size, how many of its
+genes were detected, and whether it was testable. The results file alone cannot
+answer the question, since it only contains sets that were tested. The audit is
+written for every collection, so it also explains gaps outside KEGG.
+
+A sparse panel therefore means "not tested", **not** "nothing moved" — the panel
+subtitle reports how many of the category's sets were tested, and the log says
+why the rest were not.
+
+One thing the log cannot catch: gene-set names are uppercase, so `grep
+osteoclast` over the results finds nothing even when the pathway is there. Use
+`grep -i`.
 
 ### Design QC
 

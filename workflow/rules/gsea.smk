@@ -48,6 +48,7 @@ rule GSEA:
     output:
         csv     = "gsea/{contrast}/{collection}_results.csv",
         dotplot = "gsea/{contrast}/{collection}_dotplot.pdf",
+        audit   = "gsea/{contrast}/{collection}_pathway_audit.csv",
     params:
         script           = f"{workflow.basedir}/scripts/gsea.R",
         outdir           = "gsea/{contrast}",
@@ -103,6 +104,7 @@ rule GSEAKeggCategories:
     """Slice the KEGG GSEA results by BRITE category and plot every pathway."""
     input:
         results    = "gsea/{contrast}/C2_CP_KEGG_results.csv",
+        audit      = "gsea/{contrast}/C2_CP_KEGG_pathway_audit.csv",
         categories = KEGG_CATEGORIES_FILE,
     output:
         pdfs = expand("gsea/{{contrast}}/kegg/{slug}_dotplot.pdf",
@@ -137,6 +139,7 @@ rule GSEAKeggCategories:
         mkdir -p {params.outdir}
         Rscript {params.script} \
             --results     {input.results} \
+            --audit       {input.audit} \
             --categories  {input.categories} \
             --select      "{params.select}" \
             --outdir      {params.outdir} \

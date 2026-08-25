@@ -26,6 +26,8 @@ option_list <- list(
               help = "TSV: slug, label, gs_name"),
   make_option("--select", type = "character", default = "",
               help = "Comma-separated slugs to plot; empty = every slug in the TSV"),
+  make_option("--audit", type = "character", default = "",
+              help = "Pathway audit CSV from gsea.R; lets a missing pathway be reported as filtered-by-size vs absent-from-collection"),
   make_option("--outdir", type = "character", help = "Output directory"),
   make_option("--numerator", type = "character", default = ""),
   make_option("--denominator", type = "character", default = ""),
@@ -55,6 +57,43 @@ for (s in setdiff(selected, unique(cats$slug))) {
 res <- read.csv(args$results, stringsAsFactors = FALSE)
 message("Loaded ", nrow(res), " pathways from ", args$results)
 
+# The results file only contains gene sets fgsea actually tested, so on its own
+# it cannot say WHY a pathway is absent. The audit written by gsea.R lists every
+# set in the collection with the number of its genes detected here, which
+# separates "the collection does not have it" from "too few of its genes are
+# expressed in this dataset" - two problems with different fixes.
+audit <- NULL
+if (nzchar(args$audit) && file.exists(args$audit)) {
+  audit <- read.csv(args$audit, stringsAsFactors = FALSE)
+  message("Loaded audit for ", nrow(audit), " gene sets from ", args$audit)
+} else if (nzchar(args$audit)) {
+  message("WARNING: audit file '", args$audit, "' not found. Missing pathways ",
+          "will be reported without a reason.")
+}
+
+# Why is `gs` not in the results?
+explain_missing <- function(gs) {
+  if (is.null(audit)) {
+    return("reason unknown (no audit file); it is either absent from the collection or was filtered by size")
+  }
+  row <- audit[audit$pathway == gs, , drop = FALSE]
+  if (nrow(row) == 0) {
+    return(paste0("NOT IN THE COLLECTION - no gene set by this name. Check the ",
+                  "spelling in the category file, or whether this collection ",
+                  "version contains it."))
+  }
+  if (isTRUE(row$tested[1])) {
+    return(sprintf("unexpected: it was testable (%d genes detected) but is absent from the results",
+                   row$size_detected[1]))
+  }
+  if (identical(row$reason[1], "below_min_size")) {
+    return(sprintf("FILTERED BY SIZE - only %d of its %d genes are detected here, below min_size=%d",
+                   row$size_detected[1], row$size_collection[1], row$min_size[1]))
+  }
+  sprintf("FILTERED BY SIZE - %d of its %d genes are detected here, above max_size=%d",
+          row$size_detected[1], row$size_collection[1], row$max_size[1])
+}
+
 # A pathway can be absent for two different reasons and they need different
 # fixes, so report them separately rather than as one "missing" count.
 empty_panel <- function(pdf_path, msg) {
@@ -73,11 +112,8 @@ for (s in selected) {
   absent <- setdiff(wanted, res$pathway)
   if (length(absent) > 0) {
     message("WARNING: [", s, "] ", length(absent), " of ", length(wanted),
-            " gene sets are not in the results and were skipped: ",
-            paste(absent, collapse = ", "))
-    message("         Either the collection does not contain them (the legacy ",
-            "C2:CP:KEGG set is frozen at an older KEGG release), or they fell ",
-            "outside min_size/max_size.")
+            " gene sets are not in the results and are not plotted:")
+    for (gs in absent) message("           - ", gs, ": ", explain_missing(gs))
   }
 
   out_pdf <- file.path(args$outdir, paste0(s, "_dotplot.pdf"))
@@ -117,5 +153,18 @@ for (s in selected) {
          height = max(3, nrow(hit) * 0.35 + 2.5), limitsize = FALSE)
   message("Written: ", out_pdf, "  (", nrow(hit), " gene sets)")
 }
+
+# One block at the end so the reasons are visible without scrolling back
+# through the per-category output.
+message("")
+message("==== KEGG category summary ====")
+for (s in selected) {
+  wanted <- unique(cats$gs_name[cats$slug == s])
+  absent <- setdiff(wanted, res$pathway)
+  message(sprintf("  %-32s %d/%d plotted", s, length(wanted) - length(absent),
+                  length(wanted)))
+  for (gs in absent) message("       missing  ", gs, ": ", explain_missing(gs))
+}
+message("===============================")
 
 message("KEGG category plots complete.")

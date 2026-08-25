@@ -20,6 +20,7 @@ rule GSEAInteraction:
     output:
         csv     = "gsea_interaction/{interaction}/{collection}_results.csv",
         dotplot = "gsea_interaction/{interaction}/{collection}_dotplot.pdf",
+        audit   = "gsea_interaction/{interaction}/{collection}_pathway_audit.csv",
     params:
         script        = f"{workflow.basedir}/scripts/gsea.R",
         outdir        = "gsea_interaction/{interaction}",
