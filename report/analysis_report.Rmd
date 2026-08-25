@@ -695,7 +695,16 @@ if (length(trio_tally)) {
 ## Genes of interest, E6 lineage only
 
 ```{r e6-goi, fig.height = 4}
+# Size factors (and so normalised counts) are fit from all samples for every
+# contrast, so any contrast's normalized_counts.csv carries the same values —
+# reuse TP53_vs_E6, already grabbed above.
+goi <- gene_long(grab("deseq2", "TP53_vs_E6", "normalized_counts.csv"), meta)
 if (!is.null(goi)) {
+  goi <- goi %>% filter(tolower(gene_id) %in% tolower(params$highlight_genes))
+}
+if (is.null(goi) || nrow(goi) == 0) {
+  missing_note("deseq2", "TP53_vs_E6", "normalized_counts.csv")
+} else {
   print(
     goi %>% filter(condition != "TP53") %>%
       group_by(gene_id, condition) %>%
