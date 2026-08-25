@@ -528,7 +528,7 @@ fails fast if `kegg_source_collection` is missing from `collections`.
 MSigDB's `C2:CP:KEGG` is a **snapshot of KEGG from around 2011** and never gains
 new pathways. In practice that means 17 of the 32 pathways in the five categories
 above are simply absent — everything KEGG added from 2011 on, including both
-pathways in `2.5 Chromosome`, all five synapse pathways, `Ferroptosis`,
+pathways in `Chromosome`, all five synapse pathways, `Ferroptosis`,
 `Cellular senescence` and `Axon regeneration`.
 
 `KEGG_CURRENT` is a pseudo-collection that fetches the live definitions from the

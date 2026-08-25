@@ -371,11 +371,11 @@ GSEA:
   # categories, so slice the live KEGG definitions instead (see collections).
   kegg_source_collection: KEGG_CURRENT
   kegg_categories:
-    - replication_and_repair          # 2.4 Replication and repair
-    - chromosome                      # 2.5 Chromosome
-    - cell_growth_and_death           # 4.2 Cell growth and death
-    - nervous_system                  # 5.6 Nervous system
-    - development_and_regeneration    # 5.8 Development and regeneration
+    - replication_and_repair          # Replication and repair
+    - chromosome                      # Chromosome
+    - cell_growth_and_death           # Cell growth and death
+    - nervous_system                  # Nervous system
+    - development_and_regeneration    # Development and regeneration
   kegg_padj_cutoff: 0.05
 
   # Same five groupings applied to GO, under gsea/{contrast}/go/. These are

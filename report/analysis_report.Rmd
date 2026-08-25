@@ -26,6 +26,20 @@ params:
   # caps it at a fixed N instead, since some contrasts have thousands of
   # significant genes and labelling all of them is unreadable at report scale.
   volcano_label_top: 12
+  # Optional proteomics overlay for the headline ATRX_FL_vs_ATRX_IFF volcano.
+  # Mirrors Proteomics: in config_epicode.yaml. Point proteomics_xlsx at "" (or
+  # a path that does not exist) to skip the panel gracefully.
+  proteomics_xlsx: "/nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx"
+  proteomics_sheet: "limma result filtered"
+  proteomics_gene_column: "Gene"
+  proteomics_fdr_column: "_FDR"
+  proteomics_logfc_column: "_LOG2FC"
+  proteomics_fdr_threshold: 0.05
+  proteomics_lfc_threshold: 1.0
+  # DESeq2_to_proteomics comparison for the headline contrast (see the DIRECTION
+  # note in config_epicode.yaml: proteomics columns read {numerator}_vs_{denominator},
+  # the opposite convention from the DESeq2 contrast name).
+  proteomics_comparison: "S1744_vs_S1011"
 output:
   html_document:
     toc: true
@@ -215,6 +229,64 @@ de_counts <- function(res) {
   r <- res %>% filter(!is.na(padj), padj < params$padj,
                       abs(log2FoldChange) >= params$lfc)
   c(up = sum(r$log2FoldChange > 0), down = sum(r$log2FoldChange < 0))
+}
+
+# Proteomics-significant genes for one comparison, wide-format limma Excel.
+# Mirrors workflow/scripts/deseq2_proteomic.R. Returns NULL (and lets the
+# caller show missing_note()) if the file, sheet or columns are not there.
+load_proteomics_sig <- function() {
+  if (!nchar(params$proteomics_xlsx) || !file.exists(params$proteomics_xlsx)) return(NULL)
+  logfc_col <- paste0(params$proteomics_comparison, params$proteomics_logfc_column)
+  fdr_col   <- paste0(params$proteomics_comparison, params$proteomics_fdr_column)
+  tbl <- tryCatch(
+    readxl::read_excel(params$proteomics_xlsx, sheet = params$proteomics_sheet, col_types = "text"),
+    error = function(e) NULL)
+  if (is.null(tbl) || !all(c(params$proteomics_gene_column, logfc_col, fdr_col) %in% colnames(tbl)))
+    return(NULL)
+  tbl %>%
+    transmute(gene_id    = trimws(as.character(.data[[params$proteomics_gene_column]])),
+              prot_fdr   = suppressWarnings(as.numeric(.data[[fdr_col]])),
+              prot_logfc = suppressWarnings(as.numeric(.data[[logfc_col]]))) %>%
+    filter(!is.na(gene_id), gene_id != "", !is.na(prot_fdr), !is.na(prot_logfc),
+           prot_fdr <= params$proteomics_fdr_threshold,
+           abs(prot_logfc) > params$proteomics_lfc_threshold) %>%
+    arrange(prot_fdr, dplyr::desc(abs(prot_logfc))) %>%
+    distinct(gene_id, .keep_all = TRUE) %>%
+    transmute(gene_id, prot_direction = ifelse(prot_logfc > 0, "Up", "Down"))
+}
+
+# RNA volcano restricted to genes that are also proteomics-significant, coloured
+# by RNA/protein direction agreement - same construction as the pipeline's own
+# volcano_proteomic.pdf, redrawn here in the report's own style.
+proteomic_volcano <- function(res, title, num, den, prot_sig) {
+  res <- res %>% filter(!is.na(padj)) %>%
+    mutate(rna_significant = padj < params$padj & abs(log2FoldChange) >= params$lfc,
+           rna_direction = ifelse(log2FoldChange > 0, "Up", "Down"))
+  df <- res %>% inner_join(prot_sig, by = "gene_id") %>%
+    mutate(significance = dplyr::case_when(
+      rna_significant & rna_direction == prot_direction ~ "Significant same direction",
+      rna_significant & rna_direction != prot_direction ~ "Significant opposite direction",
+      TRUE ~ "Not significant"))
+  if (!nrow(df)) return(invisible(NULL))
+  ggplot(df, aes(log2FoldChange, -log10(padj), colour = significance)) +
+    geom_point(alpha = 0.6, size = 1.2) +
+    ggrepel::geom_text_repel(aes(label = gene_id), size = 2.5, max.overlaps = Inf,
+                             show.legend = FALSE) +
+    scale_colour_manual(values = c("Significant same direction" = "#33A02C",
+                                   "Significant opposite direction" = "#E31A1C",
+                                   "Not significant" = "grey60")) +
+    geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed", linewidth = 0.3) +
+    geom_hline(yintercept = -log10(params$padj), linetype = "dashed", linewidth = 0.3) +
+    labs(
+      title = title,
+      subtitle = sprintf(
+        paste0("Proteomics-significant genes only (FDR <= %s, |log2FC| > %s)\n",
+               "RIGHT, log2FC > 0: higher in %s   |   LEFT, log2FC < 0: higher in %s\n",
+               "green = RNA and protein agree   |   red = RNA and protein disagree"),
+        params$proteomics_fdr_threshold, params$proteomics_lfc_threshold, num, den),
+      x = sprintf("log2FC  (%s / %s)   —   positive = higher in %s", num, den, num),
+      y = expression(-log[10] ~ "adjusted p"), colour = NULL) +
+    theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5), legend.position = "bottom")
 }
 ```
 
@@ -534,6 +606,11 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
     paste(nm, "(negative control)") else nm
   cat("\n\n###", heading, "\n\n")
   if (is.null(g)) { missing_note("signature_reversal", nm, "reversal_genes.csv"); next }
+  # Report-only: drop the vector/transgene features, same as every DE table and
+  # volcano above (de_results()). The negative control pairs E6_vs_EmptyVector
+  # as its signature, so EGFP/mCherry would otherwise dominate it.
+  g <- g[!tolower(g$gene_id) %in% tolower(params$exclude_genes), , drop = FALSE]
+  if (!nrow(g)) { cat("\n> No genes left after excluding vector/transgene features.\n\n"); next }
   lim <- max(abs(c(g$lfc_sig, g$lfc_resp)), na.rm = TRUE)
   st  <- grab("signature_reversal", nm, "reversal_stats.csv")
   # Stats go inside the panel: a long subtitle is silently clipped once the
@@ -681,6 +758,19 @@ for (t4 in trio) {
   cat("\n\n")
   print(kable(top_genes(r, n = 8)))
   cat("\n\n")
+  if (t4[1] == "ATRX_FL_vs_ATRX_IFF") {
+    prot_sig <- load_proteomics_sig()
+    if (is.null(prot_sig)) {
+      cat("\n> **Not available.** Proteomics overlay skipped: `params$proteomics_xlsx`",
+          "was not found, or is missing the expected sheet/columns for comparison",
+          paste0("`", params$proteomics_comparison, "`.\n\n"))
+    } else {
+      cat("\n\n**Proteomics concordance (RNA vs LC-MS/MS protein), same contrast:**\n\n")
+      print(proteomic_volcano(r, paste("Proteomics-filtered:", t4[1]),
+                              num = t4[2], den = t4[3], prot_sig))
+      cat("\n\n")
+    }
+  }
 }
 ```
 
@@ -766,24 +856,23 @@ for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
 ```
 
 > Hallmark proliferation sets (E2F, G2M, MYC) are enriched in `ATRX_IFF` compared to `ATRX_FL`, and
-> the inflammatory/interferon sets are enriched in `ATRX_FL`. 
+> the inflammatory/interferon sets are enriched in `ATRX_FL`.
 
----
-
-# KEGG pathway categories
+## KEGG pathway categories
 
 The five KEGG BRITE categories, drawn from the live KEGG definitions rather than
 MSigDB's frozen snapshot. Unlike the collection dotplot above, **every** pathway
 in a category is shown: a category is a short fixed list, so the pathways that
 did not move are part of the answer. Filled points are `padj < 0.05` and coloured
-across that range; hollow grey points did not reach it.
+across that range; hollow grey points did not reach it. Restricted to the
+headline `ATRX_FL_vs_ATRX_IFF` contrast — the cleanest comparison in the design.
 
 ```{r kegg-categories, fig.height = 4.5, results = "asis"}
-KEGG_CATS <- c(replication_and_repair       = "2.4 Replication and repair",
-               chromosome                   = "2.5 Chromosome",
-               cell_growth_and_death        = "4.2 Cell growth and death",
-               nervous_system               = "5.6 Nervous system",
-               development_and_regeneration = "5.8 Development and regeneration")
+KEGG_CATS <- c(replication_and_repair       = "Replication and repair",
+               chromosome                   = "Chromosome",
+               cell_growth_and_death        = "Cell growth and death",
+               nervous_system               = "Nervous system",
+               development_and_regeneration = "Development and regeneration")
 
 kegg_cat_dot <- function(df, title) {
   if (is.null(df) || !nrow(df)) return(invisible(NULL))
@@ -792,6 +881,12 @@ kegg_cat_dot <- function(df, title) {
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$NES)])
   sz <- range(df$size, na.rm = TRUE)
   brk <- if (sz[1] == sz[2]) sz[1] else unique(round(c(sz[1], mean(sz), sz[2])))
+  # Spell the direction out the same way the Hallmark dotplot above does.
+  num <- if ("numerator" %in% names(df)) df$numerator[1] else ""
+  den <- if ("denominator" %in% names(df)) df$denominator[1] else ""
+  sub <- if (nzchar(num) && nzchar(den))
+    sprintf("NES > 0: pathway genes HIGHER in %s   |   NES < 0: pathway genes HIGHER in %s",
+            num, den) else NULL
   print(
     ggplot(df, aes(NES, pathway)) +
       geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
@@ -802,20 +897,18 @@ kegg_cat_dot <- function(df, title) {
       scale_colour_gradient(low = "#A50F15", high = "#FC9272",
                             limits = c(0, cut), oob = scales::squish) +
       scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
-      labs(title = title, y = NULL, colour = "padj", size = "Set size")
+      labs(title = title, subtitle = sub, y = NULL, colour = "padj", size = "Set size") +
+      theme(plot.subtitle = element_text(size = 8, colour = "grey30"))
   )
 }
 
-# EDIT: which contrasts to show category panels for.
-for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
-             "EmptyVector_vs_ATRX_IFF")) {
-  cat("\n\n##", cn, "\n\n")
-  for (slug in names(KEGG_CATS)) {
-    g <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
-    cat("\n\n###", KEGG_CATS[[slug]], "\n\n")
-    if (is.null(g)) { missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv")); next }
-    kegg_cat_dot(g, paste(KEGG_CATS[[slug]], "-", cn))
-  }
+# EDIT: which contrast to show category panels for. Headline contrast only.
+cn <- "ATRX_FL_vs_ATRX_IFF"
+for (slug in names(KEGG_CATS)) {
+  g <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+  cat("\n\n###", KEGG_CATS[[slug]], "\n\n")
+  if (is.null(g)) { missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv")); next }
+  kegg_cat_dot(g, paste(KEGG_CATS[[slug]], "-", cn))
 }
 ```
 

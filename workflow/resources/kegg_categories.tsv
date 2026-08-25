@@ -4,7 +4,7 @@
 # Columns: slug <TAB> kegg_id <TAB> label <TAB> gs_name
 #   slug     filename stem, e.g. gsea/{contrast}/kegg/{slug}_dotplot.pdf
 #   kegg_id  KEGG pathway number, for cross-checking against the KEGG page
-#   label    plot title, keeps the KEGG section number
+#   label    plot title
 #   gs_name  gene-set name in the collection
 #
 # Rows follow the order KEGG lists them in, so this file can be diffed against
@@ -19,35 +19,35 @@
 # can be missing either because the collection does not contain it or because
 # fewer than min_size of its genes were detected -- see the README.
 slug	kegg_id	label	gs_name
-replication_and_repair	03030	2.4 Replication and repair	KEGG_DNA_REPLICATION
-replication_and_repair	03410	2.4 Replication and repair	KEGG_BASE_EXCISION_REPAIR
-replication_and_repair	03420	2.4 Replication and repair	KEGG_NUCLEOTIDE_EXCISION_REPAIR
-replication_and_repair	03430	2.4 Replication and repair	KEGG_MISMATCH_REPAIR
-replication_and_repair	03440	2.4 Replication and repair	KEGG_HOMOLOGOUS_RECOMBINATION
-replication_and_repair	03450	2.4 Replication and repair	KEGG_NON_HOMOLOGOUS_END_JOINING
-replication_and_repair	03460	2.4 Replication and repair	KEGG_FANCONI_ANEMIA_PATHWAY
-chromosome	03082	2.5 Chromosome	KEGG_ATP_DEPENDENT_CHROMATIN_REMODELING
-chromosome	03083	2.5 Chromosome	KEGG_POLYCOMB_REPRESSIVE_COMPLEX
-cell_growth_and_death	04110	4.2 Cell growth and death	KEGG_CELL_CYCLE
-cell_growth_and_death	04114	4.2 Cell growth and death	KEGG_OOCYTE_MEIOSIS
-cell_growth_and_death	04210	4.2 Cell growth and death	KEGG_APOPTOSIS
-cell_growth_and_death	04215	4.2 Cell growth and death	KEGG_APOPTOSIS_MULTIPLE_SPECIES
-cell_growth_and_death	04216	4.2 Cell growth and death	KEGG_FERROPTOSIS
-cell_growth_and_death	04217	4.2 Cell growth and death	KEGG_NECROPTOSIS
-cell_growth_and_death	04115	4.2 Cell growth and death	KEGG_P53_SIGNALING_PATHWAY
-cell_growth_and_death	04218	4.2 Cell growth and death	KEGG_CELLULAR_SENESCENCE
-nervous_system	04724	5.6 Nervous system	KEGG_GLUTAMATERGIC_SYNAPSE
-nervous_system	04727	5.6 Nervous system	KEGG_GABAERGIC_SYNAPSE
-nervous_system	04725	5.6 Nervous system	KEGG_CHOLINERGIC_SYNAPSE
-nervous_system	04728	5.6 Nervous system	KEGG_DOPAMINERGIC_SYNAPSE
-nervous_system	04726	5.6 Nervous system	KEGG_SEROTONERGIC_SYNAPSE
-nervous_system	04720	5.6 Nervous system	KEGG_LONG_TERM_POTENTIATION
-nervous_system	04730	5.6 Nervous system	KEGG_LONG_TERM_DEPRESSION
-nervous_system	04723	5.6 Nervous system	KEGG_RETROGRADE_ENDOCANNABINOID_SIGNALING
-nervous_system	04721	5.6 Nervous system	KEGG_SYNAPTIC_VESICLE_CYCLE
-nervous_system	04722	5.6 Nervous system	KEGG_NEUROTROPHIN_SIGNALING_PATHWAY
-development_and_regeneration	04320	5.8 Development and regeneration	KEGG_DORSO_VENTRAL_AXIS_FORMATION
-development_and_regeneration	04360	5.8 Development and regeneration	KEGG_AXON_GUIDANCE
-development_and_regeneration	04361	5.8 Development and regeneration	KEGG_AXON_REGENERATION
-development_and_regeneration	04380	5.8 Development and regeneration	KEGG_OSTEOCLAST_DIFFERENTIATION
-development_and_regeneration	04382	5.8 Development and regeneration	KEGG_CORNIFIED_ENVELOPE_FORMATION
+replication_and_repair	03030	Replication and repair	KEGG_DNA_REPLICATION
+replication_and_repair	03410	Replication and repair	KEGG_BASE_EXCISION_REPAIR
+replication_and_repair	03420	Replication and repair	KEGG_NUCLEOTIDE_EXCISION_REPAIR
+replication_and_repair	03430	Replication and repair	KEGG_MISMATCH_REPAIR
+replication_and_repair	03440	Replication and repair	KEGG_HOMOLOGOUS_RECOMBINATION
+replication_and_repair	03450	Replication and repair	KEGG_NON_HOMOLOGOUS_END_JOINING
+replication_and_repair	03460	Replication and repair	KEGG_FANCONI_ANEMIA_PATHWAY
+chromosome	03082	Chromosome	KEGG_ATP_DEPENDENT_CHROMATIN_REMODELING
+chromosome	03083	Chromosome	KEGG_POLYCOMB_REPRESSIVE_COMPLEX
+cell_growth_and_death	04110	Cell growth and death	KEGG_CELL_CYCLE
+cell_growth_and_death	04114	Cell growth and death	KEGG_OOCYTE_MEIOSIS
+cell_growth_and_death	04210	Cell growth and death	KEGG_APOPTOSIS
+cell_growth_and_death	04215	Cell growth and death	KEGG_APOPTOSIS_MULTIPLE_SPECIES
+cell_growth_and_death	04216	Cell growth and death	KEGG_FERROPTOSIS
+cell_growth_and_death	04217	Cell growth and death	KEGG_NECROPTOSIS
+cell_growth_and_death	04115	Cell growth and death	KEGG_P53_SIGNALING_PATHWAY
+cell_growth_and_death	04218	Cell growth and death	KEGG_CELLULAR_SENESCENCE
+nervous_system	04724	Nervous system	KEGG_GLUTAMATERGIC_SYNAPSE
+nervous_system	04727	Nervous system	KEGG_GABAERGIC_SYNAPSE
+nervous_system	04725	Nervous system	KEGG_CHOLINERGIC_SYNAPSE
+nervous_system	04728	Nervous system	KEGG_DOPAMINERGIC_SYNAPSE
+nervous_system	04726	Nervous system	KEGG_SEROTONERGIC_SYNAPSE
+nervous_system	04720	Nervous system	KEGG_LONG_TERM_POTENTIATION
+nervous_system	04730	Nervous system	KEGG_LONG_TERM_DEPRESSION
+nervous_system	04723	Nervous system	KEGG_RETROGRADE_ENDOCANNABINOID_SIGNALING
+nervous_system	04721	Nervous system	KEGG_SYNAPTIC_VESICLE_CYCLE
+nervous_system	04722	Nervous system	KEGG_NEUROTROPHIN_SIGNALING_PATHWAY
+development_and_regeneration	04320	Development and regeneration	KEGG_DORSO_VENTRAL_AXIS_FORMATION
+development_and_regeneration	04360	Development and regeneration	KEGG_AXON_GUIDANCE
+development_and_regeneration	04361	Development and regeneration	KEGG_AXON_REGENERATION
+development_and_regeneration	04380	Development and regeneration	KEGG_OSTEOCLAST_DIFFERENTIATION
+development_and_regeneration	04382	Development and regeneration	KEGG_CORNIFIED_ENVELOPE_FORMATION
