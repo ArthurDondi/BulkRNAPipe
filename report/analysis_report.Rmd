@@ -762,6 +762,7 @@ for (t4 in trio) {
   print(kable(top_genes(r, n = 8)))
   cat("\n\n")
   if (t4[1] == "ATRX_FL_vs_ATRX_IFF") {
+    cat("\n\n> _Add interpretation here._\n\n")
     prot_sig <- load_proteomics_sig()
     if (is.null(prot_sig)) {
       cat("\n> **Not available.** Proteomics overlay skipped: `params$proteomics_xlsx`",
@@ -771,7 +772,7 @@ for (t4 in trio) {
       cat("\n\n**Proteomics concordance (RNA vs LC-MS/MS protein), same contrast:**\n\n")
       print(proteomic_volcano(r, paste("Proteomics-filtered:", t4[1]),
                               num = t4[2], den = t4[3], prot_sig))
-      cat("\n\n")
+      cat("\n\n> _Add interpretation here._\n\n")
     }
   }
 }
