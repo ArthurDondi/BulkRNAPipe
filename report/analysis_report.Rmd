@@ -482,7 +482,6 @@ for (v in pca_views) {
 
 > PC1 (78%) of the full PCA separates TP53 from everything E6-derived with :
 > heavy clonal background, as seen with the sample-sample variance, confounded with the ATRX genotype and not correctable.
-> Restricting to the E6 lineage lets the construct effects use PC1/PC2.
 
 ---
 
@@ -517,8 +516,8 @@ if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes"
 ```
 
 > With 18% of the genes teste being significantly differently expressed between TP53 and E6, 
-> we can see thet either the clonal drift or the ATRX knockout led to huge shifts in expression.
-> Our current set up does not ena
+> we can see that either the clonal drift or the ATRX knockout led to huge shifts in expression.
+> Our current set up does not enable us to separate the two, clonal background and ATRX status vary together and are perfectly confounded
 
 
 ## Differential expression across contrasts
@@ -669,7 +668,10 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
 > If a gene was pushed up by the knockout it should be pushed back down when reintroducing ATRX: points in the shaded
 > quadrants, along the dashed line. Slope −1 is a complete rescue, 0 is no
 > response. We see a slightly higher recovery in `ATRX_FL` compared to `ATRX_IFF`,
-> however, both are very close to zero.
+> however, both are very close to zero. Furthermore, using E6/EmptyVector vs FL/IFF as a control,
+> we see that we obtain a steeper slope with a better $R^2$, while there should be no rescue there. 
+> Therefore, we can conclude that there is no significant proof of rescue when introducing ATRX_FL.
+> Any rescue effect could possibly be obfuscated by the large difference observed between the TP53 and E6 clones.
 
 ---
 
