@@ -153,7 +153,7 @@ volcano_df <- res_df %>%
       rna_significant & !is.na(prot_direction) & rna_direction != prot_direction ~ "Significant opposite direction",
       TRUE                                                                        ~ "Not significant"
     ),
-    label = gene_id
+    label = ifelse(significance != "Not significant", gene_id, NA_character_)
   )
 print("volcano_df")
 print(volcano_df)

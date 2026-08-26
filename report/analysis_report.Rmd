@@ -266,11 +266,12 @@ proteomic_volcano <- function(res, title, num, den, prot_sig) {
     mutate(significance = dplyr::case_when(
       rna_significant & rna_direction == prot_direction ~ "Significant same direction",
       rna_significant & rna_direction != prot_direction ~ "Significant opposite direction",
-      TRUE ~ "Not significant"))
+      TRUE ~ "Not significant"),
+      label = ifelse(significance != "Not significant", gene_id, NA_character_))
   if (!nrow(df)) return(invisible(NULL))
   ggplot(df, aes(log2FoldChange, -log10(padj), colour = significance)) +
     geom_point(alpha = 0.6, size = 1.2) +
-    ggrepel::geom_text_repel(aes(label = gene_id), size = 2.5, max.overlaps = Inf,
+    ggrepel::geom_text_repel(aes(label = label), size = 2.5, max.overlaps = Inf,
                              show.legend = FALSE) +
     scale_colour_manual(values = c("Significant same direction" = "#33A02C",
                                    "Significant opposite direction" = "#E31A1C",
