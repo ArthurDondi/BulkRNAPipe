@@ -747,9 +747,7 @@ trio <- list(
   c("EmptyVector_vs_ATRX_FL",  "ATRX_FL",  "EmptyVector",
     "Full-length rescue against its own transduced control"),
   c("EmptyVector_vs_ATRX_IFF", "ATRX_IFF", "EmptyVector",
-    "In-frame fusion against the same control"),
-  c("ATRX_FL_vs_ATRX_IFF",     "ATRX_IFF", "ATRX_FL",
-    "The two constructs against each other")
+    "In-frame fusion against the same control")
 )
 trio_tally <- list()
 for (t4 in trio) {
@@ -761,22 +759,41 @@ for (t4 in trio) {
   cat("\n\n")
   print(kable(top_genes(r, n = 8)))
   cat("\n\n")
-  if (t4[1] == "ATRX_FL_vs_ATRX_IFF") {
-    cat("\n\n> _Add interpretation here._\n\n")
-    prot_sig <- load_proteomics_sig()
-    if (is.null(prot_sig)) {
-      cat("\n> **Not available.** Proteomics overlay skipped: `params$proteomics_xlsx`",
-          "was not found, or is missing the expected sheet/columns for comparison",
-          paste0("`", params$proteomics_comparison, "`.\n\n"))
-    } else {
-      cat("\n\n**Proteomics concordance (RNA vs LC-MS/MS protein), same contrast:**\n\n")
-      print(proteomic_volcano(r, paste("Proteomics-filtered:", t4[1]),
-                              num = t4[2], den = t4[3], prot_sig))
-      cat("\n\n> _Add interpretation here._\n\n")
-    }
+}
+```
+
+### The two constructs against each other
+
+```{r e6-three-fl-iff-rna, fig.height = 4.5, results = "asis"}
+r_fl_iff <- de_results("deseq2", "ATRX_FL_vs_ATRX_IFF", "results.csv")
+if (is.null(r_fl_iff)) {
+  missing_note("deseq2", "ATRX_FL_vs_ATRX_IFF", "results.csv")
+} else {
+  trio_tally[["ATRX_FL_vs_ATRX_IFF"]] <- de_counts(r_fl_iff)
+  print(volcano(r_fl_iff, "ATRX_FL_vs_ATRX_IFF", num = "ATRX_IFF", den = "ATRX_FL"))
+  cat("\n\n")
+  print(kable(top_genes(r_fl_iff, n = 8)))
+}
+```
+
+> _Add interpretation here._
+
+```{r e6-three-fl-iff-prot, fig.height = 4.5, results = "asis"}
+if (!is.null(r_fl_iff)) {
+  prot_sig <- load_proteomics_sig()
+  if (is.null(prot_sig)) {
+    cat("\n> **Not available.** Proteomics overlay skipped: `params$proteomics_xlsx`",
+        "was not found, or is missing the expected sheet/columns for comparison",
+        paste0("`", params$proteomics_comparison, "`.\n\n"))
+  } else {
+    cat("\n\n**Proteomics concordance (RNA vs LC-MS/MS protein), same contrast:**\n\n")
+    print(proteomic_volcano(r_fl_iff, "Proteomics-filtered: ATRX_FL_vs_ATRX_IFF",
+                            num = "ATRX_IFF", den = "ATRX_FL", prot_sig))
   }
 }
 ```
+
+> _Add interpretation here._
 
 ```{r e6-trio-tally}
 if (length(trio_tally)) {
