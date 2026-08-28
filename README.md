@@ -68,6 +68,7 @@ BulkRNAPipe/
 │       ├── gsea_kegg.R             # KEGG BRITE category panels
 │       ├── generate_kegg_gmt.R     # Current KEGG pathways from the KEGG API
 │       ├── gsea_go_categories.R    # GO keyword category panels
+│       ├── gsea_reactome_categories.R  # Reactome keyword category panels
 │       ├── go.R                    # GO enrichment per contrast
 │       └── gsea_compare.R          # ΔNES + residual-rank comparison
 ├── report/
@@ -310,9 +311,12 @@ output_dir/
 │   ├── kegg/
 │   │   ├── {category}_results.csv           # KEGG BRITE category slice
 │   │   └── {category}_dotplot.pdf           # Every pathway in that category
-│   └── go/
-│       ├── {category}_results.csv           # All GO terms matching the category
-│       └── {category}_dotplot.pdf           # Top terms, keyword-matched
+│   ├── go/
+│   │   ├── {category}_results.csv           # All GO terms matching the category
+│   │   └── {category}_dotplot.pdf           # Top terms, keyword-matched
+│   └── reactome/
+│       ├── {category}_results.csv           # All Reactome pathways matching the category
+│       └── {category}_dotplot.pdf           # Top pathways, keyword-matched
 ├── go/{contrast}/
 │   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
 │   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
@@ -647,6 +651,35 @@ category:
   chromosome                        112 matched,   44 significant,  25 plotted
 =============================
 ```
+
+### Reactome keyword category panels
+
+The same five groupings applied to Reactome, under `gsea/{contrast}/reactome/`.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  reactome_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                        nervous_system, development_and_regeneration]
+  reactome_source_collection: C2:CP:REACTOME
+  reactome_categories_top_n: 25
+```
+
+**These are not Reactome's own hierarchy.** Reactome does curate a pathway
+tree, but MSigDB's `C2:CP:REACTOME` ships it flattened — one gene set per
+pathway, no parent/child links — so like GO there is no ready "category →
+member pathways" file to slice. Each group here is instead a **regular
+expression matched against the pathway name**, the same mechanism as the GO
+panels above (down to the same `workflow/resources/reactome_categories.tsv`
+column layout): it pulls in pathways that merely share a word and misses
+pathways that describe the same biology differently. Read a panel as
+*"Reactome pathways whose names mention X"*, never as *"everything Reactome
+knows about X"*. Categories overlap by design.
+
+Same truncation behaviour as the GO panels: the figure is capped at
+`reactome_categories_top_n` by `padj`, the subtitle and log say how many
+pathways were matched vs. plotted, and `{category}_results.csv` keeps every
+matched pathway untruncated.
 
 ### Design QC
 

@@ -64,6 +64,9 @@ rule BulkRNAPipe_output:
         # ── GO keyword category panels ───────────────────────────────────────
         expand("gsea/{contrast}/go/{slug}_dotplot.pdf",
                contrast=CONTRASTS, slug=GO_CATEGORIES) if GO_PANELS else [],
+        # ── Reactome keyword category panels ─────────────────────────────────
+        expand("gsea/{contrast}/reactome/{slug}_dotplot.pdf",
+               contrast=CONTRASTS, slug=REACTOME_CATEGORIES) if REACTOME_PANELS else [],
         # ── GSEA on the interaction contrasts ────────────────────────────────
         expand("gsea_interaction/{interaction}/{collection}_results.csv",
                interaction=INTERACTIONS,

@@ -403,6 +403,18 @@ GSEA:
     - nervous_system
     - development_and_regeneration
 
+  # Same five groupings applied to Reactome, under gsea/{contrast}/reactome/.
+  # Keyword matches on Reactome pathway names, not Reactome's own hierarchy -
+  # see the README.
+  reactome_source_collection: C2:CP:REACTOME
+  reactome_categories_top_n: 25
+  reactome_categories:
+    - replication_and_repair
+    - chromosome
+    - cell_growth_and_death
+    - nervous_system
+    - development_and_regeneration
+
 # ─── GO enrichment parameters ────────────────────────────────────────────────
 GO:
   ontology:

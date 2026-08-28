@@ -238,3 +238,54 @@ rule GSEAGoCategories:
             --denominator "{params.denominator}" \
             --padj_cutoff {params.padj_cutoff}
         """
+
+
+# ── Step 5: Reactome keyword panels (same categories, matched on pathway names) ─
+
+rule GSEAReactomeCategories:
+    """Group Reactome pathways by keyword into the KEGG categories and plot each."""
+    input:
+        results    = f"gsea/{{contrast}}/{REACTOME_SOURCE_SLUG}_results.csv",
+        categories = REACTOME_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/reactome/{slug}_dotplot.pdf",
+                      slug=REACTOME_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/reactome/{slug}_results.csv",
+                      slug=REACTOME_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_reactome_categories.R",
+        outdir      = "gsea/{contrast}/reactome",
+        select      = ",".join(REACTOME_CATEGORIES),
+        top_n       = REACTOME_CAT_TOP_N,
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAReactomeCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAReactomeCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --top_n       {params.top_n} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
+        """

@@ -404,6 +404,29 @@ GSEA:
   # go_categories_file: /path/to/your_go_categories.tsv
   go_source_collection: C5:GO:BP
   go_categories_top_n: 25
+
+  # ─── Reactome keyword category panels (optional) ────────────────────────────
+  # The same groupings applied to Reactome, under gsea/{contrast}/reactome/.
+  # MSigDB's C2:CP:REACTOME ships Reactome's pathways flattened - no parent/
+  # child links - so like GO each group here is a REGEX MATCHED ON PATHWAY
+  # NAMES, not a traversal of Reactome's own pathway browser tree: it catches
+  # pathways sharing a word and misses pathways that say the same thing
+  # differently. Read a panel as "Reactome pathways whose names mention X",
+  # never as "everything Reactome knows about X". Categories overlap by design.
+  #
+  # Slugs come from the first column of reactome_categories_file (default:
+  # workflow/resources/reactome_categories.tsv), which holds the include/
+  # exclude regexes. A keyword can match dozens of pathways, so the figure is
+  # truncated to reactome_categories_top_n by padj -- the CSV keeps all of them
+  # and the log says how many were dropped. Leave empty to disable.
+  #   reactome_categories: [replication_and_repair, chromosome,
+  #                         cell_growth_and_death, nervous_system,
+  #                         development_and_regeneration]
+  reactome_categories: []
+  # reactome_categories_file: /path/to/your_reactome_categories.tsv
+  reactome_source_collection: C2:CP:REACTOME
+  reactome_categories_top_n: 25
+
   # kegg_categories_file: /path/to/your_categories.tsv
   kegg_padj_cutoff: 0.05
 

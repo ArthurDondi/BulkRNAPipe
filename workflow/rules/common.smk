@@ -559,6 +559,39 @@ for _slug in GO_CATEGORIES:
             "first column of the GO category file - it becomes a filename."
         )
 
+# ─── Reactome keyword category panels ────────────────────────────────────────
+# The same five groupings applied to Reactome. MSigDB's C2:CP:REACTOME ships
+# Reactome's pathways flattened - no parent/child links - so like GO these are
+# REGEX MATCHES ON PATHWAY NAMES, not a traversal of Reactome's own pathway
+# browser tree: they catch pathways that share a word and miss pathways that
+# say the same thing differently. The panels and the log both state this; do
+# not read one as "everything Reactome knows about X".
+REACTOME_CATEGORIES_FILE = _gsea_cfg.get(
+    'reactome_categories_file',
+    f"{workflow.basedir}/resources/reactome_categories.tsv",
+)
+REACTOME_CATEGORIES  = [str(c) for c in (_gsea_cfg.get('reactome_categories') or [])]
+REACTOME_SOURCE_SLUG = _collection_to_slug(
+    str(_gsea_cfg.get('reactome_source_collection', 'C2:CP:REACTOME')))
+REACTOME_CAT_TOP_N   = int(_gsea_cfg.get('reactome_categories_top_n', 25))
+REACTOME_PANELS = bool(GSEA and REACTOME_CATEGORIES and REACTOME_SOURCE_SLUG in GSEA_COLLECTIONS)
+
+if REACTOME_CATEGORIES and GSEA and REACTOME_SOURCE_SLUG not in GSEA_COLLECTIONS:
+    raise ValueError(
+        f"GSEA.reactome_categories is set but its source collection "
+        f"'{REACTOME_SOURCE_SLUG}' is not in GSEA.collections. The panels slice "
+        "that collection's results, so add it, point reactome_source_collection "
+        "at one you do run, or clear reactome_categories."
+    )
+
+for _slug in REACTOME_CATEGORIES:
+    if '/' in _slug or _slug != _slug.strip():
+        raise ValueError(
+            f"GSEA.reactome_categories: '{_slug}' must be a bare slug matching "
+            "the first column of the Reactome category file - it becomes a "
+            "filename."
+        )
+
 
 # Contrast comparison pairs
 _contrast_comparisons = config.get('ContrastComparisons') or []
