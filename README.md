@@ -152,8 +152,8 @@ DESeq2:
 
   contrasts:
     # Contrast against the combined reference
-    - [ATRX_VectorControl_vs_ATRX_FL,  ATRX_FL,  ATRX_VectorControl]
-    - [ATRX_VectorControl_vs_ATRX_IFF, ATRX_IFF, ATRX_VectorControl]
+    - [ATRX_FL_vs_ATRX_VectorControl,  ATRX_FL,  ATRX_VectorControl]
+    - [ATRX_IFF_vs_ATRX_VectorControl, ATRX_IFF, ATRX_VectorControl]
 ```
 
 **How it works**: Snakemake replaces each sample's original condition label with
@@ -457,8 +457,8 @@ never crossed and there is nothing to correct.
 ```yaml
 SignatureReversal:
   - name: ATRX_FL_reverses_KO_signature
-    signature_contrast: TP53_vs_E6              # defines which genes are scored
-    response_contrast:  EmptyVector_vs_ATRX_FL  # measured on those genes
+    signature_contrast: E6_vs_TP53              # defines which genes are scored
+    response_contrast:  ATRX_FL_vs_EmptyVector  # measured on those genes
     padj_threshold: 0.05
     lfc_threshold: 0.0
     restored_fraction: 0.5

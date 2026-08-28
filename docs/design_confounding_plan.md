@@ -106,7 +106,7 @@ analysis, it is the one already in the config. The algebra collapses:
 ```
 
 Subtracting the vector effect **is** using `EmptyVector` as the denominator.
-They are the same operation, and `EmptyVector_vs_ATRX_FL` already does it. There
+They are the same operation, and `ATRX_FL_vs_EmptyVector` already does it. There
 is nothing extra to gain, and the `ATRX_FL` / `ATRX_IFF` comparisons were never
 affected by the confounding in the first place — both sides carry the vector, so
 it cancels whether or not you think of it as a subtraction.
@@ -179,7 +179,7 @@ the interesting structure often sits lower down.
 
 **This is the primary rescue readout, replacing "do they cluster".**
 
-Take the KO signature from `TP53_vs_E6` and ask what the rescue does to those
+Take the KO signature from `E6_vs_TP53` and ask what the rescue does to those
 same genes, measured as `ATRX_FL` vs `EmptyVector`. Both contrasts sit entirely
 inside one background, so the clonal difference never enters. Plot one log2FC
 against the other:
@@ -211,7 +211,7 @@ gene, minus how far it had to move to undo the knockout. The first term is
 measured inside the transduced background, the second inside the untransduced
 one, so the clone and vector effects **cancel in the subtraction** instead of
 being modelled — no covariate, no rank problem. This is the honest replacement
-for the plain `TP53_vs_ATRX_FL` contrast.
+for the plain `ATRX_FL_vs_TP53` contrast.
 
 Read it as a **shortfall**: `log2FC = 0` is a complete rescue, negative means the
 rescue fell short, positive means it overshot the TP53 level. Note the direction

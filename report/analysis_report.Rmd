@@ -11,7 +11,7 @@ params:
   # Order groups appear in every figure. Edit if you add conditions.
   condition_levels: !r c("TP53", "E6", "EmptyVector", "ATRX_FL", "ATRX_IFF")
   # The contrast the report leads with.
-  headline_contrast: "ATRX_FL_vs_ATRX_IFF"
+  headline_contrast: "ATRX_IFF_vs_ATRX_FL"
   # Vector and transgene features. They are rows in the count matrix because the
   # reference carries the vector contigs, but they are constructs rather than
   # biology, so they are dropped from every differential-expression figure and
@@ -26,7 +26,7 @@ params:
   # caps it at a fixed N instead, since some contrasts have thousands of
   # significant genes and labelling all of them is unreadable at report scale.
   volcano_label_top: 12
-  # Optional proteomics overlay for the headline ATRX_FL_vs_ATRX_IFF volcano.
+  # Optional proteomics overlay for the headline ATRX_IFF_vs_ATRX_FL volcano.
   # Mirrors Proteomics: in config_epicode.yaml. Point proteomics_xlsx at "" (or
   # a path that does not exist) to skip the panel gracefully.
   proteomics_xlsx: "/nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx"
@@ -38,7 +38,7 @@ params:
   proteomics_lfc_threshold: 1.0
   # DESeq2_to_proteomics comparison for the headline contrast (see the DIRECTION
   # note in config_epicode.yaml: proteomics columns read {numerator}_vs_{denominator},
-  # the opposite convention from the DESeq2 contrast name).
+  # the same convention as the DESeq2 contrast name).
   proteomics_comparison: "S1744_vs_S1011"
 output:
   html_document:
@@ -179,7 +179,7 @@ volcano <- function(res, title, num, den, highlight = NULL,
   # -log10(padj) x |log2FC|, so the labelled genes match the accompanying table.
   # The pipeline's own volcano.pdf labels every significant gene; capped here
   # because report-scale figures become unreadable once a contrast has more
-  # than a few dozen significant genes (TP53_vs_E6 has thousands).
+  # than a few dozen significant genes (E6_vs_TP53 has thousands).
   hl_lower <- if (is.null(highlight)) character(0) else tolower(highlight)
   if (label_top > 0) {
     lbl <- res %>% filter(sig, !tolower(gene_id) %in% hl_lower) %>%
@@ -493,9 +493,9 @@ setting aside. `TP53` is a different clone from everything E6-derived, and that
 difference is confounded with the ATRX genotype.
 
 ```{r tp53-vs-e6, fig.height = 5}
-r_tp53 <- de_results("deseq2", "TP53_vs_E6", "results.csv")
-if (is.null(r_tp53)) missing_note("deseq2", "TP53_vs_E6", "results.csv") else {
-  print(volcano(r_tp53, "TP53_vs_E6", num = "E6", den = "TP53"))
+r_tp53 <- de_results("deseq2", "E6_vs_TP53", "results.csv")
+if (is.null(r_tp53)) missing_note("deseq2", "E6_vs_TP53", "results.csv") else {
+  print(volcano(r_tp53, "E6_vs_TP53", num = "E6", den = "TP53"))
 }
 ```
 
@@ -513,7 +513,7 @@ if (!is.null(r_tp53)) {
 ```
 
 ```{r tp53-top}
-if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "TP53_vs_E6: top genes")
+if (!is.null(r_tp53)) kable(top_genes(r_tp53), caption = "E6_vs_TP53: top genes")
 ```
 
 > With 18% of the genes teste being significantly differently expressed between TP53 and E6, 
@@ -534,12 +534,12 @@ Gene counts only. The per-contrast volcanoes are in the pipeline output under
 # cleanest contrast in the design can be sized against the rest.
 tally_contrasts <- c(
   params$headline_contrast,
-  "EmptyVector_vs_ATRX_FL",
-  "EmptyVector_vs_ATRX_IFF",
-  "E6_vs_EmptyVector",
-  "TP53_vs_E6",
-  "TP53_vs_ATRX_FL",
-  "TP53_vs_ATRX_IFF"
+  "ATRX_FL_vs_EmptyVector",
+  "ATRX_IFF_vs_EmptyVector",
+  "EmptyVector_vs_E6",
+  "E6_vs_TP53",
+  "ATRX_FL_vs_TP53",
+  "ATRX_IFF_vs_TP53"
 )
 tally <- list()
 for (cn in tally_contrasts) {
@@ -607,7 +607,7 @@ for (nm in c("ATRX_FL_reverses_KO_signature_lfc1",
   cat("\n\n###", heading, "\n\n")
   if (is.null(g)) { missing_note("signature_reversal", nm, "reversal_genes.csv"); next }
   # Report-only: drop the vector/transgene features, same as every DE table and
-  # volcano above (de_results()). The negative control pairs E6_vs_EmptyVector
+  # volcano above (de_results()). The negative control pairs EmptyVector_vs_E6
   # as its signature, so EGFP/mCherry would otherwise dominate it.
   g <- g[!tolower(g$gene_id) %in% tolower(params$exclude_genes), , drop = FALSE]
   if (!nrow(g)) { cat("\n> No genes left after excluding vector/transgene features.\n\n"); next }
@@ -744,9 +744,9 @@ if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
 
 ```{r e6-three, fig.height = 4.5, results = "asis"}
 trio <- list(
-  c("EmptyVector_vs_ATRX_FL",  "ATRX_FL",  "EmptyVector",
+  c("ATRX_FL_vs_EmptyVector",  "ATRX_FL",  "EmptyVector",
     "Full-length rescue against its own transduced control"),
-  c("EmptyVector_vs_ATRX_IFF", "ATRX_IFF", "EmptyVector",
+  c("ATRX_IFF_vs_EmptyVector", "ATRX_IFF", "EmptyVector",
     "In-frame fusion against the same control")
 )
 trio_tally <- list()
@@ -765,12 +765,12 @@ for (t4 in trio) {
 ### The two constructs against each other
 
 ```{r e6-three-fl-iff-rna, fig.height = 4.5, results = "asis"}
-r_fl_iff <- de_results("deseq2", "ATRX_FL_vs_ATRX_IFF", "results.csv")
+r_fl_iff <- de_results("deseq2", "ATRX_IFF_vs_ATRX_FL", "results.csv")
 if (is.null(r_fl_iff)) {
-  missing_note("deseq2", "ATRX_FL_vs_ATRX_IFF", "results.csv")
+  missing_note("deseq2", "ATRX_IFF_vs_ATRX_FL", "results.csv")
 } else {
-  trio_tally[["ATRX_FL_vs_ATRX_IFF"]] <- de_counts(r_fl_iff)
-  print(volcano(r_fl_iff, "ATRX_FL_vs_ATRX_IFF", num = "ATRX_IFF", den = "ATRX_FL"))
+  trio_tally[["ATRX_IFF_vs_ATRX_FL"]] <- de_counts(r_fl_iff)
+  print(volcano(r_fl_iff, "ATRX_IFF_vs_ATRX_FL", num = "ATRX_IFF", den = "ATRX_FL"))
   cat("\n\n")
   print(kable(top_genes(r_fl_iff, n = 8)))
 }
@@ -787,7 +787,7 @@ if (!is.null(r_fl_iff)) {
         paste0("`", params$proteomics_comparison, "`.\n\n"))
   } else {
     cat("\n\n**Proteomics concordance (RNA vs LC-MS/MS protein), same contrast:**\n\n")
-    print(proteomic_volcano(r_fl_iff, "Proteomics-filtered: ATRX_FL_vs_ATRX_IFF",
+    print(proteomic_volcano(r_fl_iff, "Proteomics-filtered: ATRX_IFF_vs_ATRX_FL",
                             num = "ATRX_IFF", den = "ATRX_FL", prot_sig))
   }
 }
@@ -808,13 +808,13 @@ if (length(trio_tally)) {
 ```{r e6-goi, fig.height = 4}
 # Size factors (and so normalised counts) are fit from all samples for every
 # contrast, so any contrast's normalized_counts.csv carries the same values —
-# reuse TP53_vs_E6, already grabbed above.
-goi <- gene_long(grab("deseq2", "TP53_vs_E6", "normalized_counts.csv"), meta)
+# reuse E6_vs_TP53, already grabbed above.
+goi <- gene_long(grab("deseq2", "E6_vs_TP53", "normalized_counts.csv"), meta)
 if (!is.null(goi)) {
   goi <- goi %>% filter(tolower(gene_id) %in% tolower(params$highlight_genes))
 }
 if (is.null(goi) || nrow(goi) == 0) {
-  missing_note("deseq2", "TP53_vs_E6", "normalized_counts.csv")
+  missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
 } else {
   print(
     goi %>% filter(condition != "TP53") %>%
@@ -867,8 +867,8 @@ gsea_dot <- function(df, title, top = 12) {
   )
 }
 # EDIT: which contrasts to show enrichment for.
-for (cn in c("ATRX_FL_vs_ATRX_IFF", "EmptyVector_vs_ATRX_FL",
-             "EmptyVector_vs_ATRX_IFF")) {
+for (cn in c("ATRX_IFF_vs_ATRX_FL", "ATRX_FL_vs_EmptyVector",
+             "ATRX_IFF_vs_EmptyVector")) {
   g <- grab("gsea", cn, "H_results.csv")
   cat("\n\n##", cn, "\n\n")
   if (is.null(g)) { missing_note("gsea", cn, "H_results.csv"); next }
@@ -886,7 +886,7 @@ MSigDB's frozen snapshot. Unlike the collection dotplot above, **every** pathway
 in a category is shown: a category is a short fixed list, so the pathways that
 did not move are part of the answer. Filled points are `padj < 0.05` and coloured
 across that range; hollow grey points did not reach it. Restricted to the
-headline `ATRX_FL_vs_ATRX_IFF` contrast — the cleanest comparison in the design.
+headline `ATRX_IFF_vs_ATRX_FL` contrast — the cleanest comparison in the design.
 
 ```{r kegg-categories, fig.height = 4.5, results = "asis"}
 KEGG_CATS <- c(replication_and_repair       = "Replication and repair",
@@ -924,7 +924,7 @@ kegg_cat_dot <- function(df, title) {
 }
 
 # EDIT: which contrast to show category panels for. Headline contrast only.
-cn <- "ATRX_FL_vs_ATRX_IFF"
+cn <- "ATRX_IFF_vs_ATRX_FL"
 for (slug in names(KEGG_CATS)) {
   g <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
   cat("\n\n###", KEGG_CATS[[slug]], "\n\n")

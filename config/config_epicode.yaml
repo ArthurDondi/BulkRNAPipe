@@ -129,28 +129,26 @@ samples:
 # List the pairwise comparisons DESeq2 should perform.
 # Each entry: [name, numerator_condition, denominator_condition]
 #
-# NOTE ON NAMING: the names here read {denominator}_vs_{numerator}, which is the
-# reverse of how "A_vs_B" is usually read.  TP53_vs_ATRX_FL has ATRX_FL as the
-# numerator, so its log2FC is ATRX_FL / TP53.  The convention is applied
-# consistently across every contrast below — keep it that way when adding new
-# ones, and read the numerator/denominator fields rather than the name.
+# Name reads {numerator}_vs_{denominator}: E6_vs_TP53 has E6 as the numerator,
+# so its log2FC is E6 / TP53. Applied consistently across every contrast below
+# — keep it that way when adding new ones.
 DESeq2:
   contrasts:
     # Each contrast: [name_for_output, numerator, denominator(reference)]
     # Compare ATRX+ cell line vs. ATRX- (E6) cell line
-    - [TP53_vs_E6, E6, TP53]
+    - [E6_vs_TP53, E6, TP53]
     # Compare E6 alone vs. E6 + empty vector
-    - [E6_vs_EmptyVector, EmptyVector, E6]
+    - [EmptyVector_vs_E6, EmptyVector, E6]
     # Compare E6 + empty vector vs. E6 + ATRX full-length
-    - [EmptyVector_vs_ATRX_FL, ATRX_FL, EmptyVector]
+    - [ATRX_FL_vs_EmptyVector, ATRX_FL, EmptyVector]
     # Compare empty vector vs. ATRX in-frame fusion
-    - [EmptyVector_vs_ATRX_IFF, ATRX_IFF, EmptyVector]
+    - [ATRX_IFF_vs_EmptyVector, ATRX_IFF, EmptyVector]
     # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
-    - [ATRX_FL_vs_ATRX_IFF, ATRX_IFF, ATRX_FL]
+    - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
     # Compare ATRX+ cell line vs. ATRX in-frame fusion
-    - [TP53_vs_ATRX_IFF, ATRX_IFF, TP53]
+    - [ATRX_IFF_vs_TP53, ATRX_IFF, TP53]
     # Compare ATRX+ cell line vs. ATRX FL (rescue experiment)
-    - [TP53_vs_ATRX_FL, ATRX_FL, TP53]
+    - [ATRX_FL_vs_TP53, ATRX_FL, TP53]
 
 
   # ─── Combined / derived conditions ─────────────────────────────────────────
@@ -177,7 +175,7 @@ DESeq2:
       - EmptyVector
 
   # ─── Interaction contrasts (difference of differences) ────────────────────
-  # TP53_vs_ATRX_FL as a plain contrast mixes three things that cannot be
+  # ATRX_FL_vs_TP53 as a plain contrast mixes three things that cannot be
   # separated: ATRX status, the clonal background, and the transduction step.
   # The difference of differences removes the last two by cancellation — the
   # rescue effect is measured inside the transduced E6 background, the knockout
@@ -334,22 +332,23 @@ Proteomics:
   #   SE6   = E6  |  control = TP53
   #
   # DIRECTION: the proteomics column names read {numerator}_vs_{denominator},
-  # the opposite of the DESeq2 contrast names above.  Every mapping below has
-  # been checked to pair the same numerator and denominator on both sides, e.g.
-  # TP53_vs_ATRX_FL (log2FC = ATRX_FL/TP53) -> S1011_vs_control (= ATRX_FL/TP53).
-  # Getting this backwards would invert the concordance colouring on the
-  # proteomics volcano, so re-check it whenever a mapping is added.
+  # the same convention as the DESeq2 contrast names above.  Every mapping below
+  # has been checked to pair the same numerator and denominator on both sides,
+  # e.g. ATRX_FL_vs_TP53 (log2FC = ATRX_FL/TP53) -> S1011_vs_control (=
+  # ATRX_FL/TP53). Getting this backwards would invert the concordance
+  # colouring on the proteomics volcano, so re-check it whenever a mapping is
+  # added.
   #
   # Note: ATRX_Ctrl (DESeq2 combined NoVector+EmptyVector) has no direct
   # proteomics equivalent; the vs-control comparisons are the closest match.
   deseq2_to_proteomics_comparison:
-    #TP53_vs_E6:       "SE6_vs_control"
-    E6_vs_EmptyVector:  "S1760_vs_SE6"
-    #EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
-    #EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
-    ATRX_FL_vs_ATRX_IFF:                "S1744_vs_S1011"
-    TP53_vs_ATRX_FL:               "S1011_vs_control" 
-    TP53_vs_ATRX_IFF:              "S1744_vs_control"   
+    #E6_vs_TP53:        "SE6_vs_control"
+    EmptyVector_vs_E6:  "S1760_vs_SE6"
+    #ATRX_FL_vs_EmptyVector:        "S1011_vs_S1760"
+    #ATRX_IFF_vs_EmptyVector:       "S1744_vs_S1760"
+    ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
+    ATRX_FL_vs_TP53:               "S1011_vs_control"
+    ATRX_IFF_vs_TP53:              "S1744_vs_control"
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
@@ -403,20 +402,20 @@ GO:
 # background, so the clonal difference between TP53 and the E6 lineage never
 # enters the comparison.
 #
-# TP53_vs_E6 has E6 as numerator, so its log2FC is "KO relative to ATRX-WT".
-# EmptyVector_vs_ATRX_FL has ATRX_FL as numerator, so its log2FC is "rescue
+# E6_vs_TP53 has E6 as numerator, so its log2FC is "KO relative to ATRX-WT".
+# ATRX_FL_vs_EmptyVector has ATRX_FL as numerator, so its log2FC is "rescue
 # relative to the transduced control".  A working rescue makes the second the
 # mirror image of the first: negative slope, reversal score near 1.
 SignatureReversal:
   - name: ATRX_FL_reverses_KO_signature
-    signature_contrast: TP53_vs_E6
-    response_contrast:  EmptyVector_vs_ATRX_FL
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_FL_vs_EmptyVector
     padj_threshold: 0.05
     lfc_threshold: 0.0
     restored_fraction: 0.5
   - name: ATRX_IFF_reverses_KO_signature
-    signature_contrast: TP53_vs_E6
-    response_contrast:  EmptyVector_vs_ATRX_IFF
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_IFF_vs_EmptyVector
     padj_threshold: 0.05
     lfc_threshold: 0.0
     restored_fraction: 0.5
@@ -428,14 +427,14 @@ SignatureReversal:
   # regression dilution.  Requiring |log2FC| >= 1 keeps the genes where a real
   # effect exists.  Both versions are run so the two can be compared.
   - name: ATRX_FL_reverses_KO_signature_lfc1
-    signature_contrast: TP53_vs_E6
-    response_contrast:  EmptyVector_vs_ATRX_FL
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_FL_vs_EmptyVector
     padj_threshold: 0.05
     lfc_threshold: 1.0
     restored_fraction: 0.5
   - name: ATRX_IFF_reverses_KO_signature_lfc1
-    signature_contrast: TP53_vs_E6
-    response_contrast:  EmptyVector_vs_ATRX_IFF
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_IFF_vs_EmptyVector
     padj_threshold: 0.05
     lfc_threshold: 1.0
     restored_fraction: 0.5
@@ -454,14 +453,14 @@ SignatureReversal:
   # it scores like ATRX_FL does, the metric is picking up generic structure
   # rather than ATRX biology, and the rescue scores mean much less.
   - name: NEGATIVE_CONTROL_vector_signature_vs_FL_IFF
-    signature_contrast: E6_vs_EmptyVector
-    response_contrast:  ATRX_FL_vs_ATRX_IFF
+    signature_contrast: EmptyVector_vs_E6
+    response_contrast:  ATRX_IFF_vs_ATRX_FL
     padj_threshold: 0.05
     lfc_threshold: 1.0
     restored_fraction: 0.5
 
   # NOTE: there is deliberately no EmptyVector-vs-E6 negative control here.  The only
-  # candidate, TP53_vs_E6 against E6_vs_EmptyVector, shares the E6 group: E6
+  # candidate, E6_vs_TP53 against EmptyVector_vs_E6, shares the E6 group: E6
   # enters the signature as the numerator and the response as the denominator,
   # so its sampling noise appears with opposite signs on the two axes and
   # manufactures a negative correlation with no biology involved.  On pure noise
@@ -482,15 +481,15 @@ SignatureReversal:
 #   (ATRX_IFF - ATRX_FL) - (ATRX_IFF - TP53)  =  TP53 - ATRX_FL
 # so it is a TP53-vs-ATRX_FL comparison in disguise — it crosses the clonal and
 # transduction boundaries rather than removing anything.  Meanwhile
-# ATRX_FL_vs_ATRX_IFF on its own already needs no normalisation: both groups sit
+# ATRX_IFF_vs_ATRX_FL on its own already needs no normalisation: both groups sit
 # in the same clone with the same vector, so those effects cancel by
 # construction.  Kept here because ΔNES on ranks is not exactly the gene-level
 # algebra, but treat the output as exploratory and prefer the two
 # SignatureReversal scores above for comparing FL against IFF as rescues.
 ContrastComparisons:
   - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
-    contrast_A: ATRX_FL_vs_ATRX_IFF
-    contrast_B: TP53_vs_ATRX_IFF
+    contrast_A: ATRX_IFF_vs_ATRX_FL
+    contrast_B: ATRX_IFF_vs_TP53
     delta_nes: True
     residual_rank: True
 
