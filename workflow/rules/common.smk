@@ -325,8 +325,31 @@ for _k, _v in _qc_labels.items():
         )
 
 _qc_total = _qc_cfg.get('total_feature') or {}
-DESIGN_QC_TOTAL_NAME  = str(_qc_total.get('name', 'ATRX_Total'))
-DESIGN_QC_TOTAL_GENES = [str(g) for g in (_qc_total.get('genes') or [])]
+DESIGN_QC_TOTAL_NAME    = str(_qc_total.get('name', 'ATRX_Total'))
+DESIGN_QC_TOTAL_GENES   = [str(g) for g in (_qc_total.get('genes') or [])]
+DESIGN_QC_SUBSTITUTE_AS = str(_qc_total.get('substitute_as', '') or '')
+
+if DESIGN_QC_SUBSTITUTE_AS and not DESIGN_QC_TOTAL_GENES:
+    raise ValueError(
+        "DesignQC.total_feature.substitute_as is set but "
+        "DesignQC.total_feature.genes is empty - nothing to pool."
+    )
+if DESIGN_QC_SUBSTITUTE_AS and (',' in DESIGN_QC_SUBSTITUTE_AS or '"' in DESIGN_QC_SUBSTITUTE_AS):
+    raise ValueError(
+        f"DesignQC.total_feature.substitute_as '{DESIGN_QC_SUBSTITUTE_AS}' must "
+        'not contain a comma or a double quote.'
+    )
+
+# quantify/counts.txt is NEVER modified. When substitute_as is set, DESeq2,
+# DESeq2Interaction and PCA read this derived matrix instead - genes are
+# dropped and total_feature's pooled counts stand in for the target gene.
+# Everything downstream of DESeq2 (GSEA, GO, signature reversal, the
+# proteomics overlay) inherits the substitution automatically, since none of
+# those rules read counts.txt directly.
+DOWNSTREAM_COUNTS = (
+    "design_qc/counts_substituted.txt" if DESIGN_QC_SUBSTITUTE_AS
+    else "quantify/counts.txt"
+)
 
 _qc_tag = _qc_cfg.get('tag') or {}
 DESIGN_QC_TAG_NAME    = str(_qc_tag.get('name', 'Tag'))

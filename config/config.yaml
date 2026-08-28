@@ -240,12 +240,24 @@ DesignQC:
   # contributes 1/NH.  The fragment is counted exactly once, whichever copy it
   # came from.  No re-alignment, and the main count matrix is not touched.
   #
-  # Counts are fractional and NOT valid DESeq2 input - this is a QC row only.
-  # Leave `genes` empty to disable.
+  # Counts are fractional, so on its own this is a QC row only - not valid
+  # DESeq2 input. Leave `genes` empty to disable.
   total_feature:
     name: ATRX_Total
     genes: []
     #   genes: [ATRX, ATRX_FL, ATRX_IFF]
+    #
+    # ── Feed it downstream instead of just plotting it (optional) ────────────
+    # Set substitute_as to a gene id (typically one of `genes` above, e.g.
+    # ATRX) to also produce a derived count matrix - quantify/counts.txt is
+    # never modified - where every gene in `genes` is dropped and
+    # total_feature's pooled counts (rounded to the nearest integer) stand in
+    # for substitute_as. DESeq2, DESeq2Interaction and PCA then read that
+    # matrix instead of the raw one; everything downstream of DESeq2 (GSEA,
+    # GO, signature reversal, the proteomics overlay) inherits it
+    # automatically, since none of those read counts.txt directly.
+    # Leave empty (the default) to run every analysis on the raw matrix.
+    substitute_as: ""
 
   # ─── Tag-only feature (optional) ────────────────────────────────────────────
   # A coordinate window shared by the vector contigs - typically the N-terminal

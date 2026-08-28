@@ -60,6 +60,7 @@ BulkRNAPipe/
 │       ├── deseq2.R                # DESeq2 differential expression
 │       ├── pca.R                   # PCA grid (sample sets x gene views)
 │       ├── design_qc.R              # Library-level confounder QC
+│       ├── substitute_total_feature.R  # Swaps a pooled total in for one gene downstream
 │       ├── deseq2_interaction.R     # Difference-of-differences contrasts
 │       ├── signature_reversal.R     # Rescue scored as signature reversal
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
@@ -275,6 +276,7 @@ output_dir/
 │   ├── marker_expression.pdf                 # Reporter / transgene expression (log10)
 │   ├── marker_expression_linear.pdf          # Same panel, linear axis
 │   ├── total_feature_counts.txt              # Pooled gene_ids, -M --fraction (optional)
+│   ├── counts_substituted.txt                # Derived matrix (optional, see substitute_as)
 │   ├── tag_counts.txt                        # Vector tag window, -M --fraction (optional)
 │   ├── goi_expression.pdf                    # Endogenous genes of interest
 │   ├── sample_correlation.pdf                # Spearman correlation, all samples
@@ -714,14 +716,42 @@ Leave `genes` / `regions` empty to disable either one. Three caveats:
 - **The tag is a coordinate range, not a sequence match.** It is only correct if
   the contigs begin at the construct's first base — check `start`/`end` against
   the reference FASTA.
-- **Counts are fractional** and are not valid DESeq2 input. These rows never
-  enter `quantify/counts.txt`, so size factors, the VST and the correlation
-  heatmaps are untouched.
+- **Counts are fractional** and are not valid DESeq2 input on their own. These
+  rows never enter `quantify/counts.txt`, so size factors, the VST and the
+  correlation heatmaps are untouched — unless `total_feature.substitute_as` is
+  set (below), which feeds a rounded copy into a *separate*, derived matrix.
 - **The pooled row is not on the same footing as the rows below it**, since it
   includes multimappers and they do not. The panel subtitle says so.
 
 Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
 and coverage-uniformity metrics that are not recomputed here.
+
+#### Feeding `total_feature` downstream
+
+By default `total_feature` is a QC row only — DESeq2 and everything after it
+keep seeing the endogenous locus and each construct as separate genes. Set
+`substitute_as` to make the pooled total the gene those analyses actually use:
+
+```yaml
+DesignQC:
+  total_feature:
+    name: ATRX_Total
+    genes: [ATRX, ATRX_FL, ATRX_IFF]
+    substitute_as: ATRX   # pooled total stands in for this gene id downstream
+```
+
+This writes `design_qc/counts_substituted.txt` — `quantify/counts.txt` itself
+is **never modified** — where `genes` are dropped and `total_feature`'s pooled
+counts, rounded to the nearest integer, stand in for `substitute_as`. `DESeq2`,
+`DESeq2Interaction` and `PCA` read that matrix instead of the raw one; GSEA, GO,
+signature reversal and the proteomics overlay all key off DESeq2's own results
+rather than the count matrix, so they inherit the substitution automatically.
+`design_qc` itself is unaffected — it always runs on the untouched matrix and
+keeps plotting the endogenous locus and each construct separately, since that
+per-source breakdown is the whole point of the QC panel.
+
+Leave `substitute_as` empty (the default) to run every analysis on the raw
+matrix.
 
 ## Analysis report
 

@@ -17,7 +17,7 @@ rule PCA:
     limma::removeBatchEffect panel that is for visual inspection only.
     """
     input:
-        counts = "quantify/counts.txt",
+        counts = DOWNSTREAM_COUNTS,
     output:
         pc12          = "pca/{sampleset}/{view}_pc12.pdf",
         pc34          = "pca/{sampleset}/{view}_pc34.pdf",

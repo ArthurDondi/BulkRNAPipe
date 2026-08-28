@@ -2,7 +2,7 @@
 
 rule DESeq2:
     input:
-        counts = "quantify/counts.txt",
+        counts = DOWNSTREAM_COUNTS,
     output:
         results       = "deseq2/{contrast}/results.csv",
         norm_counts   = "deseq2/{contrast}/normalized_counts.csv",
@@ -59,7 +59,7 @@ rule DESeq2Interaction:
     modelled, at the cost of assuming it is the same size in both pairs.
     """
     input:
-        counts = "quantify/counts.txt",
+        counts = DOWNSTREAM_COUNTS,
     output:
         results     = "deseq2_interaction/{interaction}/results.csv",
         components  = "deseq2_interaction/{interaction}/components.csv",
