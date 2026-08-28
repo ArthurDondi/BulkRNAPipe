@@ -340,14 +340,26 @@ if DESIGN_QC_SUBSTITUTE_AS and (',' in DESIGN_QC_SUBSTITUTE_AS or '"' in DESIGN_
         'not contain a comma or a double quote.'
     )
 
-# quantify/counts.txt is NEVER modified. When substitute_as is set, DESeq2,
-# DESeq2Interaction and PCA read this derived matrix instead - genes are
-# dropped and total_feature's pooled counts stand in for the target gene.
-# Everything downstream of DESeq2 (GSEA, GO, signature reversal, the
-# proteomics overlay) inherits the substitution automatically, since none of
-# those rules read counts.txt directly.
+# Genes removed outright downstream of design_qc, no substitute - e.g. reporter
+# genes (EGFP/mCherry) that should never enter DESeq2. Independent of
+# total_feature.substitute_as above; either or both may be set.
+DESIGN_QC_DOWNSTREAM_EXCLUDE = [str(g) for g in (_qc_cfg.get('downstream_exclude_genes') or [])]
+
+for _g in DESIGN_QC_DOWNSTREAM_EXCLUDE:
+    if ',' in _g or '"' in _g:
+        raise ValueError(
+            f"DesignQC.downstream_exclude_genes: '{_g}' must not contain a "
+            "comma or a double quote."
+        )
+
+# quantify/counts.txt is NEVER modified. When substitute_as and/or
+# downstream_exclude_genes is set, DESeq2, DESeq2Interaction and PCA read this
+# derived matrix instead. Everything downstream of DESeq2 (GSEA, GO, signature
+# reversal, the proteomics overlay) inherits the adjustment automatically,
+# since none of those rules read counts.txt directly.
 DOWNSTREAM_COUNTS = (
-    "design_qc/counts_substituted.txt" if DESIGN_QC_SUBSTITUTE_AS
+    "design_qc/counts_substituted.txt"
+    if DESIGN_QC_SUBSTITUTE_AS or DESIGN_QC_DOWNSTREAM_EXCLUDE
     else "quantify/counts.txt"
 )
 

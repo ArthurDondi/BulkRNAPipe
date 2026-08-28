@@ -259,6 +259,16 @@ DesignQC:
     # Leave empty (the default) to run every analysis on the raw matrix.
     substitute_as: ""
 
+  # ─── Genes dropped downstream, no substitute (optional) ─────────────────────
+  # Independent of total_feature.substitute_as above - either or both may be
+  # set. Genes listed here are removed outright from the same derived matrix
+  # DESeq2/DESeq2Interaction/PCA read: quantify/counts.txt is never modified,
+  # and design_qc keeps plotting them if they are also listed in `genes` above.
+  # Typical use: reporter genes (EGFP, mCherry) that have no biology to
+  # substitute in and should simply never reach DESeq2.
+  #   downstream_exclude_genes: [EGFP, mCherry]
+  downstream_exclude_genes: []
+
   # ─── Tag-only feature (optional) ────────────────────────────────────────────
   # A coordinate window shared by the vector contigs - typically the N-terminal
   # purification tag, which is identical across constructs and absent from the

@@ -127,22 +127,25 @@ rule DesignQCTagCounts:
         """
 
 rule DesignQCSubstituteTotal:
-    """Swap total_feature's pooled counts in for one gene, downstream of design_qc.
+    """Adjust the count matrix downstream of design_qc: swap total_feature's
+    pooled counts in for one gene and/or drop other genes outright.
 
     quantify/counts.txt is never touched; this only runs when
-    DesignQC.total_feature.substitute_as is set (DOWNSTREAM_COUNTS then points
-    at the output here instead of the raw matrix).
+    DesignQC.total_feature.substitute_as and/or
+    DesignQC.downstream_exclude_genes is set (DOWNSTREAM_COUNTS then points at
+    the output here instead of the raw matrix).
     """
     input:
         counts = "quantify/counts.txt",
-        total  = "design_qc/total_feature_counts.txt",
+        total  = "design_qc/total_feature_counts.txt" if DESIGN_QC_SUBSTITUTE_AS else [],
     output:
         counts = "design_qc/counts_substituted.txt",
     params:
-        script      = f"{workflow.basedir}/scripts/substitute_total_feature.R",
-        total_name  = DESIGN_QC_TOTAL_NAME,
-        target_gene = DESIGN_QC_SUBSTITUTE_AS,
-        drop_genes  = ",".join(DESIGN_QC_TOTAL_GENES),
+        script           = f"{workflow.basedir}/scripts/substitute_total_feature.R",
+        total_name       = DESIGN_QC_TOTAL_NAME,
+        target_gene      = DESIGN_QC_SUBSTITUTE_AS,
+        drop_genes       = ",".join(DESIGN_QC_TOTAL_GENES),
+        extra_drop_genes = ",".join(DESIGN_QC_DOWNSTREAM_EXCLUDE),
     threads: 1
     resources:
         mem_mb        = 4000,
@@ -159,12 +162,13 @@ rule DesignQCSubstituteTotal:
         exec > {log} 2>&1
         mkdir -p design_qc
         Rscript {params.script} \
-            --counts      {input.counts} \
-            --total       {input.total} \
-            --total_name  "{params.total_name}" \
-            --target_gene "{params.target_gene}" \
-            --drop_genes  "{params.drop_genes}" \
-            --output      {output.counts}
+            --counts           {input.counts} \
+            --total            "{input.total}" \
+            --total_name       "{params.total_name}" \
+            --target_gene      "{params.target_gene}" \
+            --drop_genes       "{params.drop_genes}" \
+            --extra_drop_genes "{params.extra_drop_genes}" \
+            --output           {output.counts}
         """
 
 

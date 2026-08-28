@@ -786,6 +786,20 @@ per-source breakdown is the whole point of the QC panel.
 Leave `substitute_as` empty (the default) to run every analysis on the raw
 matrix.
 
+**Dropping genes downstream with no substitute.** `downstream_exclude_genes`
+is the same idea for genes that have nothing to be pooled into — typically
+reporter genes:
+
+```yaml
+DesignQC:
+  downstream_exclude_genes: [EGFP, mCherry]
+```
+
+Independent of `total_feature.substitute_as` — either or both may be set, and
+both write to the same `design_qc/counts_substituted.txt`. `quantify/counts.txt`
+is still never modified, and `design_qc` still plots these genes if they are
+also listed in `DesignQC.genes`.
+
 ## Analysis report
 
 `report/analysis_report.Rmd` renders a single self-contained HTML (or PDF)

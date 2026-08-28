@@ -214,14 +214,12 @@ DESeq2:
 # pca.R prints a WARNING to logs/PCA/*.log for any entry that matches nothing.
 #
 # PCA reads the counts matrix downstream of design_qc's total_feature
-# substitution (see DesignQC.total_feature.substitute_as below): ATRX_FL and
-# ATRX_IFF no longer exist as separate rows there, and ATRX is the pooled
-# ATRX_Total.
+# substitution and downstream_exclude_genes (see DesignQC below): ATRX_FL,
+# ATRX_IFF, EGFP and mCherry no longer exist as separate rows there (ATRX is
+# the pooled ATRX_Total), so exclude_genes below has nothing left to do for
+# them - left empty rather than listing entries that would only ever warn.
 PCA:
-  # Reporter features: zero in TP53 and E6, high in the three transduced groups.
-  exclude_genes:
-    - EGFP
-    - mCherry
+  exclude_genes: []
   exclude_gene_patterns: []
   exclude_contigs: []
   # The transgene (pooled total, post-substitution).  ATRX is the variable
@@ -313,6 +311,14 @@ DesignQC:
     # on the untouched matrix and keeps plotting ATRX/ATRX_FL/ATRX_IFF
     # separately. Leave unset to run every analysis on the raw matrix.
     substitute_as: ATRX
+
+  # Reporter genes: no ATRX-biology content, nothing to substitute them with -
+  # just drop them from the same derived matrix DESeq2/DESeq2Interaction/PCA
+  # read (see total_feature.substitute_as above; quantify/counts.txt itself is
+  # never modified and design_qc keeps plotting them via `genes` above).
+  downstream_exclude_genes:
+    - EGFP
+    - mCherry
 
   # Twin-Strep-tag + 10xHis, nt 1-117 of both construct contigs (39 codons:
   # StrepII + GGGSx3 linker + StrepII + 10xHis), immediately followed by the
