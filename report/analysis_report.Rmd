@@ -776,7 +776,11 @@ if (is.null(r_fl_iff)) {
 }
 ```
 
-> _Add interpretation here._
+> HOXB, PAX6 and SIM2 are overexpressed in `ATRX_IFF` compared to `ATRX_FL`. 
+> They are canonical targets of Polycomb Repressive Complex 2 (PRC2).
+> `ATRX_IFF` lacks its EZH2 (PRC2 member) interacting domain. Hypothesis: it fails recruiting PRC2 at the HOXB locus,
+> leading to a de-repression of those genes.
+
 
 ```{r e6-three-fl-iff-prot, fig.height = 4.5, results = "asis"}
 if (!is.null(r_fl_iff)) {
@@ -793,7 +797,12 @@ if (!is.null(r_fl_iff)) {
 }
 ```
 
-> _Add interpretation here._
+> The volcano plot above is the same as the previous one, only filtered for genes that are significant hits in the proteomics analysis.
+> Most proteomic hits are not significantly overexpressed on the transcriptomic level. When they are overexpressed, hits are concording:
+> a protein that interacted more with `ATRX_IFF` than `ATRX_FL` has its gene overexpressed in `ATRX_IFF`.
+> RMM2 is an E2F1 target, CDK6 is an upstream activator of E2F (via RB phosphorylation). TFRC is a MYC target.
+> IGF2BP1 is one of the top upregulated gene in `ATRX_IFF` and is a known stabilizator for E2F/MYC mRNAs (also binds to HOXB).
+
 
 ```{r e6-trio-tally}
 if (length(trio_tally)) {
@@ -833,10 +842,10 @@ if (is.null(goi) || nrow(goi) == 0) {
 }
 ```
 
-> Here, we got more coherent results in both HOXB genes:
-> taking E6 as baseline, we can see that HOXB expression is always lower in `ATRX_FL` 
-> than `E6`, while it is much higher in `ATRX_IFF`. Interestingly, this could mean that `ATRX_IFF` has an acitve role in disturbing PRC2
-> 
+> Taking E6 as baseline, we can see that HOXB expression is always lower in `ATRX_FL` 
+> than `E6`, while it is much higher in `ATRX_IFF`. This support a role of ATRX in repressing HOXB expression.
+> The overexpression of HOXB genes in `ATRX_IFF` compared to `E6` could mean that the fusion has an active role in HOXB expression, 
+> more than just not recruiting PRC2.
 
 ---
 
@@ -933,14 +942,4 @@ for (slug in names(KEGG_CATS)) {
 }
 ```
 
----
 
-# Summary
-
-TBD
-
-```{r session, results = "asis"}
-cat("\n<details><summary>Session info</summary>\n\n```\n")
-cat(capture.output(sessionInfo()), sep = "\n")
-cat("\n```\n</details>\n")
-```
