@@ -893,23 +893,53 @@ for (cn in c("ATRX_IFF_vs_ATRX_FL", "ATRX_FL_vs_EmptyVector",
 > Hallmark proliferation sets (E2F, G2M, MYC) are enriched in `ATRX_IFF` compared to `ATRX_FL`, and
 > the inflammatory/interferon sets are enriched in `ATRX_FL`.
 
-## KEGG pathway categories
+## Pathway categories
 
-The five KEGG BRITE categories, drawn from the live KEGG definitions rather than
-MSigDB's frozen snapshot. Unlike the collection dotplot above, **every** pathway
-in a category is shown: a category is a short fixed list, so the pathways that
-did not move are part of the answer. Filled points are `padj < 0.05` and coloured
-across that range; hollow grey points did not reach it. Restricted to the
-headline `ATRX_IFF_vs_ATRX_FL` contrast — the cleanest comparison in the design.
+Two complementary views of the same five categories, restricted to the
+headline `ATRX_IFF_vs_ATRX_FL` contrast — the cleanest comparison in the
+design. Filled points are `padj < 0.05` and coloured across that range;
+hollow grey points did not reach it.
 
-```{r kegg-categories, fig.height = 4.5, results = "asis"}
-KEGG_CATS <- c(replication_and_repair       = "Replication and repair",
-               chromosome                   = "Chromosome",
-               cell_growth_and_death        = "Cell growth and death",
-               nervous_system               = "Nervous system",
-               development_and_regeneration = "Development and regeneration")
+- **KEGG**, drawn from the live KEGG definitions rather than MSigDB's frozen
+  snapshot. A category here is a short, fixed pathway list, so **every**
+  pathway in it is shown — the ones that did not move are part of the answer.
+- **GO** has no KEGG-style categories, so each group is instead a **keyword
+  search**: a case-insensitive regular expression matched against GO
+  biological-process term *names*. That is a text search, not an ontology
+  traversal — it pulls in terms that merely share a word and misses terms
+  that describe the same biology differently. The exact pattern used for each
+  category is printed under its panel below, copied verbatim from
+  `workflow/resources/go_categories.tsv`, so the match is never a black box.
+  A keyword can pull in dozens of terms, so the figure is capped at the top
+  25 by `padj`; `gsea/{contrast}/go/{category}_results.csv` keeps every match.
 
-kegg_cat_dot <- function(df, title) {
+```{r pathway-categories, fig.height = 4.5, results = "asis"}
+CATEGORY_LABELS <- c(replication_and_repair       = "Replication and repair",
+                      chromosome                   = "Chromosome",
+                      cell_growth_and_death        = "Cell growth and death",
+                      nervous_system               = "Nervous system",
+                      development_and_regeneration = "Development and regeneration")
+
+# The GO include regexes actually used for each category
+# (workflow/resources/go_categories.tsv), copied here so the reasoning behind
+# each GO panel sits right next to it instead of only living in the pipeline.
+# All five have no exclude pattern ("-" in the TSV).
+GO_KEYWORDS <- c(
+  replication_and_repair =
+    "DNA_REPLICATION|DNA_REPAIR|MISMATCH_REPAIR|EXCISION_REPAIR|DOUBLE_STRAND_BREAK|HOMOLOGOUS_RECOMBINATION|END_JOINING|REPLICATION_FORK|TRANSLESION|POSTREPLICATION|DNA_DAMAGE_CHECKPOINT|DNA_INTEGRITY",
+  chromosome =
+    "CHROMATIN|CHROMOSOM|NUCLEOSOME|HISTONE|HETEROCHROMATIN|EUCHROMATIN|CENTROMER|KINETOCHORE|TELOMER|COHESIN|CONDENSIN|SISTER_CHROMATID|DNA_PACKAGING|POLYCOMB",
+  cell_growth_and_death =
+    "CELL_CYCLE|MITOTIC|MEIOTIC|MEIOSIS|APOPTOT|APOPTOSIS|NECROPTO|FERROPTO|PYROPTO|CELL_DEATH|SENESCENCE|CELL_PROLIFERATION|GROWTH_ARREST|G1_S_TRANSITION|G2_M_TRANSITION|SPINDLE_CHECKPOINT",
+  nervous_system =
+    "NEURON|NEURAL|NEURO|SYNAP|AXON|DENDRIT|GLIAL|ASTROCYTE|OLIGODENDROCYTE|NEUROTRANSMITTER|NERVE|FOREBRAIN|HINDBRAIN|MIDBRAIN|LONG_TERM_POTENTIATION|LONG_TERM_SYNAPTIC",
+  development_and_regeneration =
+    "DEVELOPMENT|MORPHOGENESIS|REGENERATION|PATTERN_SPECIFICATION|ORGANOGENESIS|CELL_FATE|AXIS_SPECIFICATION|STEM_CELL_DIFFERENTIATION|TISSUE_REMODELING"
+)
+# Matches GSEA.go_categories_top_n in config_epicode.yaml.
+GO_TOP_N <- 25
+
+cat_dot <- function(df, title) {
   if (is.null(df) || !nrow(df)) return(invisible(NULL))
   cut <- params$padj
   df$significant <- !is.na(df$padj) & df$padj < cut
@@ -939,11 +969,37 @@ kegg_cat_dot <- function(df, title) {
 
 # EDIT: which contrast to show category panels for. Headline contrast only.
 cn <- "ATRX_IFF_vs_ATRX_FL"
-for (slug in names(KEGG_CATS)) {
-  g <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
-  cat("\n\n###", KEGG_CATS[[slug]], "\n\n")
-  if (is.null(g)) { missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv")); next }
-  kegg_cat_dot(g, paste(KEGG_CATS[[slug]], "-", cn))
+for (slug in names(CATEGORY_LABELS)) {
+  label <- CATEGORY_LABELS[[slug]]
+  cat("\n\n###", label, "\n\n")
+
+  cat("\n\n**KEGG** — every pathway in the category\n\n")
+  gk <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+  if (is.null(gk)) {
+    missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+  } else {
+    cat_dot(gk, paste("KEGG:", label))
+  }
+  cat("\n\n")
+
+  cat("\n\n**GO** — keyword match on term names\n\n")
+  cat(sprintf("\n> include: `%s`\n\n", GO_KEYWORDS[[slug]]))
+  gg <- grab("gsea", cn, "go", paste0(slug, "_results.csv"))
+  if (is.null(gg)) {
+    missing_note("gsea", cn, "go", paste0(slug, "_results.csv"))
+  } else {
+    n_matched <- nrow(gg)
+    gg <- gg[order(gg$padj, -abs(gg$NES)), , drop = FALSE]
+    if (n_matched > GO_TOP_N) {
+      cat(sprintf(
+        "\n> top %d of %d matched terms by padj; the rest are in `gsea/%s/go/%s_results.csv`\n\n",
+        GO_TOP_N, n_matched, cn, slug))
+      gg <- gg[seq_len(GO_TOP_N), , drop = FALSE]
+    }
+    gg$pathway <- gsub("^GOBP_", "", gg$pathway)
+    cat_dot(gg, paste("GO:", label))
+  }
+  cat("\n\n")
 }
 ```
 
