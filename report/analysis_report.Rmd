@@ -294,6 +294,55 @@ proteomic_volcano <- function(res, title, num, den, prot_sig) {
       y = expression(-log[10] ~ "adjusted p"), colour = NULL) +
     theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5), legend.position = "bottom")
 }
+
+# The full RNA volcano (volcano()'s own grey/red dots, every gene), with
+# proteomics-significant genes redrawn as stars on top: green if also
+# RNA-significant, black otherwise. Only the green (RNA + protein agree on
+# significance) stars are labelled, same top-gene labelling convention as
+# volcano() itself.
+volcano_with_proteomic <- function(res, title, num, den, prot_sig) {
+  res <- res %>% filter(!is.na(padj)) %>%
+    mutate(sig = padj < params$padj & abs(log2FoldChange) >= params$lfc)
+  n <- c(up = sum(res$sig & res$log2FoldChange > 0),
+         down = sum(res$sig & res$log2FoldChange < 0))
+  stars <- res %>% inner_join(prot_sig, by = "gene_id")
+  stars_sig    <- stars %>% filter(sig)
+  stars_nonsig <- stars %>% filter(!sig)
+  p <- ggplot(res, aes(log2FoldChange, -log10(padj), colour = sig)) +
+    geom_point(size = 0.8, alpha = 0.5) +
+    geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed",
+               linewidth = 0.3) +
+    geom_hline(yintercept = -log10(params$padj), linetype = "dashed",
+               linewidth = 0.3) +
+    scale_colour_manual(values = c("FALSE" = "grey70", "TRUE" = "#B2182B"),
+                        guide = "none") +
+    labs(
+      title = title,
+      subtitle = sprintf(
+        paste0("%s significant (padj < %s, |log2FC| >= %s)\n",
+               "RIGHT, log2FC > 0: %s genes HIGHER in %s   |   ",
+               "LEFT, log2FC < 0: %s genes HIGHER in %s\n",
+               "★ proteomics-significant (FDR <= %s, |log2FC| > %s): ",
+               "green = also RNA-significant, black = not"),
+        format(sum(res$sig), big.mark = ","), params$padj, params$lfc,
+        format(n["up"], big.mark = ","), num,
+        format(n["down"], big.mark = ","), den,
+        params$proteomics_fdr_threshold, params$proteomics_lfc_threshold),
+      x = sprintf("log2FC  (%s / %s)   —   positive = higher in %s", num, den, num),
+      y = expression(-log[10] ~ "adjusted p")) +
+    theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5))
+  if (nrow(stars_nonsig)) {
+    p <- p + geom_point(data = stars_nonsig, shape = 8, size = 2, colour = "black")
+  }
+  if (nrow(stars_sig)) {
+    p <- p + geom_point(data = stars_sig, shape = 8, size = 2, colour = "#1B7837") +
+      ggrepel::geom_text_repel(
+        data = stars_sig, aes(label = gene_id), colour = "#1B7837",
+        fontface = "bold", size = 2.8, min.segment.length = 0, box.padding = 0.4,
+        segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE)
+  }
+  p
+}
 ```
 
 # Experimental design
@@ -808,6 +857,16 @@ if (!is.null(r_fl_iff)) {
 > RMM2 is an E2F1 target, CDK6 is an upstream activator of E2F (via RB phosphorylation). TFRC is a MYC target.
 > IGF2BP1 is one of the top upregulated gene in `ATRX_IFF` and is a known stabilizator for E2F/MYC mRNAs (also binds to HOXB).
 
+```{r e6-three-fl-iff-combo, fig.height = 4.5, results = "asis"}
+if (!is.null(r_fl_iff) && exists("prot_sig") && !is.null(prot_sig)) {
+  cat("\n\n**Combined view: all genes, proteomics-significant hits starred**\n\n")
+  print(volcano_with_proteomic(r_fl_iff, "ATRX_IFF_vs_ATRX_FL (proteomics overlay)",
+                               num = "ATRX_IFF", den = "ATRX_FL", prot_sig))
+}
+```
+
+> _Add interpretation here._
+
 
 ```{r e6-trio-tally}
 if (length(trio_tally)) {
@@ -946,12 +1005,16 @@ cat_dot <- function(df, title) {
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$NES)])
   sz <- range(df$size, na.rm = TRUE)
   brk <- if (sz[1] == sz[2]) sz[1] else unique(round(c(sz[1], mean(sz), sz[2])))
-  # Spell the direction out the same way the Hallmark dotplot above does.
+  # Spell the direction out the same way the Hallmark dotplot above does, and
+  # state the hollow/filled legend as text - same as the pipeline's own
+  # gsea_kegg.R / gsea_go_categories.R, which use two plain geom_point layers
+  # rather than a shape scale.
   num <- if ("numerator" %in% names(df)) df$numerator[1] else ""
   den <- if ("denominator" %in% names(df)) df$denominator[1] else ""
-  sub <- if (nzchar(num) && nzchar(den))
-    sprintf("NES > 0: pathway genes HIGHER in %s   |   NES < 0: pathway genes HIGHER in %s",
-            num, den) else NULL
+  sub <- sprintf("hollow: padj ≥ %s", cut)
+  if (nzchar(num) && nzchar(den))
+    sub <- paste0(sub, "   |   NES > 0: pathway genes HIGHER in ", num,
+                  "   |   NES < 0: pathway genes HIGHER in ", den)
   print(
     ggplot(df, aes(NES, pathway)) +
       geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
