@@ -295,12 +295,13 @@ proteomic_volcano <- function(res, title, num, den, prot_sig) {
     theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5), legend.position = "bottom")
 }
 
-# The full RNA volcano (volcano()'s own grey/red dots, every gene), with
-# proteomics-significant genes redrawn as stars on top: green if also
-# RNA-significant, black otherwise. Only the green (RNA + protein agree on
-# significance) stars are labelled, same top-gene labelling convention as
-# volcano() itself.
-volcano_with_proteomic <- function(res, title, num, den, prot_sig) {
+# The full RNA volcano (volcano()'s own grey/red dots, every gene, and the same
+# top-N gene labels), with proteomics-significant genes redrawn as stars on
+# top: green if also RNA-significant, black otherwise. The green stars get
+# their own label (a gene already starred green is skipped from the general
+# top-N labels below, so it is never labelled twice).
+volcano_with_proteomic <- function(res, title, num, den, prot_sig,
+                                   label_top = params$volcano_label_top) {
   res <- res %>% filter(!is.na(padj)) %>%
     mutate(sig = padj < params$padj & abs(log2FoldChange) >= params$lfc)
   n <- c(up = sum(res$sig & res$log2FoldChange > 0),
@@ -331,15 +332,32 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig) {
       x = sprintf("log2FC  (%s / %s)   —   positive = higher in %s", num, den, num),
       y = expression(-log[10] ~ "adjusted p")) +
     theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5))
+  # Same top-N labelling as volcano(): ranked by -log10(padj) x |log2FC|.
+  # Genes already labelled green below are skipped here to avoid a duplicate.
+  star_sig_ids <- tolower(stars_sig$gene_id)
+  if (label_top > 0) {
+    lbl <- res %>% filter(sig, !tolower(gene_id) %in% star_sig_ids) %>%
+      mutate(score = -log10(padj) * abs(log2FoldChange)) %>%
+      slice_max(score, n = label_top, with_ties = FALSE)
+    if (nrow(lbl)) {
+      p <- p + ggrepel::geom_text_repel(
+        data = lbl, aes(label = gene_id), colour = "grey20", size = 2.4,
+        max.overlaps = 30, segment.size = 0.2, segment.colour = "grey50",
+        show.legend = FALSE)
+    }
+  }
   if (nrow(stars_nonsig)) {
     p <- p + geom_point(data = stars_nonsig, shape = 8, size = 2, colour = "black")
   }
   if (nrow(stars_sig)) {
+    # bg.color/bg.r draw a white halo behind the text: green-on-red (a
+    # significant point under a green star's label) is otherwise unreadable.
     p <- p + geom_point(data = stars_sig, shape = 8, size = 2, colour = "#1B7837") +
       ggrepel::geom_text_repel(
         data = stars_sig, aes(label = gene_id), colour = "#1B7837",
         fontface = "bold", size = 2.8, min.segment.length = 0, box.padding = 0.4,
-        segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE)
+        segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE,
+        bg.color = "white", bg.r = 0.15)
   }
   p
 }
@@ -864,8 +882,6 @@ if (!is.null(r_fl_iff) && exists("prot_sig") && !is.null(prot_sig)) {
                                num = "ATRX_IFF", den = "ATRX_FL", prot_sig))
 }
 ```
-
-> _Add interpretation here._
 
 
 ```{r e6-trio-tally}
