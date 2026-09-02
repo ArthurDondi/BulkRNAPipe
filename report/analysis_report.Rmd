@@ -1018,29 +1018,32 @@ cat_dot <- function(df, title) {
   if (is.null(df) || !nrow(df)) return(invisible(NULL))
   cut <- params$padj
   df$significant <- !is.na(df$padj) & df$padj < cut
+  # Real shape legend instead of subtitle text: filled = significant, hollow =
+  # not, with the cutoff folded into the label so nothing else has to say it.
+  sig_levels <- c(sprintf("Significant (padj < %s)", cut), "Not significant")
+  df$sig_label <- factor(ifelse(df$significant, sig_levels[1], sig_levels[2]),
+                         levels = sig_levels)
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$NES)])
   sz <- range(df$size, na.rm = TRUE)
   brk <- if (sz[1] == sz[2]) sz[1] else unique(round(c(sz[1], mean(sz), sz[2])))
-  # Spell the direction out the same way the Hallmark dotplot above does, and
-  # state the hollow/filled legend as text - same as the pipeline's own
-  # gsea_kegg.R / gsea_go_categories.R, which use two plain geom_point layers
-  # rather than a shape scale.
+  # Spell the direction out the same way the Hallmark dotplot above does.
   num <- if ("numerator" %in% names(df)) df$numerator[1] else ""
   den <- if ("denominator" %in% names(df)) df$denominator[1] else ""
-  sub <- sprintf("hollow: padj ≥ %s", cut)
-  if (nzchar(num) && nzchar(den))
-    sub <- paste0(sub, "   |   NES > 0: pathway genes HIGHER in ", num,
-                  "   |   NES < 0: pathway genes HIGHER in ", den)
+  sub <- if (nzchar(num) && nzchar(den))
+    sprintf("NES > 0: pathway genes HIGHER in %s   |   NES < 0: pathway genes HIGHER in %s",
+            num, den) else NULL
+  shape_vals <- setNames(c(19, 21), sig_levels)
   print(
     ggplot(df, aes(NES, pathway)) +
       geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-      geom_point(data = df[!df$significant, ], aes(size = size),
-                 shape = 21, colour = "grey65", fill = NA, stroke = 0.7) +
-      geom_point(data = df[df$significant, ], aes(size = size, colour = padj),
-                 shape = 19) +
+      geom_point(data = df[!df$significant, ], aes(size = size, shape = sig_label),
+                 colour = "grey65", fill = NA, stroke = 0.7) +
+      geom_point(data = df[df$significant, ], aes(size = size, colour = padj, shape = sig_label)) +
+      scale_shape_manual(name = NULL, values = shape_vals, drop = FALSE) +
       scale_colour_gradient(low = "#A50F15", high = "#FC9272",
                             limits = c(0, cut), oob = scales::squish) +
       scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
+      guides(shape = guide_legend(override.aes = list(colour = "grey30", fill = NA, size = 3))) +
       labs(title = title, subtitle = sub, y = NULL, colour = "padj", size = "Set size") +
       theme(plot.subtitle = element_text(size = 8, colour = "grey30"))
   )
