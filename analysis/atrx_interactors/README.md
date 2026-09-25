@@ -54,8 +54,10 @@ possible rank arrangements), so the DESeq2 padj is the informative statistic.
 GSNAP / GRCh37 / Ensembl 75), matched by Ensembl gene ID. Groups come from
 the GEO sample titles; the single non-enriched DTC sample (`D07r2`) is left
 out unless `DTC_relapse_unenriched` is added to `--groups`. Wilcoxon tests are
-unpaired, although some patients contribute to several groups; `stats.csv`
-also gives BH-adjusted p across all genes x comparisons. Values are on a
+unpaired, although some patients contribute to several groups; the plots
+and `stats.csv` also give BH-adjusted p, computed within each comparison
+across the plotted genes (one family per comparison, as DESeq2 does per
+contrast). Values are on a
 different scale from epicode, so compare patterns within each dataset, not
 absolute levels between them.
 

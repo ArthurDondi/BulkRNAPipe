@@ -10,8 +10,9 @@
 # table. Not on the same scale as the epicode log2(normalised counts + 1).
 #
 # Statistics: two-sided Wilcoxon rank-sum p for each --comparisons pair, plus
-# BH adjustment across all genes x comparisons (stats.csv). Tests are
-# unpaired, although some patients contribute to several groups.
+# BH adjustment within each comparison across the plotted genes (as DESeq2
+# adjusts per contrast across genes). Tests are unpaired, although some
+# patients contribute to several groups.
 #
 # Outputs (in --outdir, default <geo_dir>/plots):
 #   overview.pdf, per_gene.pdf, expression_long.csv, stats.csv,
@@ -122,7 +123,9 @@ stats <- do.call(rbind, lapply(seq_len(nrow(genes)), function(i) {
              stringsAsFactors = FALSE, row.names = NULL)
 }))
 if (!is.null(stats)) {
-  stats$wilcox_padj_BH <- p.adjust(stats$wilcox_p, method = "BH")
+  # One BH family per comparison, across genes.
+  stats$wilcox_padj_BH <- ave(stats$wilcox_p, stats$group1, stats$group2,
+                              FUN = function(p) p.adjust(p, method = "BH"))
   write.csv(stats, file.path(outdir, "stats.csv"), row.names = FALSE)
 }
 
@@ -142,7 +145,7 @@ for (l in unique(genes$list)) {
 invisible(dev.off())
 
 caption <- paste(
-  "Wilcoxon rank-sum, two-sided, unpaired: raw p (BH-adjusted across all genes x comparisons in brackets).",
+  sprintf("Wilcoxon rank-sum, two-sided, unpaired: p = raw p (in parentheses: BH-adjusted within that comparison across the %d genes).", nrow(genes)),
   "Data: GSE94035 processed matrix (log2 DESeq2-normalised FPM, GRCh37).",
   sep = "\n")
 pdf(file.path(outdir, "per_gene.pdf"), width = 7, height = 7)
