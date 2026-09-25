@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 # GSE94035 ATRX-interactor boxplots split by patient ATRX / MYCN status:
 # sample groups (default Tumor_diagnosis, DTC_diagnosis, DTC_relapse; MNCs
-# left out) x 3 statuses. In overview.pdf all panels of a page (FL or IFF
-# list) share one y-axis: that list's min to max, padded by 5%.
+# left out) x 3 statuses. overview_<list>.pdf (FL, IFF): fixed-size panels,
+# all sharing one y-axis per list (that list's min to max, padded by 5%).
 #
 # Patient status comes from a clinical spreadsheet passed with --clinical
 # (e.g. 20230524_TGF__Fikrets_RNAseq.xlsx). It is read in place and never
@@ -21,7 +21,7 @@
 # between each pair of statuses (NA when a status has < 2 samples); BH within
 # each group x status pair across the plotted genes.
 #
-# Outputs (in --outdir): overview.pdf, per_gene.pdf, expression_long.csv,
+# Outputs (in --outdir): overview_FL.pdf, overview_IFF.pdf, per_gene.pdf, expression_long.csv,
 # stats.csv, patient_status.tsv (GEO patient -> status only).
 #
 # Usage (in the pipeline's deseq2 conda env, which has readxl):
@@ -186,24 +186,27 @@ base_plot <- function(df, point_size) {
 
 short_lab <- c(Tumor_diagnosis = "Tum dx", DTC_diagnosis = "DTC dx", DTC_relapse = "DTC rel",
                MNC_diagnosis = "MNC dx", MNC_relapse = "MNC rel", DTC_relapse_unenriched = "DTC rel (unenr.)")
-pdf(file.path(outdir, "overview.pdf"), width = 11, height = 8.5)
+# One file per list so every panel has the same, fixed size whatever the
+# number of genes: the page grows with the number of panel rows.
+ov_ncol <- 5; panel_w <- 2.3; panel_h <- 3.2   # inches per panel
 for (l in unique(genes$list)) {
   df <- droplevels(expr[expr$list == l, ])
   # Same y-axis for every panel of this list: min to max + 5% padding.
   ylim <- range(df$value, na.rm = TRUE)
   ylim <- ylim + c(-1, 1) * 0.05 * diff(ylim)
-  p <- base_plot(df, 0.5) +
-    facet_wrap(~ label, scales = "fixed", ncol = 5) +
+  n_row <- ceiling(nlevels(df$label) / ov_ncol)
+  p <- base_plot(df, 0.6) +
+    facet_wrap(~ label, scales = "fixed", ncol = ov_ncol) +
     coord_cartesian(ylim = ylim) +
     scale_x_continuous(breaks = seq_along(groups), labels = short_lab[groups],
                        expand = expansion(add = 0.4)) +
     labs(title = sprintf("ATRX %s interactors - GSE94035 by ATRX/MYCN status", l),
          x = NULL, y = ylab) +
-    theme(text = element_text(size = 8), strip.text = element_text(size = 7, lineheight = 0.9),
-          axis.text.x = element_text(angle = 45, hjust = 1, size = 6))
-  print(p)
+    theme(text = element_text(size = 9), strip.text = element_text(size = 8, lineheight = 0.9),
+          axis.text.x = element_text(angle = 45, hjust = 1, size = 7))
+  ggsave(file.path(outdir, sprintf("overview_%s.pdf", l)), p,
+         width = ov_ncol * panel_w + 0.8, height = n_row * panel_h + 1.6, limitsize = FALSE)
 }
-invisible(dev.off())
 
 n_tab <- as.data.frame(table(group = sheet$group, status = sheet$status))
 n_tab$x <- xpos(n_tab$group, n_tab$status)

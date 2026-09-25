@@ -51,7 +51,10 @@ Outputs (change with `--outdir`):
 
 Each folder holds `overview.pdf` (one page per list, one panel per gene),
 `per_gene.pdf` (one page per gene with statistics), `expression_long.csv`,
-`stats.csv`, and `missing_genes.txt` if any gene could not be found. The GEO
+`stats.csv`, and `missing_genes.txt` if any gene could not be found.
+`by_ATRX_MYCN/` has `overview_FL.pdf` and `overview_IFF.pdf` instead of
+`overview.pdf`: fixed-size panels (the page grows with the gene count), one
+shared y-axis per list. The GEO
 download itself stays in `/nobackup/lab_taschner-mandl/arthurdondi/data/GSE94035_Fikret`
 (`raw/`, `metadata/`, `download.log`).
 
