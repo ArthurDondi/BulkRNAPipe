@@ -69,4 +69,4 @@ snakemake \
     --configfile "$CONFIG" \
     --workflow-profile profile/slurm \
     --rerun-triggers mtime params software-env \
-    -p  report/analysis_report.html 
+    -p report/analysis_report.html
