@@ -33,9 +33,19 @@ All paths above are the defaults; `--help` lists every option.
 | `02_plot_GSE94035.R` | GSE94035 boxplots, cell type x timepoint |
 | `boxplot_helpers.R` | plotting and test helpers shared by both scripts |
 
-Each R script writes `overview.pdf` (one page per list, one panel per gene),
+Outputs (change with `--outdir`):
+
+```
+/nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/atrx_interactors/
+├── epicode/            # 01_plot_epicode.R
+└── GSE94035_Fikret/    # 02_plot_GSE94035.R
+```
+
+Each folder holds `overview.pdf` (one page per list, one panel per gene),
 `per_gene.pdf` (one page per gene with statistics), `expression_long.csv`,
-`stats.csv`, and `missing_genes.txt` if any gene could not be found.
+`stats.csv`, and `missing_genes.txt` if any gene could not be found. The GEO
+download itself stays in `/nobackup/lab_taschner-mandl/arthurdondi/data/GSE94035_Fikret`
+(`raw/`, `metadata/`, `download.log`).
 
 ## Methods
 

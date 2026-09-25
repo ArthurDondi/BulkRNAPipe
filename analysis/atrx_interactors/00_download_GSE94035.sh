@@ -11,7 +11,6 @@
 #   raw/ENA_PRJNA368627_runs.tsv         GSM -> SRR/SRX mapping (from ENA)
 #   raw/md5sums.txt                      checksums of the downloaded files
 #   metadata/samplesheet.tsv             one row per sample (see columns below)
-#   plots/                               empty, for 02_plot_GSE94035.R
 #   download.log                         provenance: date, URLs, sample counts
 #
 # samplesheet.tsv columns:
@@ -39,7 +38,7 @@ ENA_URL="https://www.ebi.ac.uk/ena/portal/api/filereport?accession=PRJNA368627&r
 
 N_EXPECTED=86
 
-mkdir -p "${OUTDIR}"/{raw,metadata,plots}
+mkdir -p "${OUTDIR}"/{raw,metadata}
 LOG="${OUTDIR}/download.log"
 exec > >(tee -a "${LOG}") 2>&1
 echo "=== $(date -Iseconds)  00_download_GSE94035.sh -> ${OUTDIR}"

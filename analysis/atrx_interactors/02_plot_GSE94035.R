@@ -14,7 +14,8 @@
 # adjusts per contrast across genes). Tests are unpaired, although some
 # patients contribute to several groups.
 #
-# Outputs (in --outdir, default <geo_dir>/plots):
+# Outputs (in --outdir, default
+# /nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/atrx_interactors/GSE94035_Fikret):
 #   overview.pdf, per_gene.pdf, expression_long.csv, stats.csv,
 #   missing_genes.txt (if any)
 #
@@ -39,8 +40,9 @@ option_list <- list(
   make_option("--comparisons", type = "character",
               default = "DTC_diagnosis:Tumor_diagnosis,DTC_diagnosis:MNC_diagnosis,DTC_relapse:DTC_diagnosis,DTC_relapse:MNC_relapse",
               help = "Wilcoxon pairs as group1:group2, comma-separated [default %default]"),
-  make_option("--outdir", type = "character", default = "",
-              help = "Output directory [default <geo_dir>/plots]")
+  make_option("--outdir", type = "character",
+              default = "/nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/atrx_interactors/GSE94035_Fikret",
+              help = "Output directory [default %default]")
 )
 args <- parse_args(OptionParser(option_list = option_list))
 
@@ -52,7 +54,7 @@ source(file.path(here, "boxplot_helpers.R"))
 
 geo_dir    <- args$geo_dir
 genes_path <- if (nzchar(args$genes)) args$genes else file.path(here, "atrx_interactors.tsv")
-outdir     <- if (nzchar(args$outdir)) args$outdir else file.path(geo_dir, "plots")
+outdir     <- args$outdir
 groups     <- trimws(strsplit(args$groups, ",")[[1]])
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 

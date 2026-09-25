@@ -17,7 +17,7 @@
 #   padj DESeq2 padj from deseq2/<contrast>/results.csv, taken as is: BH over
 #        all genes tested in that contrast (not re-adjusted over this list)
 #
-# Outputs (in --outdir):
+# Outputs (in --outdir, default <project_dir>/atrx_interactors/epicode):
 #   overview.pdf         one page per list (FL, IFF), one panel per gene
 #   per_gene.pdf         one page per gene with the statistics
 #   expression_long.csv  gene, sample, condition, log2 normalised count
@@ -50,7 +50,7 @@ option_list <- list(
               default = "TP53,E6,EmptyVector,ATRX_FL,ATRX_IFF",
               help = "Conditions to plot, in x-axis order [default %default]"),
   make_option("--outdir", type = "character", default = "",
-              help = "Output directory [default <project_dir>/atrx_interactors]")
+              help = "Output directory [default <project_dir>/atrx_interactors/epicode]")
 )
 args <- parse_args(OptionParser(option_list = option_list))
 
@@ -69,7 +69,7 @@ deseq2_dir <- if (nzchar(args$deseq2_dir)) args$deseq2_dir else file.path(proj, 
 config_path <- if (nzchar(args$config)) args$config else
   normalizePath(file.path(here, "..", "..", "config", "config_epicode.yaml"), mustWork = FALSE)
 genes_path <- if (nzchar(args$genes)) args$genes else file.path(here, "atrx_interactors.tsv")
-outdir     <- if (nzchar(args$outdir)) args$outdir else file.path(proj, "atrx_interactors")
+outdir     <- if (nzchar(args$outdir)) args$outdir else file.path(proj, "atrx_interactors", "epicode")
 conditions <- trimws(strsplit(args$conditions, ",")[[1]])
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
