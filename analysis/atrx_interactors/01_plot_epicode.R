@@ -10,10 +10,12 @@
 #   ATRX_Total, EGFP/mCherry removed - see DesignQCSubstituteTotal),
 #   otherwise <project_dir>/quantify/counts.txt.
 #
-# Statistics, one bracket per DESeq2 contrast found in <project_dir>/deseq2/:
+# Statistics, one bracket per DESeq2 contrast listed in the config
+# (DESeq2.contrasts) between plotted conditions:
 #   W    two-sided Wilcoxon rank-sum p on the plotted values (with 3 vs 3
 #        replicates the smallest attainable p is 0.1)
-#   padj DESeq2 BH-adjusted p from deseq2/<contrast>/results.csv
+#   padj DESeq2 padj from deseq2/<contrast>/results.csv, taken as is: BH over
+#        all genes tested in that contrast (not re-adjusted over this list)
 #
 # Outputs (in --outdir):
 #   overview.pdf         one page per list (FL, IFF), one panel per gene
@@ -38,6 +40,8 @@ option_list <- list(
               help = "Pipeline output_dir [default %default]"),
   make_option("--counts", type = "character", default = "",
               help = "featureCounts-format matrix; default: design_qc/counts_substituted.txt if present, else quantify/counts.txt"),
+  make_option("--config", type = "character", default = "",
+              help = "Pipeline config listing DESeq2.contrasts [default config/config_epicode.yaml in this repo]"),
   make_option("--deseq2_dir", type = "character", default = "",
               help = "Directory with <contrast>/results.csv [default <project_dir>/deseq2]"),
   make_option("--genes", type = "character", default = "",
@@ -62,12 +66,15 @@ counts_path <- if (nzchar(args$counts)) args$counts else {
   if (file.exists(sub)) sub else file.path(proj, "quantify", "counts.txt")
 }
 deseq2_dir <- if (nzchar(args$deseq2_dir)) args$deseq2_dir else file.path(proj, "deseq2")
+config_path <- if (nzchar(args$config)) args$config else
+  normalizePath(file.path(here, "..", "..", "config", "config_epicode.yaml"), mustWork = FALSE)
 genes_path <- if (nzchar(args$genes)) args$genes else file.path(here, "atrx_interactors.tsv")
 outdir     <- if (nzchar(args$outdir)) args$outdir else file.path(proj, "atrx_interactors")
 conditions <- trimws(strsplit(args$conditions, ",")[[1]])
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 message("Count matrix : ", counts_path)
+message("Config       : ", config_path)
 message("DESeq2 dir   : ", deseq2_dir)
 message("Gene table   : ", genes_path)
 message("Output dir   : ", outdir)
@@ -132,26 +139,41 @@ write.csv(transform(expr, label = NULL, condition = group, group = NULL,
                     log2_norm_count = value, value = NULL),
           file.path(outdir, "expression_long.csv"), row.names = FALSE)
 
-# ─── DESeq2 contrasts present on disk ────────────────────────────────────────
-res_files <- Sys.glob(file.path(deseq2_dir, "*_vs_*", "results.csv"))
-contrasts <- do.call(rbind, lapply(res_files, function(f) {
-  name  <- basename(dirname(f))
-  sides <- strsplit(name, "_vs_", fixed = TRUE)[[1]]
-  if (length(sides) != 2 || !all(sides %in% conditions)) return(NULL)
-  # Directory names are <numerator>_vs_<denominator>.
-  data.frame(contrast = name, group1 = sides[1], group2 = sides[2],
-             file = f, stringsAsFactors = FALSE)
-}))
-if (is.null(contrasts)) {
-  message("No DESeq2 results between the plotted conditions found in ", deseq2_dir,
+# ─── DESeq2 contrasts, from the config ───────────────────────────────────────
+# Read from DESeq2.contrasts ("- [name, numerator, denominator]") rather than
+# globbing deseq2/: output folders from renamed contrasts stay on disk and
+# would otherwise be picked up as duplicates. Only lines of exactly that shape
+# are matched; commented-out contrasts are skipped.
+cfg_lines <- readLines(config_path)
+m <- regmatches(cfg_lines, regexec(
+  "^\\s*-\\s*\\[\\s*([^],#]+?)\\s*,\\s*([^],#]+?)\\s*,\\s*([^],#]+?)\\s*\\]", cfg_lines, perl = TRUE))
+m <- do.call(rbind, m[lengths(m) == 4])
+contrasts <- if (is.null(m)) NULL else
+  data.frame(contrast = m[, 2], group1 = m[, 3], group2 = m[, 4],
+             stringsAsFactors = FALSE)
+if (!is.null(contrasts)) {
+  contrasts <- contrasts[contrasts$group1 %in% conditions &
+                         contrasts$group2 %in% conditions, , drop = FALSE]
+  contrasts <- contrasts[!duplicated(contrasts[, c("group1", "group2")]), , drop = FALSE]
+  contrasts$file <- file.path(deseq2_dir, contrasts$contrast, "results.csv")
+  absent <- !file.exists(contrasts$file)
+  if (any(absent)) {
+    message("No results.csv for: ", paste(contrasts$contrast[absent], collapse = ", "),
+            " - Wilcoxon only for these.")
+    contrasts$file[absent] <- NA
+  }
+}
+if (is.null(contrasts) || nrow(contrasts) == 0) {
+  message("No DESeq2 contrasts between the plotted conditions in ", config_path,
           "; Wilcoxon only for all condition pairs.")
   cmb <- t(combn(conditions, 2))
   contrasts <- data.frame(contrast = paste0(cmb[, 2], "_vs_", cmb[, 1]),
                           group1 = cmb[, 2], group2 = cmb[, 1], file = NA,
                           stringsAsFactors = FALSE)
-} else {
-  message("Contrasts: ", paste(contrasts$contrast, collapse = ", "))
 }
+message("Contrasts (numerator vs denominator): ",
+        paste(sprintf("%s [%s vs %s]", contrasts$contrast, contrasts$group1, contrasts$group2),
+              collapse = ", "))
 
 deseq_res <- lapply(setNames(contrasts$file, contrasts$contrast), function(f) {
   if (is.na(f)) return(NULL)

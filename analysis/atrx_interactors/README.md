@@ -44,9 +44,12 @@ as the ALCAM boxplots in the NK-NB study
 (`code/34_20260603_paper_revision_figures.Rmd`). Size factors are estimated
 exactly as in `workflow/scripts/deseq2.R`: the DESeq2 input matrix
 (`design_qc/counts_substituted.txt` if present, else `quantify/counts.txt`),
-all 15 samples, genes with >= 10 reads in total. Brackets are the pipeline's
-DESeq2 contrasts between plotted conditions (found in `deseq2/*/results.csv`)
-and show the Wilcoxon p on the plotted values and the DESeq2 padj. With 3 vs 3
+all 15 samples, genes with >= 10 reads in total. Brackets are the DESeq2 contrasts
+listed in `config/config_epicode.yaml` (`DESeq2.contrasts`, override with
+`--config`) between plotted conditions, and show the Wilcoxon p on the plotted
+values and the DESeq2 padj from `deseq2/<contrast>/results.csv`, taken as is:
+BH over all genes DESeq2 tested in that contrast, not re-adjusted over this
+gene list. With 3 vs 3
 replicates the Wilcoxon rank-sum test cannot go below p = 0.1 (2 of the 20
 possible rank arrangements), so the DESeq2 padj is the informative statistic.
 
