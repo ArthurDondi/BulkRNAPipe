@@ -25,6 +25,7 @@ Rscript analysis/atrx_interactors/03_plot_GSE94035_by_ATRX_MYCN.R \
      --clinical /path/to/20230524_TGF__Fikrets_RNAseq.xlsx
 ```
 
+Or run everything with `bash analysis/atrx_interactors/run_atrx_interactors.sh`.
 All paths above except `--clinical` are the defaults; `--help` lists every option.
 
 ## Files
@@ -35,7 +36,8 @@ All paths above except `--clinical` are the defaults; `--help` lists every optio
 | `00_download_GSE94035.sh` | downloads the processed matrix + series matrix + ENA run table and builds `metadata/samplesheet.tsv` |
 | `01_plot_epicode.R` | epicode boxplots, 5 conditions |
 | `02_plot_GSE94035.R` | GSE94035 boxplots, cell type x timepoint |
-| `03_plot_GSE94035_by_ATRX_MYCN.R` | GSE94035 boxplots, 5 groups x 3 patient statuses (ATRXdel, ATRXwt MYCNA, ATRXwt nonMYCNA) |
+| `03_plot_GSE94035_by_ATRX_MYCN.R` | GSE94035 boxplots, Tumor dx / DTC dx / DTC relapse x 3 patient statuses (ATRXdel, ATRXwt MYCNA, ATRXwt nonMYCNA); overview panels share one y-axis per list |
+| `run_atrx_interactors.sh` | runs steps 00-03 in order (sets the `--clinical` path) |
 | `boxplot_helpers.R` | plotting and test helpers shared by both scripts |
 
 Outputs (change with `--outdir`):

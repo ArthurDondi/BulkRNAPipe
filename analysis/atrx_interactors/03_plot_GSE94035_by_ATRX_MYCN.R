@@ -1,7 +1,8 @@
 #!/usr/bin/env Rscript
 # GSE94035 ATRX-interactor boxplots split by patient ATRX / MYCN status:
-# 5 sample groups (Tumor_diagnosis, DTC_diagnosis, DTC_relapse, MNC_diagnosis,
-# MNC_relapse) x 3 statuses = 15 boxes per gene.
+# sample groups (default Tumor_diagnosis, DTC_diagnosis, DTC_relapse; MNCs
+# left out) x 3 statuses. In overview.pdf all panels of a page (FL or IFF
+# list) share one y-axis: that list's min to max, padded by 5%.
 #
 # Patient status comes from a clinical spreadsheet passed with --clinical
 # (e.g. 20230524_TGF__Fikrets_RNAseq.xlsx). It is read in place and never
@@ -41,6 +42,9 @@ option_list <- list(
   make_option("--geo_dir", type = "character",
               default = "/nobackup/lab_taschner-mandl/arthurdondi/data/GSE94035_Fikret",
               help = "Directory created by 00_download_GSE94035.sh [default %default]"),
+  make_option("--groups", type = "character",
+              default = "Tumor_diagnosis,DTC_diagnosis,DTC_relapse",
+              help = "samplesheet groups to plot, in x-axis order [default %default]"),
   make_option("--genes", type = "character", default = "",
               help = "Gene table [default atrx_interactors.tsv next to this script]"),
   make_option("--outdir", type = "character",
@@ -56,7 +60,7 @@ here <- {
 }
 source(file.path(here, "boxplot_helpers.R"))
 
-groups   <- c("Tumor_diagnosis", "DTC_diagnosis", "DTC_relapse", "MNC_diagnosis", "MNC_relapse")
+groups   <- trimws(strsplit(args$groups, ",")[[1]])
 statuses <- c("ATRXdel", "ATRXwt_MYCNA", "ATRXwt_nonMYCNA")
 genes_path <- if (nzchar(args$genes)) args$genes else file.path(here, "atrx_interactors.tsv")
 outdir <- args$outdir
@@ -180,13 +184,18 @@ base_plot <- function(df, point_size) {
           legend.position = "bottom")
 }
 
+short_lab <- c(Tumor_diagnosis = "Tum dx", DTC_diagnosis = "DTC dx", DTC_relapse = "DTC rel",
+               MNC_diagnosis = "MNC dx", MNC_relapse = "MNC rel", DTC_relapse_unenriched = "DTC rel (unenr.)")
 pdf(file.path(outdir, "overview.pdf"), width = 11, height = 8.5)
 for (l in unique(genes$list)) {
   df <- droplevels(expr[expr$list == l, ])
+  # Same y-axis for every panel of this list: min to max + 5% padding.
+  ylim <- range(df$value, na.rm = TRUE)
+  ylim <- ylim + c(-1, 1) * 0.05 * diff(ylim)
   p <- base_plot(df, 0.5) +
-    facet_wrap(~ label, scales = "free_y", ncol = 5) +
-    scale_x_continuous(breaks = seq_along(groups),
-                       labels = c("Tum dx", "DTC dx", "DTC rel", "MNC dx", "MNC rel"),
+    facet_wrap(~ label, scales = "fixed", ncol = 5) +
+    coord_cartesian(ylim = ylim) +
+    scale_x_continuous(breaks = seq_along(groups), labels = short_lab[groups],
                        expand = expansion(add = 0.4)) +
     labs(title = sprintf("ATRX %s interactors - GSE94035 by ATRX/MYCN status", l),
          x = NULL, y = ylab) +
@@ -202,7 +211,7 @@ caption <- paste(
   "Within each sample group: Wilcoxon rank-sum, two-sided, unpaired; p = raw p (in parentheses: BH-adjusted within that group x status pair across",
   sprintf("the %d genes). No bracket when a status has < 2 samples. Status from the clinical sheet (atrx, mna); unassigned patients not shown.", nrow(genes)),
   sep = "\n")
-pdf(file.path(outdir, "per_gene.pdf"), width = 11, height = 7.5)
+pdf(file.path(outdir, "per_gene.pdf"), width = 3 + 2 * length(groups), height = 7.5)
 for (i in seq_len(nrow(genes))) {
   g  <- genes$gene[i]
   df <- expr[expr$gene == g, ]
