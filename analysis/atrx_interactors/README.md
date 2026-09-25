@@ -19,9 +19,13 @@ Rscript analysis/atrx_interactors/01_plot_epicode.R \
 # 3. GSE94035
 Rscript analysis/atrx_interactors/02_plot_GSE94035.R \
      --geo_dir /nobackup/lab_taschner-mandl/arthurdondi/data/GSE94035_Fikret
+
+# 4. GSE94035 split by patient ATRX / MYCN status (clinical sheet read in place)
+Rscript analysis/atrx_interactors/03_plot_GSE94035_by_ATRX_MYCN.R \
+     --clinical /path/to/20230524_TGF__Fikrets_RNAseq.xlsx
 ```
 
-All paths above are the defaults; `--help` lists every option.
+All paths above except `--clinical` are the defaults; `--help` lists every option.
 
 ## Files
 
@@ -31,14 +35,16 @@ All paths above are the defaults; `--help` lists every option.
 | `00_download_GSE94035.sh` | downloads the processed matrix + series matrix + ENA run table and builds `metadata/samplesheet.tsv` |
 | `01_plot_epicode.R` | epicode boxplots, 5 conditions |
 | `02_plot_GSE94035.R` | GSE94035 boxplots, cell type x timepoint |
+| `03_plot_GSE94035_by_ATRX_MYCN.R` | GSE94035 boxplots, 5 groups x 3 patient statuses (ATRXdel, ATRXwt MYCNA, ATRXwt nonMYCNA) |
 | `boxplot_helpers.R` | plotting and test helpers shared by both scripts |
 
 Outputs (change with `--outdir`):
 
 ```
 /nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/atrx_interactors/
-├── epicode/            # 01_plot_epicode.R
-└── GSE94035_Fikret/    # 02_plot_GSE94035.R
+├── epicode/              # 01_plot_epicode.R
+└── GSE94035_Fikret/      # 02_plot_GSE94035.R
+    └── by_ATRX_MYCN/     # 03_plot_GSE94035_by_ATRX_MYCN.R
 ```
 
 Each folder holds `overview.pdf` (one page per list, one panel per gene),
@@ -78,3 +84,13 @@ Notes on the deposited GEO data, handled by `00_download_GSE94035.sh`: the
 matrix has CRLF line endings; two matrix columns differ from the GEO sample
 descriptions (`D07r2` = "D07r, without enrichment", `D36NA` = "D36d"); the
 GEO sample descriptions also carry an unrelated copy-pasted Ewing sarcoma text.
+
+**GSE94035 by ATRX / MYCN status.** The clinical spreadsheet is never copied
+into the repository or the outputs; the script reads only `patient_o_id`,
+`atrx` and `mna` from its `Samples` sheet (spreadsheet `p0006` = GEO `p06`).
+A patient is `ATRXdel` if `atrx` is "Deletion"; `ATRXwt_MYCNA` /
+`ATRXwt_nonMYCNA` if `atrx` is only "Normal"/"NO" and `mna` is "YES"/"NO";
+otherwise unassigned and not plotted (blank `atrx`, other values such as
+"Xq loss", or not in the sheet) - see `patient_status.tsv`. MNC samples take
+their patient's status. Wilcoxon tests compare statuses within each sample
+group only; BH within each group x status pair across genes.

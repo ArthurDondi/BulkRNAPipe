@@ -29,3 +29,6 @@ BulkRNAPipe.nohup.log
 # OS files
 .DS_Store
 Thumbs.db
+
+# Clinical / patient spreadsheets must never be committed
+analysis/**/*.xlsx
