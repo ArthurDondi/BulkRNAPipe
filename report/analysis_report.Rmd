@@ -1157,7 +1157,7 @@ kept in the design. The corrected values are plotted as log2(value + 1).
 - Status and timepoint come from `metadata_table.csv` (`params$nb_metadata`,
   extracted from the same report); samples flagged in its `exclusion` column
   are left out, for the reason given in its `comment` column. A category is
-  shown only when it holds more than 3 samples; replicate libraries of one
+  shown only when it holds at least 3 patients; replicate libraries of one
   patient are averaged.
 
 ```{r atrx-data, results = "asis"}
@@ -1188,7 +1188,7 @@ if (is.null(nb_expr) || is.null(nb_meta)) {
 # ── Patient samples: group, category, and why a sample is left out ──────────
 NB_STATUS   <- c("ATRX DEL", "MNA", "nMNA", "BMn")
 NB_CATEGORY <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "BMn")
-NB_MIN_N    <- 3  # a category is drawn only with more samples than this
+NB_MIN_N    <- 2  # a category is drawn only with more patients than this
 
 # Reasons computed here; samples flagged in metadata_table.csv's exclusion
 # column carry the reason from its comment column instead.
@@ -1230,9 +1230,11 @@ nb_select <- function(meta, samples) {
     m$tp == "TRE"       ~ paste(type, "TRE"),
     m$tp == "REL"       ~ paste(type, "rel"),
     TRUE                ~ NA_character_)
+  # metadata_table.csv's exclusion / comment columns come first; the rules
+  # below only catch what a metadata file does not flag.
   m$reason <- case_when(
-    !m$omics_id %in% samples                ~ NB_REASONS[["removed"]],
     m$excluded                              ~ m$comment,
+    !m$omics_id %in% samples                ~ NB_REASONS[["removed"]],
     !m$material %in% c("TUM", "DTC", "BMN") ~ NB_REASONS[["material"]],
     is.na(m$status) & ambiguous             ~ NB_REASONS[["ambiguous"]],
     is.na(m$status)                         ~ NB_REASONS[["status"]],
@@ -1255,18 +1257,18 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   samples <- setdiff(colnames(nb_expr), c("GeneID", "gene_name"))
   nb <- nb_select(nb_meta, samples)
 
-  # Samples per category; the ones too small to draw in parentheses.
-  counted <- nb[is.na(nb$reason) | nb$small, ]
+  # Samples per plotted category; hidden categories are in the next table.
+  counted <- nb[is.na(nb$reason), ]
   n_tab <- tapply(counted$patient,
                   list(factor(counted$status, NB_STATUS),
                        factor(counted$category, NB_CATEGORY)),
                   function(p) length(unique(p)))
   n_tab[is.na(n_tab)] <- 0L
   n_tab <- n_tab[, colSums(n_tab) > 0, drop = FALSE]
-  cells <- ifelse(n_tab == 0, "", ifelse(n_tab <= NB_MIN_N, sprintf("(%d)", n_tab), n_tab))
+  cells <- ifelse(n_tab == 0, "", n_tab)
   cat("\n\n")
   print(kable(cells, align = "c", caption = sprintf(
-    "Samples per category, one per patient. In parentheses: %d or fewer, not shown.",
+    "Samples per plotted category, one per patient. Categories with %d or fewer are listed under Samples left out.",
     NB_MIN_N)))
   cat("\n\n")
 
@@ -1277,7 +1279,10 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   # hidden categories in plotting order.
   small <- ex[ex$small, ]
   small <- small[order(match(small$status, NB_STATUS), match(small$category, NB_CATEGORY)), ]
-  lev <- unique(c(NB_REASONS[["removed"]], sort(unique(ex$comment[ex$excluded])),
+  meta_why <- sort(unique(ex$comment[ex$excluded]))
+  meta_why <- c(meta_why[!startsWith(meta_why, "not shown")],
+                meta_why[startsWith(meta_why, "not shown")])
+  lev <- unique(c(NB_REASONS[["removed"]], meta_why,
                   NB_REASONS[names(NB_REASONS) != "small"], small$reason))
   ex_tab <- data.frame(reason = lev[lev %in% ex$reason])
   ex_tab$n <- vapply(ex_tab$reason, function(r) sum(ex$reason == r), integer(1))
