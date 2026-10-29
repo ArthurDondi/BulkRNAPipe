@@ -1286,8 +1286,15 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   if (length(no_meta)) ex_tab <- rbind(ex_tab, data.frame(
     reason = "not in metadata_table.csv", n = length(no_meta),
     samples = paste(no_meta, collapse = ", ")))
-  print(kable(ex_tab, row.names = FALSE, caption = "Samples left out"))
-  cat("\n\n")
+  ex_tab <- rbind(ex_tab, data.frame(reason = "<b>Total</b>",
+                                     n = sprintf("<b>%d</b>", sum(ex_tab$n)), samples = ""))
+  # HTML with borders: a plain markdown table has no cell rules.
+  print(kable(ex_tab, format = "html", escape = FALSE, row.names = FALSE,
+              align = c("l", "r", "l"), col.names = c("Reason", "n", "Samples"),
+              caption = "Samples left out",
+              table.attr = 'class="table table-bordered table-condensed"'))
+  cat("\n\nFor more details, see",
+      "`/mnt/bioinformatics/Research/TASCHNERMANDL/Internal/data/reanalysis.NB.bulkRNA/celine_reanalysis_2023/analysis/nb-full_omics/full_omics_analysis.html`.\n\n")
 
   keep <- nb[is.na(nb$reason), ]
   dup <- keep %>% group_by(status, category, patient) %>% filter(n() > 1) %>%
