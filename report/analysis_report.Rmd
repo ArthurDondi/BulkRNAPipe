@@ -1127,38 +1127,31 @@ for (slug in names(CATEGORY_LABELS)) {
 
 # ATRX interactors
 
-The proteomics experiment (see the overlay in
-[The two constructs against each other](#the-two-constructs-against-each-other))
-identified proteins interacting with `ATRX_FL` or `ATRX_IFF`. Here we
-investigate the expression of the genes encoding these interactors, first in
-our current data, the five SK-N-SH conditions, then in our internal
-neuroblastoma patient samples, grouped by ATRX and MYCN status. The list
-(`analysis/atrx_interactors/atrx_interactors.tsv`) splits them into `ATRX_FL`
-and `ATRX_IFF` interactors, each called *Yes* or *Maybe?*.
+A proteomics co-immunoprecipitation experiment and an analysis 
+by Celine Prakash identified proteins interacting with `ATRX_FL` or `ATRX_IFF`. 
+To identify direct interactors (as opposed to indirect binding through complexes),  
+Magdalena Rados tested the interactions of the top hits with ATRX FL/IFF in-silico
+using AlfaFold2, and proteins that came out as ATRX FL/IFF interactors 
+were calssified as *Yes* or *Maybe?* depending on the interaction score.
+Here, we investigate the expression of the genes encoding these interactors, first in our
+current data, then in our internal neuroblastoma patient samples, grouped by ATRX and MYCN status. 
+**The current list of interactors is temporary, a final list will be established, therefore interpretation is on hold**
+
 
 ## Patient cohort
 
-`reanalysis.NB.bulkRNA` holds our internal neuroblastoma bulk RNA-seq samples,
-reprocessed together by Celine Prakash (*full_omics_analysis.html*,
-2023-11-17): the samples published in GEO GSE94035 (Rifatbegovic et al.,
-*Int J Cancer* 2018, PMID 28921546) plus samples added since. Reads were
-trimmed with fastp, quantified with salmon and summarised to genes with
-tximeta. edgeR's `filterByExpr` kept 14,604 of 38,269 genes, and limma's
+We use the data from `reanalysis.NB.bulkRNA` processed by Celine Prakash 
+(`/mnt/bioinformatics/Research/TASCHNERMANDL/Internal/data/reanalysis.NB.bulkRNA/celine_reanalysis_2023/analysis/nb-full_omics/`,
+2023-11-17). Reads were trimmed with fastp, quantified with salmon and summarised to genes
+with tximeta. edgeR's `filterByExpr` kept 14,604 of 38,269 genes, and limma's
 `removeBatchEffect` removed the library-layout effect (single-end unstranded,
-single-end stranded, paired-end) from the log-CPM values, with the material
-kept in the design. The corrected values are plotted as log2(value + 1).
+single-end stranded, paired-end), with the material kept in the design.
 
 - **ATRX DEL**: ATRX deletion. **MNA** / **nMNA**: ATRX wild type, with /
-  without MYCN amplification. **BMn**: bone marrow negative for tumour cells,
-  the control without tumour cells.
-- **Tum**: primary tumour. **DTC**: disseminated tumour cells, GD2-enriched
-  from the bone marrow. **dx**: diagnosis. **TRE**: treatment. **rel**:
+  without MYCN amplification. **BMn**: bone marrow negative for tumour cells, control.
+- **Tum**: primary tumour. **DTC**: disseminated tumour cells. **dx**: diagnosis. **TRE**: treatment. **rel**:
   relapse.
-- Status and timepoint come from `metadata_table.csv` (`params$nb_metadata`,
-  extracted from the same report); samples flagged in its `exclusion` column
-  are left out, for the reason given in its `comment` column. A category is
-  shown only when it holds at least 3 patients; replicate libraries of one
-  patient are averaged.
+
 
 ```{r atrx-data, results = "asis"}
 # ── Inputs ───────────────────────────────────────────────────────────────────
@@ -1434,12 +1427,6 @@ atrx_rows <- function(list_name) {
 ```
 
 ## ATRX_FL interactors
-
-Each row is one gene, with its interactor call. Left: the five SK-N-SH
-conditions (n = 3 each), log2(DESeq2-normalised counts + 1). Right: the
-patient samples, one point per patient, all patient panels sharing one y-axis.
-The two sides are on different scales: compare patterns within a side, not
-levels across them.
 
 ```{r atrx-fl, fig.width = 9.5, fig.height = 2.7, fig.retina = 1, results = "asis"}
 # fig.retina = 1: one image per gene, so 2x images would add ~4 MB to the HTML.
