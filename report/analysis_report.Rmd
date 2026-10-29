@@ -48,9 +48,9 @@ params:
   # Section "ATRX interactors": internal neuroblastoma cohort, reprocessed by
   # Celine Prakash (full_omics_analysis.html, 2023-11-17). nb_expression is the
   # library-layout-corrected matrix (GeneID, gene_name, one column per
-  # omics_id). nb_metadata (omics_id, material_general, tp, mna, atrx) is
-  # patient data: it stays on the cluster and is never committed. Point either
-  # at "" to skip the patient panels.
+  # omics_id). nb_metadata (omics_id, material_general, tp, mna, atrx,
+  # exclusion, comment) is patient data: it stays on the cluster and is never
+  # committed. Point either at "" to skip the patient panels.
   nb_expression: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts_liblayout_corrected.csv"
   nb_metadata: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/metadata_table.csv"
   # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
@@ -114,7 +114,8 @@ LEV <- params$condition_levels
 # Condition palette from the lab colour sheet (20261021_Colors.pdf): one fixed
 # colour per line, keyed by name so editing condition_levels cannot reshuffle
 # them (1760 = EmptyVector, 1011 = ATRX_FL, 1744 = ATRX_IFF, see
-# config_epicode.yaml). Conditions not on the sheet fall back to grey.
+# config_epicode.yaml). Conditions not on the sheet fall back to grey. Keep in
+# sync with condition_colours in analysis/atrx_interactors/boxplot_helpers.R.
 COND_COLOURS <- c(TP53 = "#ABAB50", E6 = "#46184E", EmptyVector = "#D16530",
                   ATRX_FL = "#19468C", ATRX_IFF = "#B72656")
 PAL <- setNames(ifelse(LEV %in% names(COND_COLOURS), COND_COLOURS[LEV], "grey60"), LEV)
@@ -608,7 +609,7 @@ if (is.null(r_tp53)) missing_note("deseq2", "E6_vs_TP53", "results.csv") else {
 }
 ```
 
-```{r tp53-scale}
+```{r tp53-scale, results = "asis"}
 if (!is.null(r_tp53)) {
   n <- de_counts(r_tp53)
   cat(sprintf(paste("\n> **%s genes** change between TP53 and E6 at padj < %s and",
@@ -1154,8 +1155,10 @@ kept in the design. The corrected values are plotted as log2(value + 1).
   from the bone marrow. **dx**: diagnosis. **TRE**: treatment. **rel**:
   relapse.
 - Status and timepoint come from `metadata_table.csv` (`params$nb_metadata`,
-  extracted from the same report). A category is shown only when it holds
-  more than 3 samples; replicate libraries of one patient are averaged.
+  extracted from the same report); samples flagged in its `exclusion` column
+  are left out, for the reason given in its `comment` column. A category is
+  shown only when it holds more than 3 samples; replicate libraries of one
+  patient are averaged.
 
 ```{r atrx-data, results = "asis"}
 # ── Inputs ───────────────────────────────────────────────────────────────────
@@ -1187,19 +1190,10 @@ NB_STATUS   <- c("ATRX DEL", "MNA", "nMNA", "BMn")
 NB_CATEGORY <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "BMn")
 NB_MIN_N    <- 3  # a category is drawn only with more samples than this
 
-# Exclusions metadata_table.csv cannot express, from the omics tables of
-# full_omics_analysis.html: data_qc "Poor" in the lab database (none of these
-# was deposited in GEO GSE94035) and the one DTC sample sequenced without GD2
-# enrichment.
-NB_POOR_QC <- c("TUM_001_DX_3", "TUM_003_DX_1", "TUM_003_DX_3", "TUM_003_DX_4",
-                "TUM_004_DX_1", "TUM_004_DX_2", "DTC_013_REL_1", "DTC_038_NA_2",
-                "DTC_051_DX_2", "DTC_066_REL_3")
-NB_NOT_ENRICHED <- "DTC_007_REL_1"
-
+# Reasons computed here; samples flagged in metadata_table.csv's exclusion
+# column carry the reason from its comment column instead.
 NB_REASONS <- c(
   removed   = "dropped in preprocessing (low depth)",
-  qc        = "poor QC in the lab database",
-  enrich    = "DTC not GD2-enriched",
   material  = "material not annotated",
   status    = "no ATRX/MYCN status",
   ambiguous = "ambiguous status (ATRX gain or Xq loss, heterogeneous MNA)",
@@ -1207,10 +1201,14 @@ NB_REASONS <- c(
   small     = sprintf("category with ≤ %d samples (not shown)", NB_MIN_N))
 
 nb_select <- function(meta, samples) {
-  up <- function(x) toupper(trimws(ifelse(is.na(x), "", x)))
+  clean <- function(x) trimws(ifelse(is.na(x), "", x))
+  up <- function(x) toupper(clean(x))
+  field <- function(x) if (x %in% names(meta)) meta[[x]] else rep("", nrow(meta))
   m <- data.frame(omics_id = meta$omics_id, material = up(meta$material_general),
                   tp = up(meta$tp), mna = up(meta$mna), atrx = up(meta$atrx),
-                  stringsAsFactors = FALSE)
+                  excluded = up(field("exclusion")) %in% c("TRUE", "YES", "1"),
+                  comment = clean(field("comment")), stringsAsFactors = FALSE)
+  m$comment[m$excluded & !nzchar(m$comment)] <- "excluded in metadata_table.csv"
   # MNCs and cell lines are not part of this comparison: left out silently.
   m <- m[!m$material %in% c("MNC", "CL"), ]
   m$patient <- sub("^[^_]+_([^_]+)_.*$", "\\1", m$omics_id)
@@ -1234,8 +1232,7 @@ nb_select <- function(meta, samples) {
     TRUE                ~ NA_character_)
   m$reason <- case_when(
     !m$omics_id %in% samples                ~ NB_REASONS[["removed"]],
-    m$omics_id %in% NB_POOR_QC              ~ NB_REASONS[["qc"]],
-    m$omics_id %in% NB_NOT_ENRICHED         ~ NB_REASONS[["enrich"]],
+    m$excluded                              ~ m$comment,
     !m$material %in% c("TUM", "DTC", "BMN") ~ NB_REASONS[["material"]],
     is.na(m$status) & ambiguous             ~ NB_REASONS[["ambiguous"]],
     is.na(m$status)                         ~ NB_REASONS[["status"]],
@@ -1272,7 +1269,10 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   # Every sample left out, by reason; matrix columns missing from the metadata
   # are listed too.
   ex <- nb[!is.na(nb$reason), ]
-  ex_tab <- data.frame(reason = unname(NB_REASONS[NB_REASONS %in% ex$reason]))
+  # Order: preprocessing, the metadata exclusions, then the reasons above.
+  lev <- unique(c(NB_REASONS[["removed"]], sort(unique(ex$comment[ex$excluded])),
+                  NB_REASONS))
+  ex_tab <- data.frame(reason = lev[lev %in% ex$reason])
   ex_tab$n <- vapply(ex_tab$reason, function(r) sum(ex$reason == r), integer(1))
   ex_tab$samples <- vapply(ex_tab$reason, function(r)
     paste(sort(ex$omics_id[ex$reason == r]), collapse = ", "), character(1))
@@ -1347,12 +1347,24 @@ atrx_theme <- theme_bw(base_size = 10) +
         plot.title   = element_text(face = "bold", size = 11),
         legend.position = "none", plot.margin = margin(4, 6, 2, 4))
 
+# Median line colour for a box fill: white where the fill is dark (relative
+# luminance < 0.179, where white contrasts more than black), else the outline
+# grey. A grey median vanishes on E6 and ATRX_FL.
+median_ink <- function(fill) {
+  v <- grDevices::col2rgb(fill) / 255
+  v <- ifelse(v <= 0.03928, v / 12.92, ((v + 0.055) / 1.055)^2.4)
+  ifelse(colSums(v * c(0.2126, 0.7152, 0.0722)) < 0.179, "white", "grey25")
+}
+
 # empty = TRUE draws the same panels without data, for a gene missing from one
 # dataset only, so every row keeps the same layout.
 atrx_boxes <- function(p, empty = FALSE) {
   if (empty) return(p + geom_blank() + atrx_theme +
                       theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()))
   p + geom_boxplot(outlier.shape = NA, width = 0.62, linewidth = 0.3, colour = "grey25") +
+    stat_summary(aes(colour = after_scale(median_ink(fill))), fun = median,
+                 fun.min = median, fun.max = median, geom = "errorbar",
+                 width = 0.62, linewidth = 0.45, show.legend = FALSE) +
     geom_point(position = position_jitter(width = 0.13, height = 0, seed = 1),
                shape = 21, fill = "white", colour = "grey15", size = 0.9, stroke = 0.3) +
     atrx_theme

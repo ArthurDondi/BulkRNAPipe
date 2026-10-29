@@ -56,5 +56,6 @@ replicates the Wilcoxon rank-sum test cannot go below p = 0.1 (2 of the 20
 possible rank arrangements), so the DESeq2 padj is the informative statistic.
 
 **Patient cohort.** The patient metadata (`metadata_table.csv`: omics_id,
-material_general, tp, mna, atrx) is patient data: it stays on the cluster next
-to the expression matrix and is never committed.
+material_general, tp, mna, atrx, exclusion, comment) is patient data: it stays
+on the cluster next to the expression matrix and is never committed. Samples
+with `exclusion` TRUE are left out of the report, with `comment` as the reason.

@@ -39,7 +39,8 @@ fmt_p <- function(p) ifelse(is.na(p), "NA", formatC(p, format = "g", digits = 2)
 #   pairs  : data.frame(group1, group2, label) - one bracket per row, may be empty
 gene_page <- function(df, title, subtitle, ylab, colours, pairs = NULL, caption = NULL) {
   p <- ggplot(df, aes(x = group, y = value, fill = group)) +
-    geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
+    geom_boxplot(outlier.shape = NA, width = 0.6) +
+    median_line(width = 0.6) +
     geom_jitter(width = 0.15, height = 0, size = 1.8, shape = 21,
                 colour = "black", fill = "white", stroke = 0.4) +
     scale_fill_manual(values = colours, drop = FALSE, guide = "none") +
@@ -80,7 +81,8 @@ gene_page <- function(df, title, subtitle, ylab, colours, pairs = NULL, caption 
 #   df : data.frame(label, group, value) - label is the facet strip text
 overview_page <- function(df, title, ylab, colours, ncol = 5, subtitle = NULL) {
   ggplot(df, aes(x = group, y = value, fill = group)) +
-    geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.6) +
+    geom_boxplot(outlier.shape = NA, width = 0.6) +
+    median_line(width = 0.6) +
     geom_jitter(width = 0.15, height = 0, size = 0.8, shape = 21,
                 colour = "black", fill = "white", stroke = 0.3) +
     facet_wrap(~ label, scales = "free_y", ncol = ncol) +
@@ -94,6 +96,21 @@ overview_page <- function(df, title, ylab, colours, ncol = 5, subtitle = NULL) {
           plot.title      = element_text(face = "bold"))
 }
 
-# Colourblind-safe (Okabe-Ito) colours for up to 8 groups.
-okabe_ito <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442",
-               "#0072B2", "#D55E00", "#CC79A7", "#999999")
+# Condition colours from the lab colour sheet (20261021_Colors.pdf), the same
+# as COND_COLOURS in report/analysis_report.Rmd - keep the two in sync.
+condition_colours <- c(TP53 = "#ABAB50", E6 = "#46184E", EmptyVector = "#D16530",
+                       ATRX_FL = "#19468C", ATRX_IFF = "#B72656")
+
+# Median redrawn over a box: white where the fill is dark (relative luminance
+# < 0.179, where white contrasts more than black), else the default box grey.
+# The default median vanishes on the E6 and ATRX_FL colours.
+median_ink <- function(fill) {
+  v <- grDevices::col2rgb(fill) / 255
+  v <- ifelse(v <= 0.03928, v / 12.92, ((v + 0.055) / 1.055)^2.4)
+  ifelse(colSums(v * c(0.2126, 0.7152, 0.0722)) < 0.179, "white", "grey20")
+}
+median_line <- function(width) {
+  stat_summary(aes(colour = after_scale(median_ink(fill))), fun = median,
+               fun.min = median, fun.max = median, geom = "errorbar",
+               width = width, linewidth = 0.5, show.legend = FALSE)
+}

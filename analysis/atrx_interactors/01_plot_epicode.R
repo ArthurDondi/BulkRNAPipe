@@ -201,7 +201,9 @@ stats <- do.call(rbind, lapply(seq_len(nrow(genes)), function(i) {
 write.csv(stats, file.path(outdir, "stats.csv"), row.names = FALSE)
 
 # ─── Plots ───────────────────────────────────────────────────────────────────
-colours <- setNames(okabe_ito[seq_along(conditions)], conditions)
+# Conditions not on the lab colour sheet fall back to grey.
+colours <- setNames(ifelse(conditions %in% names(condition_colours),
+                           condition_colours[conditions], "grey60"), conditions)
 ylab    <- expression(log[2] ~ "(normalised counts + 1)")
 
 pdf(file.path(outdir, "overview.pdf"), width = 11, height = 8.5)
