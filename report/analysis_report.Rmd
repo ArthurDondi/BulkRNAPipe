@@ -1198,7 +1198,7 @@ NB_REASONS <- c(
   status    = "no ATRX/MYCN status",
   ambiguous = "ambiguous status (ATRX gain or Xq loss, heterogeneous MNA)",
   timepoint = "no timepoint",
-  small     = sprintf("category with ≤ %d samples (not shown)", NB_MIN_N))
+  small     = sprintf("not shown, category with ≤ %d patients", NB_MIN_N))
 
 nb_select <- function(meta, samples) {
   clean <- function(x) trimws(ifelse(is.na(x), "", x))
@@ -1242,7 +1242,11 @@ nb_select <- function(meta, samples) {
   key <- paste(m$status, m$category)
   ok  <- is.na(m$reason)
   n_pat <- tapply(m$patient[ok], key[ok], function(p) length(unique(p)))
-  m$reason[ok & key %in% names(n_pat)[n_pat <= NB_MIN_N]] <- NB_REASONS[["small"]]
+  m$small <- ok & key %in% names(n_pat)[n_pat <= NB_MIN_N]
+  # One reason per category, so the table names each hidden category.
+  m$reason[m$small] <- sprintf("%s: %s / %s (%d)", NB_REASONS[["small"]],
+                               m$status[m$small], m$category[m$small],
+                               n_pat[key[m$small]])
   m
 }
 
@@ -1252,7 +1256,7 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   nb <- nb_select(nb_meta, samples)
 
   # Samples per category; the ones too small to draw in parentheses.
-  counted <- nb[is.na(nb$reason) | nb$reason == NB_REASONS[["small"]], ]
+  counted <- nb[is.na(nb$reason) | nb$small, ]
   n_tab <- tapply(counted$patient,
                   list(factor(counted$status, NB_STATUS),
                        factor(counted$category, NB_CATEGORY)),
@@ -1269,9 +1273,12 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   # Every sample left out, by reason; matrix columns missing from the metadata
   # are listed too.
   ex <- nb[!is.na(nb$reason), ]
-  # Order: preprocessing, the metadata exclusions, then the reasons above.
+  # Order: preprocessing, the metadata exclusions, the reasons above, then the
+  # hidden categories in plotting order.
+  small <- ex[ex$small, ]
+  small <- small[order(match(small$status, NB_STATUS), match(small$category, NB_CATEGORY)), ]
   lev <- unique(c(NB_REASONS[["removed"]], sort(unique(ex$comment[ex$excluded])),
-                  NB_REASONS))
+                  NB_REASONS[names(NB_REASONS) != "small"], small$reason))
   ex_tab <- data.frame(reason = lev[lev %in% ex$reason])
   ex_tab$n <- vapply(ex_tab$reason, function(r) sum(ex$reason == r), integer(1))
   ex_tab$samples <- vapply(ex_tab$reason, function(r)
