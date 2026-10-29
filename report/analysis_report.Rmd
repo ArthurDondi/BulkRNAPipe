@@ -45,6 +45,17 @@ params:
   # note in config_epicode.yaml: proteomics columns read {numerator}_vs_{denominator},
   # the same convention as the DESeq2 contrast name).
   proteomics_comparison: "S1744_vs_S1011"
+  # Section "ATRX interactors": internal neuroblastoma cohort, reprocessed by
+  # Celine Prakash (full_omics_analysis.html, 2023-11-17). nb_expression is the
+  # library-layout-corrected matrix (GeneID, gene_name, one column per
+  # omics_id). nb_metadata (omics_id, material_general, tp, mna, atrx) is
+  # patient data: it stays on the cluster and is never committed. Point either
+  # at "" to skip the patient panels.
+  nb_expression: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts_liblayout_corrected.csv"
+  nb_metadata: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/metadata_table.csv"
+  # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
+  # this repository.
+  atrx_interactors: ""
 output:
   html_document:
     toc: true
@@ -100,9 +111,20 @@ suppressPackageStartupMessages({
 OUT <- params$outdir
 LEV <- params$condition_levels
 
-# Condition palette: the ggplot hue values, so figures match the pipeline PDFs.
-PAL <- setNames(
-  c("#E76BF3", "#00BF7D", "#00B0F6", "#F8766D", "#A3A500")[seq_along(LEV)], LEV)
+# Condition palette from the lab colour sheet (20261021_Colors.pdf): one fixed
+# colour per line, keyed by name so editing condition_levels cannot reshuffle
+# them (1760 = EmptyVector, 1011 = ATRX_FL, 1744 = ATRX_IFF, see
+# config_epicode.yaml). Conditions not on the sheet fall back to grey.
+COND_COLOURS <- c(TP53 = "#ABAB50", E6 = "#46184E", EmptyVector = "#D16530",
+                  ATRX_FL = "#19468C", ATRX_IFF = "#B72656")
+PAL <- setNames(ifelse(LEV %in% names(COND_COLOURS), COND_COLOURS[LEV], "grey60"), LEV)
+
+# Volcano colours from the same sheet: significant genes pink on the left
+# (log2FC < 0), green on the right (log2FC > 0). Non-significant genes are a
+# light grey, not grey70: grey70 is indistinguishable from the pink under
+# protanopia. The sheet's spare blue marks highlighted genes and proteomics hits.
+VOLC_COL <- c(down = "#E5A6B7", up = "#4C5021", ns = "#E6E6E6")
+HL_COL   <- "#6D8AB6"
 
 theme_set(theme_bw(base_size = 11))
 theme_update(panel.grid.minor = element_blank(),
@@ -152,20 +174,29 @@ de_results <- function(...) {
   r
 }
 
+# Volcano dots, shared by volcano() and volcano_with_proteomic(): the
+# non-significant genes first, then the significant ones on top, coloured by
+# side (VOLC_COL: pink left, green right). res needs a logical `sig` column.
+volcano_dots <- function(res) {
+  list(
+    geom_point(data = filter(res, !sig), colour = VOLC_COL[["ns"]], size = 0.8),
+    geom_point(aes(colour = ifelse(log2FoldChange > 0, "up", "down")),
+               data = filter(res, sig), size = 1, alpha = 0.9),
+    scale_colour_manual(values = VOLC_COL, guide = "none"))
+}
+
 volcano <- function(res, title, num, den, highlight = NULL,
                     label_top = params$volcano_label_top) {
   res <- res %>% filter(!is.na(padj)) %>%
     mutate(sig = padj < params$padj & abs(log2FoldChange) >= params$lfc)
   n <- c(up = sum(res$sig & res$log2FoldChange > 0),
          down = sum(res$sig & res$log2FoldChange < 0))
-  p <- ggplot(res, aes(log2FoldChange, -log10(padj), colour = sig)) +
-    geom_point(size = 0.8, alpha = 0.5) +
+  p <- ggplot(res, aes(log2FoldChange, -log10(padj))) +
+    volcano_dots(res) +
     geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed",
                linewidth = 0.3) +
     geom_hline(yintercept = -log10(params$padj), linetype = "dashed",
                linewidth = 0.3) +
-    scale_colour_manual(values = c("FALSE" = "grey70", "TRUE" = "#B2182B"),
-                        guide = "none") +
     labs(
       title = title,
       # Spell the direction out on both axes: "up in X" is ambiguous unless the
@@ -202,12 +233,14 @@ volcano <- function(res, title, num, den, highlight = NULL,
     if (nrow(h)) {
       # Drawn after the general labels so the highlighted genes and their
       # labels sit on top rather than being obscured by them.
+      # Blue point, dark label: green now means "significant, right side".
       p <- p +
-        geom_point(data = h, colour = "#1B7837", size = 2.4) +
+        geom_point(data = h, shape = 21, fill = HL_COL, colour = "grey15",
+                   size = 2.6, stroke = 0.4) +
         ggrepel::geom_text_repel(
-          data = h, aes(label = gene_id), colour = "#1B7837", fontface = "bold",
+          data = h, aes(label = gene_id), colour = "grey10", fontface = "bold",
           size = 3.1, min.segment.length = 0, box.padding = 0.6,
-          segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE)
+          segment.colour = HL_COL, max.overlaps = Inf, show.legend = FALSE)
     }
     miss <- setdiff(hl_lower, tolower(res$gene_id))
     if (length(miss)) message("highlight not found: ", paste(miss, collapse = ", "))
@@ -260,27 +293,32 @@ load_proteomics_sig <- function() {
     transmute(gene_id, prot_direction = ifelse(prot_logfc > 0, "Up", "Down"))
 }
 
-# RNA volcano restricted to genes that are also proteomics-significant, coloured
-# by RNA/protein direction agreement - same construction as the pipeline's own
-# volcano_proteomic.pdf, redrawn here in the report's own style.
+# RNA volcano restricted to genes that are also proteomics-significant - same
+# construction as the pipeline's own volcano_proteomic.pdf, redrawn here in the
+# report's own style. RNA-significant genes are coloured by side as in
+# volcano() (pink left, green right); their shape says whether RNA and protein
+# move the same way.
 proteomic_volcano <- function(res, title, num, den, prot_sig) {
   res <- res %>% filter(!is.na(padj)) %>%
     mutate(rna_significant = padj < params$padj & abs(log2FoldChange) >= params$lfc,
            rna_direction = ifelse(log2FoldChange > 0, "Up", "Down"))
   df <- res %>% inner_join(prot_sig, by = "gene_id") %>%
-    mutate(significance = dplyr::case_when(
-      rna_significant & rna_direction == prot_direction ~ "Significant same direction",
-      rna_significant & rna_direction != prot_direction ~ "Significant opposite direction",
-      TRUE ~ "Not significant"),
-      label = ifelse(significance != "Not significant", gene_id, NA_character_))
+    mutate(side = ifelse(rna_direction == "Up", "up", "down"),
+           agreement = ifelse(rna_direction == prot_direction,
+                              "RNA and protein agree", "RNA and protein disagree"),
+           label = ifelse(rna_significant, gene_id, NA_character_))
   if (!nrow(df)) return(invisible(NULL))
-  ggplot(df, aes(log2FoldChange, -log10(padj), colour = significance)) +
-    geom_point(alpha = 0.6, size = 1.2) +
-    ggrepel::geom_text_repel(aes(label = label), size = 2.5, max.overlaps = Inf,
-                             show.legend = FALSE) +
-    scale_colour_manual(values = c("Significant same direction" = "#33A02C",
-                                   "Significant opposite direction" = "#E31A1C",
-                                   "Not significant" = "grey60")) +
+  ggplot(df, aes(log2FoldChange, -log10(padj))) +
+    geom_point(data = filter(df, !rna_significant), shape = 21, size = 1.4, stroke = 0.3,
+               fill = VOLC_COL[["ns"]], colour = "grey50") +
+    geom_point(data = filter(df, rna_significant), aes(fill = side, shape = agreement),
+               size = 2.2, stroke = 0.3, colour = "grey20") +
+    ggrepel::geom_text_repel(aes(label = label), size = 2.5, colour = "grey15",
+                             max.overlaps = Inf, show.legend = FALSE) +
+    scale_fill_manual(values = VOLC_COL, guide = "none") +
+    scale_shape_manual(values = c("RNA and protein agree" = 21,
+                                  "RNA and protein disagree" = 24), drop = FALSE) +
+    guides(shape = guide_legend(override.aes = list(fill = "grey60", size = 2.5))) +
     geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed", linewidth = 0.3) +
     geom_hline(yintercept = -log10(params$padj), linetype = "dashed", linewidth = 0.3) +
     labs(
@@ -288,18 +326,18 @@ proteomic_volcano <- function(res, title, num, den, prot_sig) {
       subtitle = sprintf(
         paste0("Proteomics-significant genes only (FDR <= %s, |log2FC| > %s)\n",
                "RIGHT, log2FC > 0: higher in %s   |   LEFT, log2FC < 0: higher in %s\n",
-               "green = RNA and protein agree   |   red = RNA and protein disagree"),
+               "RNA-significant genes coloured by side; shape = RNA/protein agreement"),
         params$proteomics_fdr_threshold, params$proteomics_lfc_threshold, num, den),
       x = sprintf("log2FC  (%s / %s)   —   positive = higher in %s", num, den, num),
-      y = expression(-log[10] ~ "adjusted p"), colour = NULL) +
+      y = expression(-log[10] ~ "adjusted p"), shape = NULL) +
     theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5), legend.position = "bottom")
 }
 
-# The full RNA volcano (volcano()'s own grey/red dots, every gene, and the same
-# top-N gene labels), with proteomics-significant genes redrawn as stars on
-# top: green if also RNA-significant, black otherwise. The green stars get
-# their own label (a gene already starred green is skipped from the general
-# top-N labels below, so it is never labelled twice).
+# The full RNA volcano (volcano()'s own dots, every gene, and the same top-N
+# gene labels), with proteomics-significant genes redrawn as stars on top: blue
+# if also RNA-significant, black otherwise. The blue stars get their own label
+# (a gene already starred blue is skipped from the general top-N labels below,
+# so it is never labelled twice).
 volcano_with_proteomic <- function(res, title, num, den, prot_sig,
                                    label_top = params$volcano_label_top) {
   res <- res %>% filter(!is.na(padj)) %>%
@@ -309,14 +347,12 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig,
   stars <- res %>% inner_join(prot_sig, by = "gene_id")
   stars_sig    <- stars %>% filter(sig)
   stars_nonsig <- stars %>% filter(!sig)
-  p <- ggplot(res, aes(log2FoldChange, -log10(padj), colour = sig)) +
-    geom_point(size = 0.8, alpha = 0.5) +
+  p <- ggplot(res, aes(log2FoldChange, -log10(padj))) +
+    volcano_dots(res) +
     geom_vline(xintercept = c(-params$lfc, params$lfc), linetype = "dashed",
                linewidth = 0.3) +
     geom_hline(yintercept = -log10(params$padj), linetype = "dashed",
                linewidth = 0.3) +
-    scale_colour_manual(values = c("FALSE" = "grey70", "TRUE" = "#B2182B"),
-                        guide = "none") +
     labs(
       title = title,
       subtitle = sprintf(
@@ -324,7 +360,7 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig,
                "RIGHT, log2FC > 0: %s genes HIGHER in %s   |   ",
                "LEFT, log2FC < 0: %s genes HIGHER in %s\n",
                "★ proteomics-significant (FDR <= %s, |log2FC| > %s): ",
-               "green = also RNA-significant, black = not"),
+               "blue = also RNA-significant, black = not"),
         format(sum(res$sig), big.mark = ","), params$padj, params$lfc,
         format(n["up"], big.mark = ","), num,
         format(n["down"], big.mark = ","), den,
@@ -333,7 +369,7 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig,
       y = expression(-log[10] ~ "adjusted p")) +
     theme(plot.subtitle = element_text(lineheight = 1.2, size = 8.5))
   # Same top-N labelling as volcano(): ranked by -log10(padj) x |log2FC|.
-  # Genes already labelled green below are skipped here to avoid a duplicate.
+  # Genes already labelled blue below are skipped here to avoid a duplicate.
   star_sig_ids <- tolower(stars_sig$gene_id)
   if (label_top > 0) {
     lbl <- res %>% filter(sig, !tolower(gene_id) %in% star_sig_ids) %>%
@@ -350,13 +386,14 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig,
     p <- p + geom_point(data = stars_nonsig, shape = 8, size = 2, colour = "black")
   }
   if (nrow(stars_sig)) {
-    # bg.color/bg.r draw a white halo behind the text: green-on-red (a
-    # significant point under a green star's label) is otherwise unreadable.
-    p <- p + geom_point(data = stars_sig, shape = 8, size = 2, colour = "#1B7837") +
+    # bg.color/bg.r draw a white halo behind the text, which keeps a label
+    # readable where it crosses the coloured significant dots.
+    p <- p + geom_point(data = stars_sig, shape = 8, size = 2.2, stroke = 0.8,
+                        colour = HL_COL) +
       ggrepel::geom_text_repel(
-        data = stars_sig, aes(label = gene_id), colour = "#1B7837",
+        data = stars_sig, aes(label = gene_id), colour = "grey10",
         fontface = "bold", size = 2.8, min.segment.length = 0, box.padding = 0.4,
-        segment.colour = "#1B7837", max.overlaps = Inf, show.legend = FALSE,
+        segment.colour = HL_COL, max.overlaps = Inf, show.legend = FALSE,
         bg.color = "white", bg.r = 0.15)
   }
   p
@@ -1083,6 +1120,312 @@ for (slug in names(CATEGORY_LABELS)) {
   }
   cat("\n\n")
 }
+```
+
+---
+
+# ATRX interactors
+
+The proteomics experiment (see the overlay in
+[The two constructs against each other](#the-two-constructs-against-each-other))
+identified proteins interacting with `ATRX_FL` or `ATRX_IFF`. Here we
+investigate the expression of the genes encoding these interactors, first in
+our current data, the five SK-N-SH conditions, then in our internal
+neuroblastoma patient samples, grouped by ATRX and MYCN status. The list
+(`analysis/atrx_interactors/atrx_interactors.tsv`) splits them into `ATRX_FL`
+and `ATRX_IFF` interactors, each called *Yes* or *Maybe?*.
+
+## Patient cohort
+
+`reanalysis.NB.bulkRNA` holds our internal neuroblastoma bulk RNA-seq samples,
+reprocessed together by Celine Prakash (*full_omics_analysis.html*,
+2023-11-17): the samples published in GEO GSE94035 (Rifatbegovic et al.,
+*Int J Cancer* 2018, PMID 28921546) plus samples added since. Reads were
+trimmed with fastp, quantified with salmon and summarised to genes with
+tximeta. edgeR's `filterByExpr` kept 14,604 of 38,269 genes, and limma's
+`removeBatchEffect` removed the library-layout effect (single-end unstranded,
+single-end stranded, paired-end) from the log-CPM values, with the material
+kept in the design. The corrected values are plotted as log2(value + 1).
+
+- **ATRX DEL**: ATRX deletion. **MNA** / **nMNA**: ATRX wild type, with /
+  without MYCN amplification. **BMn**: bone marrow negative for tumour cells,
+  the control without tumour cells.
+- **Tum**: primary tumour. **DTC**: disseminated tumour cells, GD2-enriched
+  from the bone marrow. **dx**: diagnosis. **TRE**: treatment. **rel**:
+  relapse.
+- Status and timepoint come from `metadata_table.csv` (`params$nb_metadata`,
+  extracted from the same report). A category is shown only when it holds
+  more than 3 samples; replicate libraries of one patient are averaged.
+
+```{r atrx-data, results = "asis"}
+# ── Inputs ───────────────────────────────────────────────────────────────────
+# The interactor list lives in this repository; resolve it from the Rmd's own
+# path, since the Snakemake rule knits from a temporary directory.
+atrx_tsv <- if (nzchar(params$atrx_interactors)) params$atrx_interactors else
+  file.path(dirname(knitr::current_input(dir = TRUE)), "..", "analysis",
+            "atrx_interactors", "atrx_interactors.tsv")
+ai <- if (file.exists(atrx_tsv)) read.delim(atrx_tsv, colClasses = "character") else NULL
+if (is.null(ai)) cat("\n> **Not available.** `", atrx_tsv, "` was not found.\n\n", sep = "")
+
+# SK-N-SH: the normalised counts used for "Genes of interest" above.
+nc <- grab("deseq2", "E6_vs_TP53", "normalized_counts.csv")
+if (is.null(nc)) missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
+
+# Patients: both files are needed.
+read_param <- function(f, ...)
+  if (nzchar(f) && file.exists(f)) read.csv(f, check.names = FALSE, ...) else NULL
+nb_expr <- read_param(params$nb_expression, stringsAsFactors = FALSE)
+nb_meta <- read_param(params$nb_metadata, colClasses = "character")
+if (is.null(nb_expr) || is.null(nb_meta)) {
+  cat("\n> **Not available.** `params$nb_expression` or `params$nb_metadata` was",
+      "not found; the patient panels are skipped.\n\n")
+  nb_expr <- nb_meta <- NULL
+}
+
+# ── Patient samples: group, category, and why a sample is left out ──────────
+NB_STATUS   <- c("ATRX DEL", "MNA", "nMNA", "BMn")
+NB_CATEGORY <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "BMn")
+NB_MIN_N    <- 3  # a category is drawn only with more samples than this
+
+# Exclusions metadata_table.csv cannot express, from the omics tables of
+# full_omics_analysis.html: data_qc "Poor" in the lab database (none of these
+# was deposited in GEO GSE94035) and the one DTC sample sequenced without GD2
+# enrichment.
+NB_POOR_QC <- c("TUM_001_DX_3", "TUM_003_DX_1", "TUM_003_DX_3", "TUM_003_DX_4",
+                "TUM_004_DX_1", "TUM_004_DX_2", "DTC_013_REL_1", "DTC_038_NA_2",
+                "DTC_051_DX_2", "DTC_066_REL_3")
+NB_NOT_ENRICHED <- "DTC_007_REL_1"
+
+NB_REASONS <- c(
+  removed   = "dropped in preprocessing (low depth)",
+  qc        = "poor QC in the lab database",
+  enrich    = "DTC not GD2-enriched",
+  material  = "material not annotated",
+  status    = "no ATRX/MYCN status",
+  ambiguous = "ambiguous status (ATRX gain or Xq loss, heterogeneous MNA)",
+  timepoint = "no timepoint",
+  small     = sprintf("category with ≤ %d samples (not shown)", NB_MIN_N))
+
+nb_select <- function(meta, samples) {
+  up <- function(x) toupper(trimws(ifelse(is.na(x), "", x)))
+  m <- data.frame(omics_id = meta$omics_id, material = up(meta$material_general),
+                  tp = up(meta$tp), mna = up(meta$mna), atrx = up(meta$atrx),
+                  stringsAsFactors = FALSE)
+  # MNCs and cell lines are not part of this comparison: left out silently.
+  m <- m[!m$material %in% c("MNC", "CL"), ]
+  m$patient <- sub("^[^_]+_([^_]+)_.*$", "\\1", m$omics_id)
+  # An ATRX deletion overrides the MYCN call; otherwise MYCN splits the ATRX
+  # wild type (atrx Normal, NO or blank, as in the omics tables).
+  ambiguous <- m$atrx %in% c("GAIN", "XQ LOSS") | m$mna == "HETMNA"
+  m$status <- case_when(
+    m$material == "BMN"              ~ "BMn",
+    !m$material %in% c("TUM", "DTC") ~ NA_character_,
+    m$atrx == "DELETION"             ~ "ATRX DEL",
+    ambiguous                        ~ NA_character_,
+    m$mna == "YES"                   ~ "MNA",
+    m$mna == "NO"                    ~ "nMNA",
+    TRUE                             ~ NA_character_)
+  type <- ifelse(m$material == "TUM", "Tum", "DTC")
+  m$category <- case_when(
+    m$material == "BMN" ~ "BMn",
+    m$tp == "DE"        ~ paste(type, "dx"),
+    m$tp == "TRE"       ~ paste(type, "TRE"),
+    m$tp == "REL"       ~ paste(type, "rel"),
+    TRUE                ~ NA_character_)
+  m$reason <- case_when(
+    !m$omics_id %in% samples                ~ NB_REASONS[["removed"]],
+    m$omics_id %in% NB_POOR_QC              ~ NB_REASONS[["qc"]],
+    m$omics_id %in% NB_NOT_ENRICHED         ~ NB_REASONS[["enrich"]],
+    !m$material %in% c("TUM", "DTC", "BMN") ~ NB_REASONS[["material"]],
+    is.na(m$status) & ambiguous             ~ NB_REASONS[["ambiguous"]],
+    is.na(m$status)                         ~ NB_REASONS[["status"]],
+    is.na(m$category)                       ~ NB_REASONS[["timepoint"]],
+    TRUE                                    ~ NA_character_)
+  # Counted in patients: the libraries of one patient become one point.
+  key <- paste(m$status, m$category)
+  ok  <- is.na(m$reason)
+  n_pat <- tapply(m$patient[ok], key[ok], function(p) length(unique(p)))
+  m$reason[ok & key %in% names(n_pat)[n_pat <= NB_MIN_N]] <- NB_REASONS[["small"]]
+  m
+}
+
+pat <- cell <- NULL
+if (!is.null(nb_meta) && !is.null(ai)) {
+  samples <- setdiff(colnames(nb_expr), c("GeneID", "gene_name"))
+  nb <- nb_select(nb_meta, samples)
+
+  # Samples per category; the ones too small to draw in parentheses.
+  counted <- nb[is.na(nb$reason) | nb$reason == NB_REASONS[["small"]], ]
+  n_tab <- tapply(counted$patient,
+                  list(factor(counted$status, NB_STATUS),
+                       factor(counted$category, NB_CATEGORY)),
+                  function(p) length(unique(p)))
+  n_tab[is.na(n_tab)] <- 0L
+  n_tab <- n_tab[, colSums(n_tab) > 0, drop = FALSE]
+  cells <- ifelse(n_tab == 0, "", ifelse(n_tab <= NB_MIN_N, sprintf("(%d)", n_tab), n_tab))
+  cat("\n\n")
+  print(kable(cells, align = "c", caption = sprintf(
+    "Samples per category, one per patient. In parentheses: %d or fewer, not shown.",
+    NB_MIN_N)))
+  cat("\n\n")
+
+  # Every sample left out, by reason; matrix columns missing from the metadata
+  # are listed too.
+  ex <- nb[!is.na(nb$reason), ]
+  ex_tab <- data.frame(reason = unname(NB_REASONS[NB_REASONS %in% ex$reason]))
+  ex_tab$n <- vapply(ex_tab$reason, function(r) sum(ex$reason == r), integer(1))
+  ex_tab$samples <- vapply(ex_tab$reason, function(r)
+    paste(sort(ex$omics_id[ex$reason == r]), collapse = ", "), character(1))
+  no_meta <- setdiff(samples[!grepl("^(MNC|CL)_", samples)], nb_meta$omics_id)
+  if (length(no_meta)) ex_tab <- rbind(ex_tab, data.frame(
+    reason = "not in metadata_table.csv", n = length(no_meta),
+    samples = paste(no_meta, collapse = ", ")))
+  print(kable(ex_tab, row.names = FALSE, caption = "Samples left out"))
+  cat("\n\n")
+
+  keep <- nb[is.na(nb$reason), ]
+  dup <- keep %>% group_by(status, category, patient) %>% filter(n() > 1) %>%
+    summarise(ids = paste(sort(omics_id), collapse = " + "), .groups = "drop")
+  if (nrow(dup)) cat("\nAveraged into one point per patient:",
+                     paste(dup$ids, collapse = "; "), "\n\n")
+
+  # Interactor rows: Ensembl ID first, then the symbol, then previous symbols.
+  ens <- sub("\\.[0-9]+$", "", nb_expr$GeneID)
+  rows <- vapply(seq_len(nrow(ai)), function(i) {
+    prev <- trimws(strsplit(ai$previous_symbols[i], ";")[[1]])
+    hit <- c(which(ens == ai$ensembl_gene_id[i]),
+             which(nb_expr$gene_name == ai$gene[i]),
+             which(nb_expr$gene_name %in% prev[nzchar(prev)]))
+    if (length(hit)) hit[1] else NA_integer_
+  }, integer(1))
+  vals <- as.matrix(nb_expr[rows[!is.na(rows)], keep$omics_id, drop = FALSE])
+  n_neg <- sum(vals < 0, na.rm = TRUE)
+  if (n_neg) cat(sprintf(paste(
+    "\nNegative values after the layout correction, set to 0 before",
+    "log2(value + 1): %d.\n\n"), n_neg))
+  pat <- data.frame(gene = rep(ai$gene[!is.na(rows)], times = ncol(vals)),
+                    omics_id = rep(keep$omics_id, each = nrow(vals)),
+                    value = log2(pmax(as.vector(vals), 0) + 1)) %>%
+    left_join(keep[, c("omics_id", "status", "category", "patient")], by = "omics_id") %>%
+    group_by(gene, status, category, patient) %>%
+    summarise(value = mean(value), .groups = "drop") %>%
+    mutate(key = factor(paste(status, category, sep = "|"),
+                        levels = paste(rep(NB_STATUS, each = length(NB_CATEGORY)),
+                                       NB_CATEGORY, sep = "|")),
+           status = factor(status, NB_STATUS))
+}
+
+# SK-N-SH, log2(normalised counts + 1); the epicode GTF names genes by symbol.
+if (!is.null(nc) && !is.null(meta) && !is.null(ai)) {
+  ids <- tolower(nc$gene_id)
+  crow <- vapply(seq_len(nrow(ai)), function(i) {
+    cand <- tolower(c(ai$gene[i], trimws(strsplit(ai$previous_symbols[i], ";")[[1]])))
+    hit <- match(cand[nzchar(cand)], ids)
+    if (any(!is.na(hit))) hit[!is.na(hit)][1] else NA_integer_
+  }, integer(1))
+  cell <- nc[crow[!is.na(crow)], , drop = FALSE] %>%
+    mutate(gene = ai$gene[!is.na(crow)]) %>% select(-gene_id) %>%
+    pivot_longer(-gene, names_to = "sample", values_to = "value") %>%
+    inner_join(meta, by = "sample") %>%
+    mutate(value = log2(value + 1), condition = cond_factor(as.character(condition)))
+}
+
+# ── One row per gene ─────────────────────────────────────────────────────────
+# SK-N-SH on the left on its own y-axis, the patient groups on the right on
+# one shared y-axis: two plots joined side by side, since one facet grid cannot
+# give a single panel its own y-axis. Patient boxes are blue for tumour
+# samples and grey for the tumour-free BMn control, so the condition colours
+# stay unique to SK-N-SH.
+ATRX_FILL  <- c(tumour = "#6D8AB6", control = "#D9D9D9")
+atrx_theme <- theme_bw(base_size = 10) +
+  theme(panel.grid.major.x = element_blank(), panel.grid.minor = element_blank(),
+        axis.text.x  = element_text(angle = 45, hjust = 1, size = 8.5, colour = "grey20"),
+        axis.text.y  = element_text(size = 8),
+        axis.title.y = element_text(size = 8.5, colour = "grey30"),
+        strip.text   = element_text(size = 9, face = "bold"),
+        strip.background = element_rect(fill = "grey95", colour = "grey80"),
+        plot.title   = element_text(face = "bold", size = 11),
+        legend.position = "none", plot.margin = margin(4, 6, 2, 4))
+
+# empty = TRUE draws the same panels without data, for a gene missing from one
+# dataset only, so every row keeps the same layout.
+atrx_boxes <- function(p, empty = FALSE) {
+  if (empty) return(p + geom_blank() + atrx_theme +
+                      theme(axis.text.y = element_blank(), axis.ticks.y = element_blank()))
+  p + geom_boxplot(outlier.shape = NA, width = 0.62, linewidth = 0.3, colour = "grey25") +
+    geom_point(position = position_jitter(width = 0.13, height = 0, seed = 1),
+               shape = 21, fill = "white", colour = "grey15", size = 0.9, stroke = 0.3) +
+    atrx_theme
+}
+
+atrx_cell_plot <- function(d, title, empty = FALSE) {
+  atrx_boxes(ggplot(transform(d, panel = "SK-N-SH"),
+                    aes(condition, value, fill = condition)), empty) +
+    facet_grid(. ~ panel, scales = "free_x", space = "free_x") +
+    scale_fill_manual(values = PAL) +
+    labs(title = title, x = NULL, y = "log2(norm. counts + 1)")
+}
+
+atrx_patient_plot <- function(d, title = NULL, empty = FALSE) {
+  n <- table(droplevels(d$key))
+  lab <- sub("^.*\\|", "", names(n))
+  if (!empty) lab <- sprintf("%s (%d)", lab, n)
+  atrx_boxes(ggplot(d, aes(key, value,
+                           fill = ifelse(status == "BMn", "control", "tumour"))), empty) +
+    facet_grid(. ~ status, scales = "free_x", space = "free_x") +
+    scale_x_discrete(labels = setNames(lab, names(n))) +
+    scale_fill_manual(values = ATRX_FILL) +
+    labs(title = title, x = NULL, y = "log2(corrected value + 1)")
+}
+
+atrx_rows <- function(list_name) {
+  if (is.null(ai) || (is.null(cell) && is.null(pat))) return(invisible())
+  genes <- ai[ai$list == list_name, ]
+  absent <- setdiff(genes$gene, c(cell$gene, pat$gene))
+  if (length(absent)) cat("\nNot found in either dataset:",
+                          paste(absent, collapse = ", "), "\n\n")
+  # Layout templates for a gene missing from one dataset only.
+  cell_blank <- if (!is.null(cell)) transform(cell[cell$gene == cell$gene[1], ], value = 0)
+  pat_blank  <- if (!is.null(pat)) mutate(filter(pat, gene == gene[1]), value = 0)
+  for (i in which(!genes$gene %in% absent)) {
+    g  <- genes$gene[i]
+    dc <- cell[cell$gene == g, ]
+    dp <- pat[pat$gene == g, ]
+    title <- sprintf("%s  (%s)", g, genes$call[i])
+    if (!is.null(cell) && !nrow(dc)) title <- paste0(title, "   ·   below the count filter in SK-N-SH")
+    if (!is.null(pat) && !nrow(dp))  title <- paste0(title, "   ·   not in the patient matrix")
+    left  <- if (!is.null(cell))
+      atrx_cell_plot(if (nrow(dc)) dc else cell_blank, title, empty = !nrow(dc))
+    right <- if (!is.null(pat))
+      atrx_patient_plot(if (nrow(dp)) dp else pat_blank,
+                        title = if (is.null(cell)) title, empty = !nrow(dp))
+    if (is.null(left) || is.null(right)) {
+      print(if (is.null(left)) right else left)
+      next
+    }
+    grid::grid.newpage()
+    grid::grid.draw(cbind(ggplotGrob(left), ggplotGrob(right), size = "max"))
+  }
+}
+```
+
+## ATRX_FL interactors
+
+Each row is one gene, with its interactor call. Left: the five SK-N-SH
+conditions (n = 3 each), log2(DESeq2-normalised counts + 1). Right: the
+patient samples, one point per patient, all patient panels sharing one y-axis.
+The two sides are on different scales: compare patterns within a side, not
+levels across them.
+
+```{r atrx-fl, fig.width = 9.5, fig.height = 2.7, fig.retina = 1, results = "asis"}
+# fig.retina = 1: one image per gene, so 2x images would add ~4 MB to the HTML.
+atrx_rows("FL")
+```
+
+## ATRX_IFF interactors
+
+```{r atrx-iff, fig.width = 9.5, fig.height = 2.7, fig.retina = 1, results = "asis"}
+atrx_rows("IFF")
 ```
 
 

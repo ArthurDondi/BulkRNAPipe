@@ -32,3 +32,5 @@ Thumbs.db
 
 # Clinical / patient spreadsheets must never be committed
 analysis/**/*.xlsx
+# Patient metadata for the report's ATRX-interactor section (cluster only)
+metadata_table.csv

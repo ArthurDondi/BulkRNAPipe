@@ -1,4 +1,4 @@
-# Shared helpers for 01_plot_epicode.R and 02_plot_GSE94035.R.
+# Helpers for 01_plot_epicode.R.
 # Sourced, not run directly.
 
 suppressPackageStartupMessages({
