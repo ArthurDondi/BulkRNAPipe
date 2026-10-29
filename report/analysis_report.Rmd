@@ -1147,6 +1147,7 @@ with tximeta. edgeR's `filterByExpr` kept 14,604 of 38,269 genes, and limma's
 `removeBatchEffect` removed the library-layout effect (single-end unstranded,
 single-end stranded, paired-end), with the material kept in the design.
 
+Nomenclature:
 - **ATRX DEL**: ATRX deletion. **MNA** / **nMNA**: ATRX wild type, with /
   without MYCN amplification. **BMn**: bone marrow negative for tumour cells, control.
 - **Tum**: primary tumour. **DTC**: disseminated tumour cells. **dx**: diagnosis. **TRE**: treatment. **rel**:
