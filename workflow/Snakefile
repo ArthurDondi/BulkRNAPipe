@@ -12,6 +12,7 @@ include: 'rules/gsea.smk'
 include: 'rules/gsea_interaction.smk'
 include: 'rules/go.smk'
 include: 'rules/compare_contrasts.smk'
+include: 'rules/shared_genes.smk'
 include: 'rules/report.smk'
 
 # Define the pipeline working directory
@@ -76,6 +77,8 @@ rule BulkRNAPipe_output:
                contrast=CONTRASTS,
                ont=[o.lower() for o in GO_ONTOLOGIES],
                dir=["up", "down"]) if GOENRICH else [],
+        # ── Genes shared by two contrasts (Venn centres + enrichment) ────────
+        expand("shared_genes/{name}/genes.csv", name=SHARED_GENES) if DESEQ2 else [],
         # ── Contrast comparisons ──────────────────────────────────────────────
         expand("gsea_compare/{comparison}/delta_nes_summary.csv",
                comparison=CONTRAST_COMPARISONS) if GSEA and CONTRAST_COMPARISONS else [],

@@ -616,6 +616,30 @@ def get_comparison_cfg(name):
             return cc
     raise ValueError(f"No ContrastComparisons entry named '{name}'")
 
+# Genes shared by two contrasts with the same denominator (SharedGenes)
+_shared_cfg = config.get('SharedGenes') or {}
+SHARED_COLLECTIONS = [str(c) for c in
+                      (_shared_cfg.get('collections') or ['H', 'KEGG_CURRENT', 'C5:GO:BP'])]
+SHARED_GENES = [sg['name'] for sg in (_shared_cfg.get('comparisons') or [])]
+
+def get_shared_cfg(name):
+    """Return the SharedGenes.comparisons entry for *name*."""
+    for sg in _shared_cfg.get('comparisons') or []:
+        if sg['name'] == name:
+            return sg
+    raise ValueError(f"No SharedGenes.comparisons entry named '{name}'")
+
+# The "down" set is "higher in the denominator in both", so both contrasts must
+# share it; otherwise the shared genes mean nothing.
+for _name in SHARED_GENES:
+    _a, _b = (get_shared_cfg(_name)[k] for k in ('contrast_A', 'contrast_B'))
+    _den = {c[0]: c[2] for c in config['DESeq2']['contrasts']}
+    if _a not in _den or _b not in _den:
+        raise ValueError(f"SharedGenes '{_name}': {_a} and {_b} must be DESeq2.contrasts")
+    if _den[_a] != _den[_b]:
+        raise ValueError(f"SharedGenes '{_name}': {_a} and {_b} have different "
+                         f"denominators ({_den[_a]} vs {_den[_b]})")
+
 # GO ontologies (BP / MF / CC)
 GO_ONTOLOGIES = config.get('GO', {}).get('ontology', ['BP']) if GOENRICH else []
 

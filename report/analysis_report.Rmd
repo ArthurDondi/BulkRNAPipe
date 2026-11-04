@@ -120,12 +120,20 @@ COND_COLOURS <- c(TP53 = "#ABAB50", E6 = "#46184E", EmptyVector = "#D16530",
                   ATRX_FL = "#19468C", ATRX_IFF = "#B72656")
 PAL <- setNames(ifelse(LEV %in% names(COND_COLOURS), COND_COLOURS[LEV], "grey60"), LEV)
 
-# Volcano colours from the same sheet: significant genes pink on the left
-# (log2FC < 0), green on the right (log2FC > 0). Non-significant genes are a
+# Volcano colours from the same sheet: significant genes green on the left
+# (log2FC < 0), pink on the right (log2FC > 0). Non-significant genes are a
 # light grey, not grey70: grey70 is indistinguishable from the pink under
 # protanopia. The sheet's spare blue marks highlighted genes and proteomics hits.
-VOLC_COL <- c(down = "#E5A6B7", up = "#4C5021", ns = "#E6E6E6")
+VOLC_COL <- c(down = "#4C5021", up = "#E5A6B7", ns = "#E6E6E6")
 HL_COL   <- "#6D8AB6"
+
+# Enrichment plots (GSEA, GO, over-representation): padj on a single-hue blue
+# ramp, dark where padj is lowest. Neither the old red ramp nor viridis, which
+# the proteomics analysis uses, so transcriptomic and proteomic enrichment
+# panels never share a colour scale.
+scale_colour_padj <- function(cut = params$padj)
+  scale_colour_gradient(low = "#0d366b", high = "#86b6ef", limits = c(0, cut),
+                        oob = scales::squish, name = "padj")
 
 theme_set(theme_bw(base_size = 11))
 theme_update(panel.grid.minor = element_blank(),
@@ -177,7 +185,7 @@ de_results <- function(...) {
 
 # Volcano dots, shared by volcano() and volcano_with_proteomic(): the
 # non-significant genes first, then the significant ones on top, coloured by
-# side (VOLC_COL: pink left, green right). res needs a logical `sig` column.
+# side (VOLC_COL: green left, pink right). res needs a logical `sig` column.
 volcano_dots <- function(res) {
   list(
     geom_point(data = filter(res, !sig), colour = VOLC_COL[["ns"]], size = 0.8),
@@ -297,7 +305,7 @@ load_proteomics_sig <- function() {
 # RNA volcano restricted to genes that are also proteomics-significant - same
 # construction as the pipeline's own volcano_proteomic.pdf, redrawn here in the
 # report's own style. RNA-significant genes are coloured by side as in
-# volcano() (pink left, green right); their shape says whether RNA and protein
+# volcano() (green left, pink right); their shape says whether RNA and protein
 # move the same way.
 proteomic_volcano <- function(res, title, num, den, prot_sig) {
   res <- res %>% filter(!is.na(padj)) %>%
@@ -970,10 +978,14 @@ if (is.null(goi) || nrow(goi) == 0) {
 # Pathway enrichment (GSEA)
 
 ```{r gsea, fig.height = 6, results = "asis"}
+# Significant pathways only (padj < params$padj), the top N by |NES| per side.
 gsea_dot <- function(df, title, top = 12) {
-  df <- df %>% filter(!is.na(padj)) %>% arrange(desc(abs(NES)))
+  df <- df %>% filter(!is.na(padj), padj < params$padj) %>% arrange(desc(abs(NES)))
   df <- bind_rows(head(filter(df, NES > 0), top), head(filter(df, NES < 0), top))
-  if (!nrow(df)) return(invisible(NULL))
+  if (!nrow(df)) {
+    cat(sprintf("\nNo pathway with padj < %s.\n\n", params$padj))
+    return(invisible(NULL))
+  }
   num <- df$numerator[1]; den <- df$denominator[1]
   up   <- sprintf("NES > 0: pathway genes HIGHER in %s", num)
   down <- sprintf("NES < 0: pathway genes HIGHER in %s", den)
@@ -986,7 +998,7 @@ gsea_dot <- function(df, title, top = 12) {
       geom_point() +
       geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
       facet_grid(side ~ ., scales = "free_y", space = "free_y") +
-      scale_colour_gradient(low = "#B2182B", high = "grey75", limits = c(0, 0.25)) +
+      scale_colour_padj() +
       labs(title = title,
            subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
            y = NULL, colour = "padj", size = "Set size") +
@@ -1010,12 +1022,11 @@ for (cn in c("ATRX_IFF_vs_ATRX_FL", "ATRX_FL_vs_EmptyVector",
 
 Two complementary views of the same five categories, restricted to the
 headline `ATRX_IFF_vs_ATRX_FL` contrast — the cleanest comparison in the
-design. Filled points are `padj < 0.05` and coloured across that range;
-hollow grey points did not reach it.
+design. Only pathways with `padj < 0.05` are shown;
+`gsea/{contrast}/{kegg,go}/{category}_results.csv` keeps every pathway tested.
 
 - **KEGG**, drawn from the live KEGG definitions rather than MSigDB's frozen
-  snapshot. A category here is a short, fixed pathway list, so **every**
-  pathway in it is shown — the ones that did not move are part of the answer.
+  snapshot. A category here is a short, fixed pathway list.
 - **GO** has no KEGG-style categories, so each group is instead a **keyword
   search**: a case-insensitive regular expression matched against GO
   biological-process term *names*. That is a text search, not an ontology
@@ -1023,8 +1034,8 @@ hollow grey points did not reach it.
   that describe the same biology differently. The exact pattern used for each
   category is printed under its panel below, copied verbatim from
   `workflow/resources/go_categories.tsv`, so the match is never a black box.
-  A keyword can pull in dozens of terms, so the figure is capped at the top
-  25 by `padj`; `gsea/{contrast}/go/{category}_results.csv` keeps every match.
+  A keyword can pull in dozens of significant terms, so the figure is capped
+  at the top 25 by `padj`.
 
 ```{r pathway-categories, fig.height = 4.5, results = "asis"}
 CATEGORY_LABELS <- c(replication_and_repair       = "Replication and repair",
@@ -1052,15 +1063,14 @@ GO_KEYWORDS <- c(
 # Matches GSEA.go_categories_top_n in config_epicode.yaml.
 GO_TOP_N <- 25
 
+# Significant pathways only (padj < params$padj).
 cat_dot <- function(df, title) {
-  if (is.null(df) || !nrow(df)) return(invisible(NULL))
-  cut <- params$padj
-  df$significant <- !is.na(df$padj) & df$padj < cut
-  # Real shape legend instead of subtitle text: filled = significant, hollow =
-  # not, with the cutoff folded into the label so nothing else has to say it.
-  sig_levels <- c(sprintf("Significant (padj < %s)", cut), "Not significant")
-  df$sig_label <- factor(ifelse(df$significant, sig_levels[1], sig_levels[2]),
-                         levels = sig_levels)
+  if (is.null(df)) return(invisible(NULL))
+  df <- df[!is.na(df$padj) & df$padj < params$padj, , drop = FALSE]
+  if (!nrow(df)) {
+    cat(sprintf("\nNo pathway with padj < %s.\n\n", params$padj))
+    return(invisible(NULL))
+  }
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$NES)])
   sz <- range(df$size, na.rm = TRUE)
   brk <- if (sz[1] == sz[2]) sz[1] else unique(round(c(sz[1], mean(sz), sz[2])))
@@ -1070,19 +1080,13 @@ cat_dot <- function(df, title) {
   sub <- if (nzchar(num) && nzchar(den))
     sprintf("NES > 0: pathway genes HIGHER in %s   |   NES < 0: pathway genes HIGHER in %s",
             num, den) else NULL
-  shape_vals <- setNames(c(19, 21), sig_levels)
   print(
     ggplot(df, aes(NES, pathway)) +
       geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-      geom_point(data = df[!df$significant, ], aes(size = size, shape = sig_label),
-                 colour = "grey65", fill = NA, stroke = 0.7) +
-      geom_point(data = df[df$significant, ], aes(size = size, colour = padj, shape = sig_label)) +
-      scale_shape_manual(name = NULL, values = shape_vals, drop = FALSE) +
-      scale_colour_gradient(low = "#A50F15", high = "#FC9272",
-                            limits = c(0, cut), oob = scales::squish) +
+      geom_point(aes(size = size, colour = padj)) +
+      scale_colour_padj() +
       scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
-      guides(shape = guide_legend(override.aes = list(colour = "grey30", fill = NA, size = 3))) +
-      labs(title = title, subtitle = sub, y = NULL, colour = "padj", size = "Set size") +
+      labs(title = title, subtitle = sub, y = NULL, size = "Set size") +
       theme(plot.subtitle = element_text(size = 8, colour = "grey30"))
   )
 }
@@ -1093,7 +1097,7 @@ for (slug in names(CATEGORY_LABELS)) {
   label <- CATEGORY_LABELS[[slug]]
   cat("\n\n###", label, "\n\n")
 
-  cat("\n\n**KEGG** — every pathway in the category\n\n")
+  cat("\n\n**KEGG** — significant pathways in the category\n\n")
   gk <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
   if (is.null(gk)) {
     missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv"))
@@ -1108,11 +1112,12 @@ for (slug in names(CATEGORY_LABELS)) {
   if (is.null(gg)) {
     missing_note("gsea", cn, "go", paste0(slug, "_results.csv"))
   } else {
+    gg <- gg[!is.na(gg$padj) & gg$padj < params$padj, , drop = FALSE]
     n_matched <- nrow(gg)
     gg <- gg[order(gg$padj, -abs(gg$NES)), , drop = FALSE]
     if (n_matched > GO_TOP_N) {
       cat(sprintf(
-        "\n> top %d of %d matched terms by padj; the rest are in `gsea/%s/go/%s_results.csv`\n\n",
+        "\n> top %d of %d significant terms by padj; all matches are in `gsea/%s/go/%s_results.csv`\n\n",
         GO_TOP_N, n_matched, cn, slug))
       gg <- gg[seq_len(GO_TOP_N), , drop = FALSE]
     }
@@ -1120,6 +1125,137 @@ for (slug in names(CATEGORY_LABELS)) {
     cat_dot(gg, paste("GO:", label))
   }
   cat("\n\n")
+}
+```
+
+---
+
+# Shared by ATRX_FL and ATRX_IFF
+
+What do the two constructs change the same way, relative to their common
+control? Genes significant (`padj < 0.05`, `|log2FC| >= 1`) in the same
+direction in `ATRX_FL_vs_EmptyVector` and `ATRX_IFF_vs_EmptyVector`: higher in
+both constructs, or higher in `EmptyVector` in both. The centre of each Venn
+diagram is then tested against Hallmark, current KEGG and GO
+biological-process gene sets. The centre is a gene set rather than a ranking,
+so this is an over-representation test (one-sided hypergeometric, against all
+genes tested in both contrasts, BH-adjusted), not GSEA.
+
+## Venn diagrams
+
+```{r shared-venn, fig.width = 9, fig.height = 3.8, results = "asis"}
+# SharedGenes.comparisons entry in config_epicode.yaml (pipeline outputs under
+# shared_genes/<name>/).
+SHARED_NAME <- "ATRX_FL_and_ATRX_IFF_vs_EmptyVector"
+r_fl  <- de_results("deseq2", "ATRX_FL_vs_EmptyVector", "results.csv")
+r_iff <- de_results("deseq2", "ATRX_IFF_vs_EmptyVector", "results.csv")
+
+# Same calls as the pipeline's SharedGenes rule and every DE table above.
+sig_genes <- function(r, sign) r$gene_id[!is.na(r$padj) & r$padj < params$padj &
+                                           sign * r$log2FoldChange >= params$lfc]
+
+venn_plot <- function(sets) {
+  circle <- function(x0) {
+    t <- seq(0, 2 * pi, length.out = 200)
+    data.frame(x = x0 + cos(t), y = sin(t))
+  }
+  shapes <- bind_rows(lapply(names(sets), function(p) bind_rows(
+    cbind(circle(-0.6), set = "ATRX_FL", panel = p),
+    cbind(circle(0.6), set = "ATRX_IFF", panel = p))))
+  counts <- bind_rows(lapply(names(sets), function(p) {
+    a <- sets[[p]]$ATRX_FL; b <- sets[[p]]$ATRX_IFF
+    data.frame(panel = p, x = c(-1.1, 0, 1.1), y = 0,
+               n = c(length(setdiff(a, b)), length(intersect(a, b)), length(setdiff(b, a))))
+  }))
+  labels <- bind_rows(lapply(names(sets), function(p) data.frame(
+    panel = p, x = c(-0.6, 0.6), y = 1.22, hjust = c(0.7, 0.3),
+    lab = sprintf("%s vs EmptyVector\n(%d)", c("ATRX_FL", "ATRX_IFF"),
+                  lengths(sets[[p]][c("ATRX_FL", "ATRX_IFF")])))))
+  ggplot() +
+    geom_polygon(data = shapes, aes(x, y, group = set, fill = set, colour = set),
+                 alpha = 0.25, linewidth = 0.6) +
+    geom_text(data = counts, aes(x, y, label = n), size = 5, colour = "grey10") +
+    geom_text(data = labels, aes(x, y, label = lab, hjust = hjust), vjust = 0,
+              size = 3.2, colour = "grey20", lineheight = 0.9) +
+    facet_wrap(~ factor(panel, levels = names(sets))) +
+    scale_fill_manual(values = PAL, guide = "none") +
+    scale_colour_manual(values = PAL, guide = "none") +
+    coord_fixed(xlim = c(-1.8, 1.8), ylim = c(-1.1, 1.65), clip = "off") +
+    theme_void() +
+    theme(strip.text = element_text(face = "bold", size = 11, margin = margin(b = 6)))
+}
+
+if (is.null(r_fl) || is.null(r_iff)) {
+  if (is.null(r_fl))  missing_note("deseq2", "ATRX_FL_vs_EmptyVector", "results.csv")
+  if (is.null(r_iff)) missing_note("deseq2", "ATRX_IFF_vs_EmptyVector", "results.csv")
+} else {
+  sets <- list(
+    "Higher in the construct" = list(ATRX_FL = sig_genes(r_fl, 1), ATRX_IFF = sig_genes(r_iff, 1)),
+    "Higher in EmptyVector"   = list(ATRX_FL = sig_genes(r_fl, -1), ATRX_IFF = sig_genes(r_iff, -1)))
+  print(venn_plot(sets))
+
+  # The shared genes themselves, strongest first (smaller |log2FC| of the two).
+  shared_table <- function(s, sign, label) {
+    g <- intersect(s$ATRX_FL, s$ATRX_IFF)
+    if (!length(g)) return(invisible(NULL))
+    d <- inner_join(r_fl[r_fl$gene_id %in% g, c("gene_id", "log2FoldChange", "padj")],
+                    r_iff[r_iff$gene_id %in% g, c("gene_id", "log2FoldChange", "padj")],
+                    by = "gene_id", suffix = c("_FL", "_IFF"))
+    d <- d[order(-pmin(sign * d$log2FoldChange_FL, sign * d$log2FoldChange_IFF)), ]
+    cat("\n\n")
+    print(kable(head(transmute(d, gene_id,
+                               `log2FC FL` = round(log2FoldChange_FL, 2),
+                               `log2FC IFF` = round(log2FoldChange_IFF, 2),
+                               `padj FL` = signif(padj_FL, 2),
+                               `padj IFF` = signif(padj_IFF, 2)), 15),
+                caption = sprintf("%s in both: top %d of %d, by the smaller |log2FC| (all in shared_genes/%s/genes.csv)",
+                                  label, min(15, nrow(d)), nrow(d), SHARED_NAME)))
+    cat("\n\n")
+  }
+  shared_table(sets[[1]], 1, "Higher in the construct")
+  shared_table(sets[[2]], -1, "Higher in EmptyVector")
+}
+```
+
+## Enrichment of the shared genes
+
+Significant gene sets only (`padj < 0.05`), at most the top 20 by `padj`;
+`shared_genes/ATRX_FL_and_ATRX_IFF_vs_EmptyVector/ora_*.csv` keeps every set
+tested. Fold enrichment is the observed overlap over the overlap expected by
+chance.
+
+```{r shared-ora, fig.height = 4.5, results = "asis"}
+ora_dot <- function(df, title, top = 20) {
+  df <- df[!is.na(df$padj) & df$padj < params$padj, , drop = FALSE]
+  if (!nrow(df)) {
+    cat(sprintf("\nNo gene set with padj < %s.\n\n", params$padj))
+    return(invisible(NULL))
+  }
+  df <- head(df[order(df$padj, -df$fold_enrichment), ], top)
+  df$pathway <- gsub("^(HALLMARK|GOBP)_", "", df$pathway)
+  df$pathway <- factor(df$pathway, levels = df$pathway[order(df$fold_enrichment)])
+  print(
+    ggplot(df, aes(fold_enrichment, pathway, colour = padj, size = overlap)) +
+      geom_point() +
+      scale_colour_padj() +
+      labs(title = title, x = "fold enrichment (observed / expected overlap)",
+           y = NULL, size = "Shared genes in set")
+  )
+}
+
+ORA_COLLECTIONS <- c(H = "Hallmark", KEGG_CURRENT = "KEGG (current)",
+                     C5_GO_BP = "GO biological process")
+for (dir in c("up", "down")) {
+  heading <- if (dir == "up") "Higher in both ATRX constructs" else "Higher in EmptyVector in both"
+  short   <- if (dir == "up") "higher in ATRX_FL and ATRX_IFF" else "higher in EmptyVector (vs both)"
+  cat("\n\n###", heading, "\n\n")
+  for (slug in names(ORA_COLLECTIONS)) {
+    f <- sprintf("ora_%s_%s.csv", dir, slug)
+    o <- grab("shared_genes", SHARED_NAME, f)
+    if (is.null(o)) { missing_note("shared_genes", SHARED_NAME, f); next }
+    ora_dot(o, paste0(ORA_COLLECTIONS[[slug]], ": ", short))
+    cat("\n\n")
+  }
 }
 ```
 

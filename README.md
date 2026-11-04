@@ -70,7 +70,8 @@ BulkRNAPipe/
 │       ├── gsea_go_categories.R    # GO keyword category panels
 │       ├── gsea_reactome_categories.R  # Reactome keyword category panels
 │       ├── go.R                    # GO enrichment per contrast
-│       └── gsea_compare.R          # ΔNES + residual-rank comparison
+│       ├── gsea_compare.R          # ΔNES + residual-rank comparison
+│       └── shared_genes.R          # Genes shared by two contrasts + over-representation
 ├── report/
 │   └── analysis_report.Rmd         # Rendered analysis report template
 ├── run_BulkRNAPipe.sh              # Local (non-SLURM) run script
@@ -330,6 +331,9 @@ output_dir/
 │   ├── delta_nes_barplot.pdf                # ΔNES bar plot
 │   └── residual_rank/
 │       └── residual_rank_{collection}.csv   # Residual-rank fgsea per collection
+├── shared_genes/{name}/
+│   ├── genes.csv                            # log2FC/padj in both contrasts, up/down group
+│   └── ora_{up,down}_{collection}.csv       # Over-representation of the shared genes
 ├── logs/                                     # Per-rule log files
 └── benchmark/                                # Per-rule benchmark files
 ```
@@ -964,6 +968,32 @@ preferably the DESeq2 Wald `stat`).  fgsea is then run on these residuals.
   that move *more* in contrast A than in contrast B.
 - This is a gene-level "subtraction" that highlights programs unique to the
   numerator contrast.
+
+### Genes shared by two contrasts (Venn centres)
+
+`SharedGenes` takes pairs of contrasts with the same denominator and finds the
+genes significant in the same direction in both (DESeq2 `padj_threshold` /
+`lfc_threshold`): `up` = higher in both numerators, `down` = higher in the
+shared denominator. The genes shared in each direction are the centres of the
+report's Venn diagrams; each centre is tested for over-representation
+(one-sided hypergeometric, as in clusterProfiler's `enricher()`) against the
+configured collections, with all genes tested in both contrasts as the
+universe and BH adjustment per direction and collection. A centre is a gene
+set, not a ranking, so this is over-representation rather than GSEA.
+
+```yaml
+SharedGenes:
+  collections: [H, KEGG_CURRENT, C5:GO:BP]   # MSigDB collections, or KEGG_CURRENT
+  exclude_genes: [ATRX]                      # left out of the sets and the universe
+  min_size: 10                               # gene-set size within the universe
+  max_size: 500
+  comparisons:
+    - name: ATRX_FL_and_ATRX_IFF_vs_EmptyVector
+      contrast_A: ATRX_FL_vs_EmptyVector
+      contrast_B: ATRX_IFF_vs_EmptyVector
+```
+
+Outputs appear under `shared_genes/{name}/`.
 
 ---
 
