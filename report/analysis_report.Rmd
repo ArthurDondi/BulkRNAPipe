@@ -1191,7 +1191,8 @@ if (is.null(r_fl) || is.null(r_iff)) {
     "Higher in EmptyVector"   = list(ATRX_FL = sig_genes(r_fl, -1), ATRX_IFF = sig_genes(r_iff, -1)))
   print(venn_plot(sets))
 
-  # The shared genes themselves, strongest first (smaller |log2FC| of the two).
+  # All shared genes, strongest first (smaller |log2FC| of the two), in a
+  # scrollable box.
   shared_table <- function(s, sign, label) {
     g <- intersect(s$ATRX_FL, s$ATRX_IFF)
     if (!length(g)) return(invisible(NULL))
@@ -1199,15 +1200,17 @@ if (is.null(r_fl) || is.null(r_iff)) {
                     r_iff[r_iff$gene_id %in% g, c("gene_id", "log2FoldChange", "padj")],
                     by = "gene_id", suffix = c("_FL", "_IFF"))
     d <- d[order(-pmin(sign * d$log2FoldChange_FL, sign * d$log2FoldChange_IFF)), ]
-    cat("\n\n")
-    print(kable(head(transmute(d, gene_id,
-                               `log2FC FL` = round(log2FoldChange_FL, 2),
-                               `log2FC IFF` = round(log2FoldChange_IFF, 2),
-                               `padj FL` = signif(padj_FL, 2),
-                               `padj IFF` = signif(padj_IFF, 2)), 15),
-                caption = sprintf("%s in both: top %d of %d, by the smaller |log2FC| (all in shared_genes/%s/genes.csv)",
-                                  label, min(15, nrow(d)), nrow(d), SHARED_NAME)))
-    cat("\n\n")
+    cat(sprintf("\n\n**%s in both: %d genes**, sorted by the smaller |log2FC| of the two\n\n",
+                label, nrow(d)))
+    cat('<div style="max-height: 320px; overflow-y: auto; margin-bottom: 1em;">\n')
+    print(kable(transmute(d, gene_id,
+                          `log2FC FL` = round(log2FoldChange_FL, 2),
+                          `log2FC IFF` = round(log2FoldChange_IFF, 2),
+                          `padj FL` = signif(padj_FL, 2),
+                          `padj IFF` = signif(padj_IFF, 2)),
+                format = "html", row.names = FALSE,
+                table.attr = 'class="table table-condensed"'))
+    cat("\n</div>\n\n")
   }
   shared_table(sets[[1]], 1, "Higher in the construct")
   shared_table(sets[[2]], -1, "Higher in EmptyVector")

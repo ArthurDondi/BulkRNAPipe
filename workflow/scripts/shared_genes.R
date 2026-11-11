@@ -9,7 +9,8 @@
 # The shared genes are a set, not a ranking, so the enrichment is an
 # over-representation test (one-sided hypergeometric, as in clusterProfiler's
 # enricher()), not GSEA. Universe: genes with a non-NA padj in both contrasts.
-# BH adjustment within each direction x collection.
+# BH adjustment within each direction x collection, over the sets holding at
+# least one shared gene (the sets clusterProfiler's enricher() tests).
 #
 # Outputs (in --outdir):
 #   genes.csv                         every universe gene: log2FC / padj in both
@@ -104,8 +105,11 @@ ora <- function(hits, sets) {
                     pvalue = phyper(k - 1, K, N - K, n, lower.tail = FALSE),
                     genes = vapply(ov, function(g) paste(sort(g), collapse = "/"), ""),
                     stringsAsFactors = FALSE)
+  # As clusterProfiler's enricher(): only sets holding at least one hit are
+  # tested, so BH runs over those (a set with no hit cannot be enriched).
+  res <- res[res$overlap > 0, , drop = FALSE]
   res$padj <- p.adjust(res$pvalue, method = "BH")
-  res <- res[res$overlap > 0, names(empty)]
+  res <- res[, names(empty)]
   res[order(res$pvalue), ]
 }
 
