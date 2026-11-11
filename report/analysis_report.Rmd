@@ -131,9 +131,9 @@ HL_COL   <- "#6D8AB6"
 # ramp, dark where padj is lowest. Neither the old red ramp nor viridis, which
 # the proteomics analysis uses, so transcriptomic and proteomic enrichment
 # panels never share a colour scale.
-scale_colour_padj <- function(cut = params$padj)
+scale_colour_padj <- function(cut = params$padj, name = "padj")
   scale_colour_gradient(low = "#0d366b", high = "#86b6ef", limits = c(0, cut),
-                        oob = scales::squish, name = "padj")
+                        oob = scales::squish, name = name)
 
 theme_set(theme_bw(base_size = 11))
 theme_update(panel.grid.minor = element_blank(),
@@ -1219,26 +1219,41 @@ if (is.null(r_fl) || is.null(r_iff)) {
 
 ## Enrichment of the shared genes
 
-Significant gene sets only (`padj < 0.05`), at most the top 20 by `padj`;
+**Exploratory.** With only a few dozen shared genes, few or no gene sets
+survive multiple-testing correction, so the plots show gene sets with a
+**nominal** `p < 0.05` (at most the top 20 by `p`), coloured by that nominal
+`p`. Filled points also pass BH FDR `< 0.05` (within each direction and
+collection); hollow points pass the nominal threshold only and are leads to
+follow up, not results. Fold enrichment is the observed overlap over the
+overlap expected by chance;
 `shared_genes/ATRX_FL_and_ATRX_IFF_vs_EmptyVector/ora_*.csv` keeps every set
-tested. Fold enrichment is the observed overlap over the overlap expected by
-chance.
+tested, with both `pvalue` and `padj`.
 
 ```{r shared-ora, fig.height = 4.5, results = "asis"}
+# Exploratory: nominal p < params$padj (same 0.05 cutoff), top N by p.
+# Filled = also BH FDR < cutoff, hollow = nominal only.
 ora_dot <- function(df, title, top = 20) {
-  df <- df[!is.na(df$padj) & df$padj < params$padj, , drop = FALSE]
+  cut <- params$padj
+  df <- df[!is.na(df$pvalue) & df$pvalue < cut, , drop = FALSE]
   if (!nrow(df)) {
-    cat(sprintf("\nNo gene set with padj < %s.\n\n", params$padj))
+    cat(sprintf("\nNo gene set with nominal p < %s.\n\n", cut))
     return(invisible(NULL))
   }
-  df <- head(df[order(df$padj, -df$fold_enrichment), ], top)
+  df <- head(df[order(df$pvalue, -df$fold_enrichment), ], top)
   df$pathway <- gsub("^(HALLMARK|GOBP)_", "", df$pathway)
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$fold_enrichment)])
+  fdr_levels <- c(sprintf("FDR < %s", cut), sprintf("nominal p < %s only", cut))
+  df$fdr <- factor(ifelse(df$padj < cut, fdr_levels[1], fdr_levels[2]), levels = fdr_levels)
   print(
-    ggplot(df, aes(fold_enrichment, pathway, colour = padj, size = overlap)) +
-      geom_point() +
-      scale_colour_padj() +
-      labs(title = title, x = "fold enrichment (observed / expected overlap)",
+    ggplot(df, aes(fold_enrichment, pathway, colour = pvalue, size = overlap, shape = fdr)) +
+      geom_point(stroke = 1.1) +
+      scale_colour_padj(name = "nominal p") +
+      scale_shape_manual(values = setNames(c(19, 1), fdr_levels), drop = FALSE, name = NULL) +
+      guides(shape = guide_legend(override.aes = list(colour = "grey30", size = 3))) +
+      labs(title = title,
+           subtitle = sprintf("%d of the %d sets shown pass BH FDR < %s",
+                              sum(df$padj < cut), nrow(df), cut),
+           x = "fold enrichment (observed / expected overlap)",
            y = NULL, size = "Shared genes in set")
   )
 }
