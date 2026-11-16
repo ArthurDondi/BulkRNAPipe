@@ -130,10 +130,76 @@ HL_COL   <- "#6D8AB6"
 # Enrichment plots (GSEA, GO, over-representation): padj on a single-hue blue
 # ramp, dark where padj is lowest. Neither the old red ramp nor viridis, which
 # the proteomics analysis uses, so transcriptomic and proteomic enrichment
-# panels never share a colour scale.
-scale_colour_padj <- function(cut = params$padj, name = "padj")
-  scale_colour_gradient(low = "#0d366b", high = "#86b6ef", limits = c(0, cut),
-                        oob = scales::squish, name = name)
+# panels never share a colour scale. log10 scale from `floor` (anything lower,
+# including 0, gets the darkest colour) to the cutoff.
+scale_colour_padj <- function(cut = params$padj, name = "padj", floor = 1e-10) {
+  # Every 2 decades up to 1e-4; 1e-2 would sit on top of the 0.05 cutoff.
+  brk <- c(floor, 10^-(seq(-log10(floor) - 2, 4, by = -2)), cut)
+  brk <- sort(unique(brk[brk >= floor & brk <= cut]))
+  scale_colour_gradient(
+    low = "#0d366b", high = "#86b6ef", trans = "log10", limits = c(floor, cut),
+    breaks = brk,
+    labels = ifelse(brk == floor, paste("\u2264", format(floor)), vapply(brk, format, "")),
+    oob = function(x, range) scales::squish(x, range, only.finite = FALSE), name = name)
+}
+
+# Whole-number size legend (counts of genes): about 3 pretty breaks, rounded.
+int_breaks <- function(lim) {
+  b <- unique(round(pretty(lim, n = 3)))
+  b[b >= lim[1] & b <= lim[2]]
+}
+
+# Draw a plot as an image of the given size (inches). scroll = TRUE puts it in
+# a horizontally scrollable box at full width, so long pathway names do not
+# squeeze the panel.
+show_plot <- function(p, width, height, scroll = FALSE) {
+  if (!knitr::is_html_output()) return(print(p))
+  f <- tempfile(fileext = ".png")
+  ggsave(f, p, width = width, height = height, dpi = 150)
+  # Tag built with paste0, not a sprintf template: rmarkdown scans the whole
+  # page, folded source code included, for img src attributes and warns on a
+  # literal "%s" there.
+  img <- paste0('<img src="', knitr::image_uri(f), '" style="width: ', round(width * 96),
+                'px; max-width: ', if (scroll) "none" else "100%", ';">')
+  cat("\n", if (scroll) sprintf('<div style="overflow-x: auto;">%s</div>', img) else img, "\n\n")
+}
+
+# Enrichment dot plot sized to its labels and number of rows.
+show_enrich <- function(p, labels, n_rows) {
+  # 8.4 in (~810 px) fits the report column; only long labels need scrolling.
+  # At least 4 in tall so the legends fit; titles start at the left edge, not
+  # over the panel, which long labels push far right.
+  show_plot(p + theme(plot.title.position = "plot"),
+            width = max(8.4, 5.5 + 0.07 * max(nchar(as.character(labels)))),
+            height = max(4, 1.8 + 0.26 * n_rows), scroll = TRUE)
+}
+
+# A table in a scrollable box (both directions), under the plot it lists.
+scroll_table <- function(d, max_height = 300) {
+  cat(sprintf('<div style="max-height: %dpx; overflow: auto; margin-bottom: 1.5em;">\n',
+              max_height))
+  print(kable(d, format = "html", row.names = FALSE,
+              # "enrich": see the <style> block after the setup chunk.
+              table.attr = 'class="table table-condensed enrich" style="font-size: 85%;"'))
+  cat("\n</div>\n\n")
+}
+
+# p-values as text (2 significant digits): kable would otherwise reformat a
+# numeric column and print tiny values as 0.00. Non-breaking hyphen so
+# "9.9e-24" does not wrap in a narrow column.
+fmt_p <- function(x) gsub("-", "\u2011", formatC(x, format = "g", digits = 2), fixed = TRUE)
+
+# Gene lists as written by fgsea (";") or shared_genes.R ("/"), comma-separated.
+genes_list <- function(x) if (is.null(x)) "" else gsub("[;/]", ", ", x)
+
+# The table under a GSEA dot plot: the plotted pathways, top to bottom.
+gsea_table <- function(df) {
+  df <- df[order(-df$NES), , drop = FALSE]
+  scroll_table(data.frame(pathway = as.character(df$pathway), NES = round(df$NES, 2),
+                          padj = fmt_p(df$padj), `set size` = df$size,
+                          `leading-edge genes` = genes_list(df$leadingEdge),
+                          check.names = FALSE))
+}
 
 theme_set(theme_bw(base_size = 11))
 theme_update(panel.grid.minor = element_blank(),
@@ -408,6 +474,12 @@ volcano_with_proteomic <- function(res, title, num, den, prot_sig,
   p
 }
 ```
+
+<!-- Enrichment tables (scroll_table): GO term names have no spaces, so let the
+first (pathway) column break inside words; other columns wrap at spaces. -->
+<style>
+table.enrich td:first-child { overflow-wrap: anywhere; min-width: 14em; }
+</style>
 
 # Experimental design
 
@@ -977,7 +1049,13 @@ if (is.null(goi) || nrow(goi) == 0) {
 
 # Pathway enrichment (GSEA)
 
-```{r gsea, fig.height = 6, results = "asis"}
+Each plot shows the significant pathways (`padj < 0.05`). Under it, a
+scrollable table lists the same pathways in the same order, with their
+**leading-edge genes**: the pathway genes ranked before the enrichment score
+peaks, i.e. the ones driving the enrichment — not every gene in the pathway,
+and not necessarily individually significant.
+
+```{r gsea, results = "asis"}
 # Significant pathways only (padj < params$padj), the top N by |NES| per side.
 gsea_dot <- function(df, title, top = 12) {
   df <- df %>% filter(!is.na(padj), padj < params$padj) %>% arrange(desc(abs(NES)))
@@ -993,17 +1071,17 @@ gsea_dot <- function(df, title, top = 12) {
     pathway = gsub("^HALLMARK_", "", pathway),
     pathway = factor(pathway, levels = pathway[order(df$NES)]),
     side = factor(ifelse(NES > 0, up, down), levels = c(up, down)))
-  print(
-    ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
-      geom_point() +
-      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-      facet_grid(side ~ ., scales = "free_y", space = "free_y") +
-      scale_colour_padj() +
-      labs(title = title,
-           subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
-           y = NULL, colour = "padj", size = "Set size") +
-      theme(strip.text.y = element_text(angle = 0, size = 8))
-  )
+  p <- ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
+    geom_point() +
+    geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+    facet_grid(side ~ ., scales = "free_y", space = "free_y") +
+    scale_colour_padj() +
+    labs(title = title,
+         subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
+         y = NULL, colour = "padj", size = "Set size") +
+    theme(strip.text.y = element_text(angle = 0, size = 8))
+  show_enrich(p, df$pathway, nrow(df) + 2)
+  gsea_table(df)
 }
 # EDIT: which contrasts to show enrichment for.
 for (cn in c("ATRX_IFF_vs_ATRX_FL", "ATRX_FL_vs_EmptyVector",
@@ -1077,15 +1155,15 @@ cat_dot <- function(df, title) {
   sub <- if (nzchar(num) && nzchar(den))
     sprintf("NES > 0: pathway genes HIGHER in %s   |   NES < 0: pathway genes HIGHER in %s",
             num, den) else NULL
-  print(
-    ggplot(df, aes(NES, pathway)) +
-      geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-      geom_point(aes(size = size, colour = padj)) +
-      scale_colour_padj() +
-      scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
-      labs(title = title, subtitle = sub, y = NULL, size = "Set size") +
-      theme(plot.subtitle = element_text(size = 8, colour = "grey30"))
-  )
+  p <- ggplot(df, aes(NES, pathway)) +
+    geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
+    geom_point(aes(size = size, colour = padj)) +
+    scale_colour_padj() +
+    scale_size_continuous(limits = sz, breaks = brk, range = c(2, 8)) +
+    labs(title = title, subtitle = sub, y = NULL, size = "Set size") +
+    theme(plot.subtitle = element_text(size = 8, colour = "grey30"))
+  show_enrich(p, df$pathway, nrow(df))
+  gsea_table(df)
 }
 
 # EDIT: which contrast to show category panels for. Headline contrast only.
@@ -1206,8 +1284,8 @@ if (is.null(r_fl) || is.null(r_iff)) {
     print(kable(transmute(d, gene_id,
                           `log2FC FL` = round(log2FoldChange_FL, 2),
                           `log2FC IFF` = round(log2FoldChange_IFF, 2),
-                          `padj FL` = signif(padj_FL, 2),
-                          `padj IFF` = signif(padj_IFF, 2)),
+                          `padj FL` = fmt_p(padj_FL),
+                          `padj IFF` = fmt_p(padj_IFF)),
                 format = "html", row.names = FALSE,
                 table.attr = 'class="table table-condensed"'))
     cat("\n</div>\n\n")
@@ -1244,18 +1322,24 @@ ora_dot <- function(df, title, top = 20) {
   df$pathway <- factor(df$pathway, levels = df$pathway[order(df$fold_enrichment)])
   fdr_levels <- c(sprintf("FDR < %s", cut), sprintf("nominal p < %s only", cut))
   df$fdr <- factor(ifelse(df$padj < cut, fdr_levels[1], fdr_levels[2]), levels = fdr_levels)
-  print(
-    ggplot(df, aes(fold_enrichment, pathway, colour = pvalue, size = overlap, shape = fdr)) +
-      geom_point(stroke = 1.1) +
-      scale_colour_padj(name = "nominal p") +
-      scale_shape_manual(values = setNames(c(19, 1), fdr_levels), drop = FALSE, name = NULL) +
-      guides(shape = guide_legend(override.aes = list(colour = "grey30", size = 3))) +
-      labs(title = title,
-           subtitle = sprintf("%d of the %d sets shown pass BH FDR < %s",
-                              sum(df$padj < cut), nrow(df), cut),
-           x = "fold enrichment (observed / expected overlap)",
-           y = NULL, size = "Shared genes in set")
-  )
+  p <- ggplot(df, aes(fold_enrichment, pathway, colour = pvalue, size = overlap, shape = fdr)) +
+    geom_point(stroke = 1.1) +
+    scale_colour_padj(name = "nominal p") +
+    scale_size_continuous(breaks = int_breaks) +
+    scale_shape_manual(values = setNames(c(19, 1), fdr_levels), drop = FALSE, name = NULL) +
+    guides(shape = guide_legend(override.aes = list(colour = "grey30", size = 3))) +
+    labs(title = title,
+         subtitle = sprintf("%d of the %d sets shown pass BH FDR < %s",
+                            sum(df$padj < cut), nrow(df), cut),
+         x = "fold enrichment (observed / expected overlap)",
+         y = NULL, size = "Shared genes in set")
+  show_enrich(p, df$pathway, nrow(df))
+  df <- df[order(-df$fold_enrichment), , drop = FALSE]
+  scroll_table(data.frame(pathway = as.character(df$pathway), `shared genes in set` = df$overlap,
+                          `set size` = df$set_size,
+                          `fold enrichment` = round(df$fold_enrichment, 2),
+                          p = fmt_p(df$pvalue), padj = fmt_p(df$padj),
+                          genes = genes_list(df$genes), check.names = FALSE))
 }
 
 ORA_COLLECTIONS <- c(H = "Hallmark", KEGG_CURRENT = "KEGG (current)",
@@ -1271,6 +1355,96 @@ for (dir in c("up", "down")) {
     ora_dot(o, paste0(ORA_COLLECTIONS[[slug]], ": ", short))
     cat("\n\n")
   }
+}
+```
+
+## Shared pathways (test)
+
+The same question at the pathway level, using every gene: the pipeline's GSEA
+of `ATRX_FL_vs_EmptyVector` and of `ATRX_IFF_vs_EmptyVector` (fgsea on the
+DESeq2 Wald statistic), compared. A pathway is **shared** when it is
+significant (`padj < 0.05`) in both comparisons with the same NES sign. For
+each collection: Venn diagrams of the significant pathways per direction, the
+NES of every pathway significant in at least one comparison (shared ones
+labelled), and a table of the shared pathways with both leading edges.
+
+```{r shared-gsea, fig.width = 9, fig.height = 3.8, results = "asis"}
+GSEA_SHARED <- c(H = "Hallmark", KEGG_CURRENT = "KEGG (current)",
+                 C5_GO_BP = "GO biological process")
+short_name <- function(x, n = 45) {
+  x <- gsub("^(HALLMARK|GOBP|KEGG)_", "", x)
+  ifelse(nchar(x) > n, paste0(substr(x, 1, n - 1), "\u2026"), x)
+}
+for (slug in names(GSEA_SHARED)) {
+  cat("\n\n###", GSEA_SHARED[[slug]], "\n\n")
+  f <- paste0(slug, "_results.csv")
+  fl  <- grab("gsea", "ATRX_FL_vs_EmptyVector", f)
+  iff <- grab("gsea", "ATRX_IFF_vs_EmptyVector", f)
+  if (is.null(fl) || is.null(iff)) {
+    if (is.null(fl))  missing_note("gsea", "ATRX_FL_vs_EmptyVector", f)
+    if (is.null(iff)) missing_note("gsea", "ATRX_IFF_vs_EmptyVector", f)
+    next
+  }
+  cols <- c("pathway", "NES", "padj", "size", "leadingEdge")
+  m <- inner_join(fl[, intersect(cols, names(fl))], iff[, intersect(cols, names(iff))],
+                  by = "pathway", suffix = c("_FL", "_IFF"))
+  sig_fl  <- !is.na(m$padj_FL)  & m$padj_FL  < params$padj
+  sig_iff <- !is.na(m$padj_IFF) & m$padj_IFF < params$padj
+  print(venn_plot(list(
+    "NES > 0: higher in the construct" =
+      list(ATRX_FL = m$pathway[sig_fl & m$NES_FL > 0], ATRX_IFF = m$pathway[sig_iff & m$NES_IFF > 0]),
+    "NES < 0: higher in EmptyVector" =
+      list(ATRX_FL = m$pathway[sig_fl & m$NES_FL < 0], ATRX_IFF = m$pathway[sig_iff & m$NES_IFF < 0]))))
+
+  m$class <- case_when(
+    sig_fl & sig_iff & sign(m$NES_FL) == sign(m$NES_IFF) ~ "shared (same direction)",
+    sig_fl & sig_iff ~ "opposite directions",
+    sig_fl ~ "ATRX_FL only",
+    sig_iff ~ "ATRX_IFF only",
+    TRUE ~ "neither")
+  d <- m[m$class != "neither", , drop = FALSE]
+  if (!nrow(d)) {
+    cat(sprintf("\nNo pathway with padj < %s in either comparison.\n\n", params$padj))
+    next
+  }
+  shared <- d[d$class == "shared (same direction)", , drop = FALSE]
+  # Strongest shared effect first: the smaller |NES| of the two comparisons.
+  shared <- shared[order(-pmin(abs(shared$NES_FL), abs(shared$NES_IFF))), , drop = FALSE]
+  lab <- head(shared, 15)
+  lim <- max(abs(c(d$NES_FL, d$NES_IFF)))
+  p <- ggplot(d, aes(NES_FL, NES_IFF)) +
+    geom_hline(yintercept = 0, colour = "grey60", linewidth = 0.3) +
+    geom_vline(xintercept = 0, colour = "grey60", linewidth = 0.3) +
+    geom_abline(slope = 1, linetype = "dashed", colour = "grey60", linewidth = 0.3) +
+    geom_point(aes(colour = class), size = 1.8, alpha = 0.85) +
+    ggrepel::geom_text_repel(data = lab, aes(label = short_name(pathway)), size = 2.5,
+                             colour = "grey15", max.overlaps = Inf, min.segment.length = 0,
+                             segment.colour = "grey50", segment.size = 0.2) +
+    scale_colour_manual(values = c("shared (same direction)" = "grey10",
+                                   "ATRX_FL only" = PAL[["ATRX_FL"]],
+                                   "ATRX_IFF only" = PAL[["ATRX_IFF"]],
+                                   "opposite directions" = "grey70"), name = NULL) +
+    coord_fixed(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
+    labs(title = paste0(GSEA_SHARED[[slug]], ": NES in both comparisons"),
+         subtitle = sprintf("pathways with padj < %s in at least one; %d shared, %d labelled",
+                            params$padj, nrow(shared), nrow(lab)),
+         x = "NES  ATRX_FL vs EmptyVector", y = "NES  ATRX_IFF vs EmptyVector")
+  show_plot(p, width = 7.5, height = 6.2)
+
+  if (!nrow(shared)) {
+    cat("\nNo shared pathway.\n\n")
+    next
+  }
+  shared <- shared[order(shared$NES_FL < 0), , drop = FALSE]  # NES > 0 first, order kept
+  cat(sprintf("\n\n**Shared pathways: %d**\n\n", nrow(shared)))
+  scroll_table(data.frame(
+    pathway = shared$pathway,
+    direction = ifelse(shared$NES_FL > 0, "higher in the construct", "higher in EmptyVector"),
+    `NES FL` = round(shared$NES_FL, 2), `padj FL` = fmt_p(shared$padj_FL),
+    `NES IFF` = round(shared$NES_IFF, 2), `padj IFF` = fmt_p(shared$padj_IFF),
+    `leading edge FL` = genes_list(shared$leadingEdge_FL),
+    `leading edge IFF` = genes_list(shared$leadingEdge_IFF), check.names = FALSE),
+    max_height = 400)
 }
 ```
 
