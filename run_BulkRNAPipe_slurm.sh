@@ -12,7 +12,14 @@
 #SBATCH --mail-type=end
 #SBATCH --mail-user=arthur.dondi@cemm.at
 #
-# Run the whole BulkRNAPipe Snakemake workflow on the SLURM cluster.
+# Run the whole BulkRNAPipe Snakemake workflow on the SLURM cluster, then
+# re-render the analysis report.
+#
+# Two Snakemake calls, in order: (1) the default target, i.e. every pipeline
+# output; (2) the report, forced. The Report rule only declares
+# design_qc/design_qc_summary.csv as input, so in a single call it could
+# render before the GSEA / SharedGenes outputs exist, and an existing report
+# would count as up to date even after analysis_report.Rmd changed.
 #
 # This batch job is the Snakemake *controller*: it stays alive for the whole
 # run and submits each rule as its own SLURM job through the profile in
@@ -64,9 +71,18 @@ echo "job id     : ${SLURM_JOB_ID:-NA}"
 echo "config     : $CONFIG"
 echo "======================"
 
+# Rerun triggers (mtime, params, software-env) come from the profile.
+# 1. The whole workflow: the default target, BulkRNAPipe_output.
+snakemake \
+    -s workflow/Snakefile \
+    --configfile "$CONFIG" \
+    --workflow-profile profile/slurm
+
+# 2. The report, always re-rendered, now that every output above exists.
+#    set -e above stops the script here if step 1 failed.
 snakemake \
     -s workflow/Snakefile \
     --configfile "$CONFIG" \
     --workflow-profile profile/slurm \
-    --rerun-triggers mtime params software-env \
+    --forcerun Report \
     -p report/analysis_report.html
