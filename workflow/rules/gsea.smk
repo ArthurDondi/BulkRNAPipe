@@ -36,6 +36,39 @@ rule GenerateHoxGmt:
         """
 
 
+# ── Step 1b: fetch the CURRENT KEGG pathway definitions ──────────────────────
+# Only built when 'KEGG_CURRENT' is among GSEA.collections. Needs outbound HTTPS
+# to rest.kegg.jp; see workflow/scripts/generate_kegg_gmt.R for why the frozen
+# MSigDB collection is not enough.
+
+rule GenerateKeggGmt:
+    """Build a GMT of current human KEGG pathways from the KEGG REST API."""
+    output:
+        gmt      = "resources/generated_gmts/kegg_current.gmt",
+        pathways = "resources/generated_gmts/kegg_current_pathways.tsv",
+    params:
+        script = f"{workflow.basedir}/scripts/generate_kegg_gmt.R",
+        outdir = "resources/generated_gmts",
+    threads: 1
+    retries: 2
+    resources:
+        mem_mb        = 4000,
+        runtime       = 30,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GenerateKeggGmt/kegg.log"
+    benchmark:
+        "benchmark/GenerateKeggGmt/kegg.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} --outdir {params.outdir}
+        """
+
+
 # ── Step 2: run fgsea per contrast and per collection ─────────────────────────
 rule GSEA:
     """Run fgsea (fgseaMultilevel) for one contrast and one gene-set collection.
@@ -45,9 +78,16 @@ rule GSEA:
     input:
         results = "deseq2/{contrast}/results.csv",
         hox_gmt = "resources/generated_gmts/hox.gmt",
+        # Only the KEGG_CURRENT collection needs the fetched GMT, so the other
+        # collections do not drag the network call into their dependency graph.
+        kegg_gmt = lambda wildcards: (
+            "resources/generated_gmts/kegg_current.gmt"
+            if wildcards.collection == "KEGG_CURRENT" else []
+        ),
     output:
         csv     = "gsea/{contrast}/{collection}_results.csv",
         dotplot = "gsea/{contrast}/{collection}_dotplot.pdf",
+        audit   = "gsea/{contrast}/{collection}_pathway_audit.csv",
     params:
         script           = f"{workflow.basedir}/scripts/gsea.R",
         outdir           = "gsea/{contrast}",
@@ -84,6 +124,7 @@ rule GSEA:
         Rscript {params.script} \
             --results        {input.results} \
             --hox_gmt        {input.hox_gmt} \
+            --kegg_gmt       "{input.kegg_gmt}" \
             --outdir         {params.outdir} \
             --collection     {params.collection} \
             --contrast_name  "{params.contrast_name}" \
@@ -94,4 +135,157 @@ rule GSEA:
             --max_size       {params.max_size} \
             --nperm          {params.nperm} \
             --custom_gmts    "{params.custom_gmt_files}"
+        """
+
+
+# ── Step 3: per-KEGG-category panels (re-plots step 2, no fgsea re-run) ───────
+
+rule GSEAKeggCategories:
+    """Slice the KEGG GSEA results by BRITE category and plot every pathway."""
+    input:
+        results    = f"gsea/{{contrast}}/{KEGG_SOURCE_SLUG}_results.csv",
+        audit      = f"gsea/{{contrast}}/{KEGG_SOURCE_SLUG}_pathway_audit.csv",
+        categories = KEGG_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/kegg/{slug}_dotplot.pdf",
+                      slug=KEGG_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/kegg/{slug}_results.csv",
+                      slug=KEGG_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_kegg.R",
+        outdir      = "gsea/{contrast}/kegg",
+        select      = ",".join(KEGG_CATEGORIES),
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAKeggCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAKeggCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --audit       {input.audit} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
+        """
+
+
+# ── Step 4: GO keyword panels (same categories, matched on term names) ───────
+
+rule GSEAGoCategories:
+    """Group GO terms by keyword into the KEGG categories and plot each."""
+    input:
+        results    = f"gsea/{{contrast}}/{GO_SOURCE_SLUG}_results.csv",
+        categories = GO_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/go/{slug}_dotplot.pdf",
+                      slug=GO_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/go/{slug}_results.csv",
+                      slug=GO_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_go_categories.R",
+        outdir      = "gsea/{contrast}/go",
+        select      = ",".join(GO_CATEGORIES),
+        top_n       = GO_CAT_TOP_N,
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAGoCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAGoCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --top_n       {params.top_n} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
+        """
+
+
+# ── Step 5: Reactome keyword panels (same categories, matched on pathway names) ─
+
+rule GSEAReactomeCategories:
+    """Group Reactome pathways by keyword into the KEGG categories and plot each."""
+    input:
+        results    = f"gsea/{{contrast}}/{REACTOME_SOURCE_SLUG}_results.csv",
+        categories = REACTOME_CATEGORIES_FILE,
+    output:
+        pdfs = expand("gsea/{{contrast}}/reactome/{slug}_dotplot.pdf",
+                      slug=REACTOME_CATEGORIES),
+        csvs = expand("gsea/{{contrast}}/reactome/{slug}_results.csv",
+                      slug=REACTOME_CATEGORIES),
+    params:
+        script      = f"{workflow.basedir}/scripts/gsea_reactome_categories.R",
+        outdir      = "gsea/{contrast}/reactome",
+        select      = ",".join(REACTOME_CATEGORIES),
+        top_n       = REACTOME_CAT_TOP_N,
+        padj_cutoff = lambda wildcards: config.get('GSEA', {}).get('kegg_padj_cutoff', 0.05),
+        numerator   = lambda wildcards: next(
+            c[1] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+        denominator = lambda wildcards: next(
+            c[2] for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast
+        ),
+    threads: 1
+    resources:
+        mem_mb        = 4000,
+        runtime       = 20,
+        cpus_per_task = 1,
+    conda:
+        "../envs/gsea.yaml"
+    log:
+        "logs/GSEAReactomeCategories/{contrast}.log"
+    benchmark:
+        "benchmark/GSEAReactomeCategories/{contrast}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --results     {input.results} \
+            --categories  {input.categories} \
+            --select      "{params.select}" \
+            --outdir      {params.outdir} \
+            --top_n       {params.top_n} \
+            --numerator   "{params.numerator}" \
+            --denominator "{params.denominator}" \
+            --padj_cutoff {params.padj_cutoff}
         """

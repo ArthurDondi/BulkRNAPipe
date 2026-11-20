@@ -1,0 +1,26 @@
+# Keyword groupings of Reactome pathways, mirroring the KEGG BRITE categories
+# and the GO keyword panels (workflow/resources/go_categories.tsv).
+#
+# THESE ARE NOT REACTOME'S OWN HIERARCHY. Reactome does curate a pathway tree,
+# but MSigDB's C2:CP:REACTOME collection ships it flattened - one gene set per
+# pathway, no parent/child links - so there is no ready "category -> member
+# pathways" file to slice, the same problem GO has. Each group below is
+# therefore a regular expression matched against the pathway NAME
+# (REACTOME_<UPPERCASE_WITH_UNDERSCORES>), not a traversal of Reactome's actual
+# pathway browser tree: it pulls in sets that merely share a word and misses
+# sets that describe the same biology differently. Treat a panel as "Reactome
+# pathways whose names mention X", never as "everything Reactome knows about
+# X". The plot subtitle says so too.
+#
+# Categories overlap by design, and a pathway may appear in several panels.
+#
+# Columns: slug <TAB> label <TAB> include <TAB> exclude
+#   include  case-insensitive regex; a pathway is in the group if it matches
+#   exclude  case-insensitive regex; matching pathways are dropped again (may
+#            be empty, written as "-")
+slug	label	include	exclude
+replication_and_repair	Replication and repair	DNA_REPLICATION|DNA_REPAIR|MISMATCH_REPAIR|BASE_EXCISION_REPAIR|NUCLEOTIDE_EXCISION_REPAIR|HOMOLOGOUS_RECOMBINATION|NONHOMOLOGOUS_END|FANCONI_ANEMIA|DNA_DAMAGE|STRAND_ELONGATION|TRANSLESION|REPLICATION_FORK|ORIGIN_OF_REPLICATION	-
+chromosome	Chromosome	CHROMATIN|CHROMOSOME_MAINTENANCE|NUCLEOSOME|HISTONE|HETEROCHROMATIN|CENTROMERE|KINETOCHORE|TELOMERE|COHESIN|CONDENSIN|SISTER_CHROMATID|POLYCOMB|PRC2	-
+cell_growth_and_death	Cell growth and death	CELL_CYCLE|MITOTIC|MEIOTIC|MEIOSIS|APOPTOSIS|PROGRAMMED_CELL_DEATH|NECROPTOSIS|FERROPTOSIS|PYROPTOSIS|SENESCENCE|G1_S|G2_M|CHECKPOINT	-
+nervous_system	Nervous system	NEURONAL_SYSTEM|NEURON|NEUROTRANSMITTER|SYNAPT|SYNAPSE|AXON|DENDRIT|GLIAL|ASTROCYTE|OLIGODENDROCYTE|GABA_RECEPTOR|SEROTONIN|DOPAMINE|NERVOUS_SYSTEM|POTASSIUM_CHANNELS	-
+development_and_regeneration	Development and regeneration	DEVELOPMENTAL_BIOLOGY|MORPHOGENESIS|ORGANOGENESIS|AXON_GUIDANCE|AXON_REGENERATION|STEM_CELL|CELL_FATE|PATTERN_SPECIFICATION|LIMB_|NEURAL_TUBE|SKELETAL_SYSTEM	-

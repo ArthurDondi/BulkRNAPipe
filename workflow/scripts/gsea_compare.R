@@ -49,17 +49,29 @@ parse_collection_slug <- function(slug) {
   }
 }
 
-load_pathways_for_collection <- function(slug, hox_gmt, custom_gmt_paths) {
-  coll   <- parse_collection_slug(slug)
-  msig_df <- if (!is.null(coll$subcategory)) {
-    msigdbr(species = "Homo sapiens",
-            category    = coll$category,
-            subcategory = coll$subcategory)
+load_pathways_for_collection <- function(slug, hox_gmt, custom_gmt_paths,
+                                         kegg_gmt = "") {
+  # KEGG_CURRENT is not an MSigDB collection - it is the GMT fetched from the
+  # live KEGG API by GenerateKeggGmt. Keep this branch in step with the one in
+  # gsea.R: both resolve the same collection list, so a collection one of them
+  # understands and the other does not shows up as a mid-run failure.
+  if (identical(slug, "KEGG_CURRENT")) {
+    if (!nzchar(kegg_gmt) || !file.exists(kegg_gmt)) {
+      stop("collection KEGG_CURRENT requires --kegg_gmt pointing at an existing GMT")
+    }
+    pathways <- gmtPathways(kegg_gmt)
   } else {
-    msigdbr(species = "Homo sapiens",
-            category = coll$category)
+    coll   <- parse_collection_slug(slug)
+    msig_df <- if (!is.null(coll$subcategory)) {
+      msigdbr(species = "Homo sapiens",
+              category    = coll$category,
+              subcategory = coll$subcategory)
+    } else {
+      msigdbr(species = "Homo sapiens",
+              category = coll$category)
+    }
+    pathways <- split(msig_df$gene_symbol, msig_df$gs_name)
   }
-  pathways <- split(msig_df$gene_symbol, msig_df$gs_name)
   pathways <- c(pathways, gmtPathways(hox_gmt))
   for (gp in custom_gmt_paths) {
     if (file.exists(gp)) {
@@ -91,6 +103,8 @@ option_list <- list(
   make_option("--results_a",    type = "character"),
   make_option("--results_b",    type = "character"),
   make_option("--hox_gmt",      type = "character"),
+  make_option("--kegg_gmt",     type = "character", default = "",
+              help = "GMT of current KEGG pathways; required if KEGG_CURRENT is in --collections"),
   make_option("--gsea_dir_a",   type = "character"),
   make_option("--gsea_dir_b",   type = "character"),
   make_option("--outdir",       type = "character"),
@@ -139,7 +153,8 @@ res_b <- read.csv(args$results_b, stringsAsFactors = FALSE)
 message("Loading gene-set pathways for collections: ", paste(collections, collapse = ", "))
 pathways_cache <- setNames(
   lapply(collections, load_pathways_for_collection,
-         hox_gmt = args$hox_gmt, custom_gmt_paths = custom_gmt_paths),
+         hox_gmt = args$hox_gmt, custom_gmt_paths = custom_gmt_paths,
+         kegg_gmt = args$kegg_gmt),
   collections
 )
 

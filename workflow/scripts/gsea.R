@@ -38,6 +38,8 @@ option_list <- list(
   make_option("--min_size",    type = "integer",   default = 15L),
   make_option("--max_size",    type = "integer",   default = 500L),
   make_option("--nperm",       type = "integer",   default = 1000L),
+  make_option("--kegg_gmt", type = "character", default = "",
+              help = "GMT of current KEGG pathways; used when --collection is KEGG_CURRENT"),
   make_option("--custom_gmts", type = "character", default = "",
               help = "Comma-separated paths to extra GMT files"),
   make_option("--contrast_name", type = "character", default = "",
@@ -85,22 +87,34 @@ parse_collection_slug <- function(slug) {
   }
 }
 
-coll <- parse_collection_slug(args$collection)
-
-message(sprintf("Fetching msigdbr sets: category=%s subcategory=%s",
-                coll$category, coll$subcategory %||% ""))
-
-msig_df <- if (!is.null(coll$subcategory)) {
-  msigdbr(species = "Homo sapiens",
-          category    = coll$category,
-          subcategory = coll$subcategory)
+# KEGG_CURRENT is not an MSigDB collection: it is the GMT built by
+# GenerateKeggGmt from the live KEGG API. MSigDB's own C2:CP:KEGG is a frozen
+# ~2011 snapshot, so anything KEGG has added since is only reachable this way.
+if (identical(args$collection, "KEGG_CURRENT")) {
+  if (!nzchar(args$kegg_gmt) || !file.exists(args$kegg_gmt)) {
+    stop("collection KEGG_CURRENT requires --kegg_gmt pointing at an existing GMT")
+  }
+  message("Loading current KEGG gene sets from ", args$kegg_gmt)
+  pathways_msig <- gmtPathways(args$kegg_gmt)
+  message(sprintf("  %d gene sets", length(pathways_msig)))
 } else {
-  msigdbr(species = "Homo sapiens",
-          category = coll$category)
-}
+  coll <- parse_collection_slug(args$collection)
 
-# Convert to named list of gene vectors
-pathways_msig <- split(msig_df$gene_symbol, msig_df$gs_name)
+  message(sprintf("Fetching msigdbr sets: category=%s subcategory=%s",
+                  coll$category, coll$subcategory %||% ""))
+
+  msig_df <- if (!is.null(coll$subcategory)) {
+    msigdbr(species = "Homo sapiens",
+            category    = coll$category,
+            subcategory = coll$subcategory)
+  } else {
+    msigdbr(species = "Homo sapiens",
+            category = coll$category)
+  }
+
+  # Convert to named list of gene vectors
+  pathways_msig <- split(msig_df$gene_symbol, msig_df$gs_name)
+}
 
 # Load HOX GMT
 pathways_hox <- gmtPathways(args$hox_gmt)
@@ -125,6 +139,36 @@ if (nchar(trimws(args$custom_gmts)) > 0) {
 pathways <- c(pathways_msig, pathways_hox, pathways_custom)
 
 message(sprintf("Total gene sets after merge: %d", length(pathways)))
+
+# ── Pathway audit ─────────────────────────────────────────────────────────────
+# Which gene sets fgsea will actually test, and why the rest drop out. The size
+# filters apply to the number of a set's genes DETECTED in this dataset, not to
+# its nominal size, so a set can be present in the collection and still never be
+# tested. Without this table, a pathway missing from the results downstream is
+# indistinguishable from one the collection never contained - and those need
+# different fixes.
+rn <- names(ranks)
+audit <- data.frame(
+  pathway         = names(pathways),
+  size_collection = vapply(pathways, function(g) length(unique(g)), integer(1)),
+  size_detected   = vapply(pathways, function(g) sum(unique(g) %in% rn), integer(1)),
+  stringsAsFactors = FALSE
+)
+audit$reason <- ifelse(
+  audit$size_detected < args$min_size, "below_min_size",
+  ifelse(audit$size_detected > args$max_size, "above_max_size", "tested"))
+audit$tested   <- audit$reason == "tested"
+audit$min_size <- args$min_size
+audit$max_size <- args$max_size
+audit <- audit[order(audit$pathway), ]
+
+out_audit <- file.path(args$outdir, paste0(args$collection, "_pathway_audit.csv"))
+write.csv(audit, out_audit, row.names = FALSE)
+message(sprintf(
+  "Pathway audit: %d of %d gene sets testable (min_size=%d, max_size=%d); %d below, %d above. -> %s",
+  sum(audit$tested), nrow(audit), args$min_size, args$max_size,
+  sum(audit$reason == "below_min_size"), sum(audit$reason == "above_max_size"),
+  out_audit))
 
 # ── Run fgseaMultilevel ────────────────────────────────────────────────────────
 set.seed(42)

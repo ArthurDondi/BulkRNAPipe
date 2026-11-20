@@ -1,44 +1,8 @@
 ### Rules for differential expression analysis with DESeq2
 
-rule PCA:
-    """PCA plot (PC1 vs PC2, % variance explained) across all samples."""
-    input:
-        counts = "quantify/counts.txt",
-    output:
-        pca_plot = "deseq2/pca.pdf",
-    params:
-        script  = f"{workflow.basedir}/scripts/pca.R",
-        outdir  = "deseq2",
-        # Use raw conditions (no contrast-specific remapping) so all samples
-        # are represented with their original condition labels.
-        samples = lambda wildcards: ",".join(
-            f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
-        ),
-    threads: 1
-    resources:
-        mem_mb        = 4000,
-        runtime       = 30,
-        cpus_per_task = 1,
-    conda:
-        "../envs/deseq2.yaml"
-    log:
-        "logs/PCA/pca.log"
-    benchmark:
-        "benchmark/PCA/pca.benchmark.txt"
-    shell:
-        r"""
-        exec > {log} 2>&1
-        mkdir -p {params.outdir}
-        Rscript {params.script} \
-            --counts   {input.counts} \
-            --outdir   {params.outdir} \
-            --samples  {params.samples}
-        """
-
-
 rule DESeq2:
     input:
-        counts = "quantify/counts.txt",
+        counts = DOWNSTREAM_COUNTS,
     output:
         results       = "deseq2/{contrast}/results.csv",
         norm_counts   = "deseq2/{contrast}/normalized_counts.csv",
@@ -87,6 +51,70 @@ rule DESeq2:
         """
 
 
+rule DESeq2Interaction:
+    """Difference of differences: (A1 - A2) - (B1 - B2).
+
+    Used to compare across a boundary whose effect cannot be estimated as a
+    covariate.  The nuisance effect cancels in the subtraction instead of being
+    modelled, at the cost of assuming it is the same size in both pairs.
+    """
+    input:
+        counts = DOWNSTREAM_COUNTS,
+    output:
+        results     = "deseq2_interaction/{interaction}/results.csv",
+        components  = "deseq2_interaction/{interaction}/components.csv",
+        norm_counts = "deseq2_interaction/{interaction}/normalized_counts.csv",
+        volcano     = "deseq2_interaction/{interaction}/volcano.pdf",
+        ma_plot     = "deseq2_interaction/{interaction}/ma_plot.pdf",
+    params:
+        script         = f"{workflow.basedir}/scripts/deseq2_interaction.R",
+        outdir         = "deseq2_interaction/{interaction}",
+        group_a        = lambda wildcards: " ".join(
+            get_interaction_cfg(wildcards.interaction)['group_A']
+        ),
+        group_b        = lambda wildcards: " ".join(
+            get_interaction_cfg(wildcards.interaction)['group_B']
+        ),
+        padj_threshold = lambda wildcards: float(
+            get_interaction_cfg(wildcards.interaction).get(
+                'padj_threshold', config['DESeq2']['padj_threshold'])
+        ),
+        lfc_threshold  = lambda wildcards: float(
+            get_interaction_cfg(wildcards.interaction).get(
+                'lfc_threshold', config['DESeq2']['lfc_threshold'])
+        ),
+        # Raw condition labels: an interaction names its four groups directly,
+        # so combine_conditions remapping must not be applied here.
+        sample_conditions = lambda wildcards: ",".join(
+            f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
+        ),
+    threads: 2
+    resources:
+        mem_mb        = 8000,
+        runtime       = 60,
+        cpus_per_task = 2,
+    conda:
+        "../envs/deseq2.yaml"
+    log:
+        "logs/DESeq2Interaction/{interaction}.log"
+    benchmark:
+        "benchmark/DESeq2Interaction/{interaction}.benchmark.txt"
+    shell:
+        r"""
+        exec > {log} 2>&1
+        mkdir -p {params.outdir}
+        Rscript {params.script} \
+            --counts  {input.counts} \
+            --outdir  {params.outdir} \
+            --samples {params.sample_conditions} \
+            --name    "{wildcards.interaction}" \
+            --group_a "{params.group_a}" \
+            --group_b "{params.group_b}" \
+            --padj    {params.padj_threshold} \
+            --lfc     {params.lfc_threshold}
+        """
+
+
 rule DESeq2Proteomic:
     input:
         results = "deseq2/{contrast}/results.csv",
@@ -108,6 +136,7 @@ rule DESeq2Proteomic:
         proteomics_fdr_column = lambda wildcards: str(config.get('Proteomics', {}).get('fdr_column', "")),
         proteomics_logfc_column = lambda wildcards: str(config.get('Proteomics', {}).get('logfc_column', "")),
         proteomics_fdr_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('fdr_threshold', 0.05)),
+        proteomics_lfc_threshold = lambda wildcards: float(config.get('Proteomics', {}).get('lfc_threshold', 1.0)),
         proteomics_comparison = lambda wildcards: str(get_proteomics_comparison(wildcards.contrast)),
     threads: 2
     resources:
@@ -138,5 +167,6 @@ rule DESeq2Proteomic:
             --proteomics_fdr_column "{params.proteomics_fdr_column}" \
             --proteomics_logfc_column "{params.proteomics_logfc_column}" \
             --proteomics_fdr_threshold {params.proteomics_fdr_threshold} \
+            --proteomics_lfc_threshold {params.proteomics_lfc_threshold} \
             --proteomics_comparison "{params.proteomics_comparison}"
         """

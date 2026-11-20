@@ -6,18 +6,18 @@
 # ─── User paths ──────────────────────────────────────────────────────────────
 User:
   # Directory that contains your raw FASTQ files (or SRA accessions – see below)
-  input_dir: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/data/Epicode.bulkRNA
+  input_dir: /nobackup/lab_taschner-mandl/arthurdondi/data/Epicode.bulkRNA
   # All pipeline outputs will be written here
-  output_dir: /scratch/research/taschnermandl/arthur_d/epicode/analysis/BulkRNA
+  output_dir: /nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/
 
 # ─── Reference genome ────────────────────────────────────────────────────────
 Reference:
   # Path to the genome FASTA (used to build the STAR index)
-  genome_fasta: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/hg38_plus_vectors.fa
+  genome_fasta: /nobackup/lab_taschner-mandl/arthurdondi/resources/references/hg38/epicode/hg38_plus_vectors.fa
   # Path to the gene annotation GTF (used for STAR index and featureCounts)
-  gtf: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/hg38_plus_vectors.gtf
+  gtf: /nobackup/lab_taschner-mandl/arthurdondi/resources/references/hg38/epicode/hg38_plus_vectors.gtf
   # Directory where the STAR index will be stored (created automatically)
-  star_index: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/ressources/references/hg38/epicode/star_index
+  star_index: /nobackup/lab_taschner-mandl/arthurdondi/resources/references/hg38/epicode/star_index
   # Genome name for reporting purposes (e.g. hg38, mm10, GRCh38)
   genome: hg38
 
@@ -56,6 +56,8 @@ Library:
 # R1 / R2: FASTQ file names relative to input_dir (just the filename, no path)
 #   For single-end data, omit R2 (or leave it as an empty string "").
 #   For SRA data, leave R1/R2 blank and add an "sra" field with the SRR accession.
+#
+# FASTQ construct codes: 1011 = ATRX_FL | 1744 = ATRX_IFF | 1760 = EmptyVector
 samples:
   TP53_1:
     condition: TP53
@@ -121,28 +123,32 @@ samples:
     condition: EmptyVector
     R1: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R1_001.fastq.gz
     R2: 20260203-SK-N-SH-p53-ATRX-E6-1760-R3-RNAbulk_R2_001.fastq.gz
-    
+
 
 # ─── DESeq2 contrasts ────────────────────────────────────────────────────────
 # List the pairwise comparisons DESeq2 should perform.
 # Each entry: [name, numerator_condition, denominator_condition]
+#
+# Name reads {numerator}_vs_{denominator}: E6_vs_TP53 has E6 as the numerator,
+# so its log2FC is E6 / TP53. Applied consistently across every contrast below
+# — keep it that way when adding new ones.
 DESeq2:
   contrasts:
     # Each contrast: [name_for_output, numerator, denominator(reference)]
     # Compare ATRX+ cell line vs. ATRX- (E6) cell line
-    - [TP53_vs_E6, E6, TP53]
+    - [E6_vs_TP53, E6, TP53]
     # Compare E6 alone vs. E6 + empty vector
-    - [E6_vs_EmptyVector, EmptyVector, E6]
+    - [EmptyVector_vs_E6, EmptyVector, E6]
     # Compare E6 + empty vector vs. E6 + ATRX full-length
-    - [EmptyVector_vs_ATRX_FL, ATRX_FL, EmptyVector]
+    - [ATRX_FL_vs_EmptyVector, ATRX_FL, EmptyVector]
     # Compare empty vector vs. ATRX in-frame fusion
-    - [EmptyVector_vs_ATRX_IFF, ATRX_IFF, EmptyVector]
+    - [ATRX_IFF_vs_EmptyVector, ATRX_IFF, EmptyVector]
     # Compare ATRX in-frame fusion vs. ATRX full-length (FL as reference)
     - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]
     # Compare ATRX+ cell line vs. ATRX in-frame fusion
-    - [TP53_vs_ATRX_IFF, ATRX_IFF, TP53]
+    - [ATRX_IFF_vs_TP53, ATRX_IFF, TP53]
     # Compare ATRX+ cell line vs. ATRX FL (rescue experiment)
-    - [TP53_vs_ATRX_FL, ATRX_FL, TP53]
+    - [ATRX_FL_vs_TP53, ATRX_FL, TP53]
 
 
   # ─── Combined / derived conditions ─────────────────────────────────────────
@@ -157,20 +163,179 @@ DESeq2:
   #     those groups are not both used in the same contrast.
   #   - A raw condition used on one side of a contrast must not also be a source
   #     member of the combined group on the other side.
+  #
+  # NOTE: ATRX_Ctrl is currently defined but referenced by no contrast, so it has
+  # no effect on any output.  Left in place as documentation of the option.
+  # Pooling E6 with EmptyVector would also put the transduction effect inside the
+  # control group, so EmptyVector alone remains the better denominator for the
+  # ATRX_FL / ATRX_IFF contrasts.
   combine_conditions:
     ATRX_Ctrl:
       - E6
       - EmptyVector
+
+  # ─── Interaction contrasts (difference of differences) ────────────────────
+  # ATRX_FL_vs_TP53 as a plain contrast mixes three things that cannot be
+  # separated: ATRX status, the clonal background, and the transduction step.
+  # The difference of differences removes the last two by cancellation — the
+  # rescue effect is measured inside the transduced E6 background, the knockout
+  # effect inside the untransduced one, and only the residual is reported.
+  interactions:
+    - name: ATRX_FL_rescue_shortfall
+      # (ATRX_FL / EmptyVector) - (TP53 / E6)
+      #   group_A = how far the rescue moved the gene, inside the transduced background
+      #   group_B = how far it HAD to move to undo the KO, inside the untransduced one
+      # log2FC = 0  -> complete rescue
+      # log2FC < 0  -> the rescue fell short
+      # log2FC > 0  -> the rescue overshot the TP53 level
+      # Note group_B is [TP53, E6], not [E6, TP53]: the restoration target is the
+      # KO effect reversed, so flipping it would report rescue + KO instead of the
+      # residual, and a perfect rescue would score twice the effect size instead
+      # of zero.
+      group_A: [ATRX_FL, EmptyVector]
+      group_B: [TP53, E6]
+    - name: ATRX_IFF_rescue_shortfall
+      # Same, for the in-frame fusion.
+      group_A: [ATRX_IFF, EmptyVector]
+      group_B: [TP53, E6]
 
   # Adjusted p-value threshold for volcano plots and result tables
   padj_threshold: 0.05
   # Absolute log2 fold-change threshold for volcano plots
   lfc_threshold: 1.0
 
+# ─── PCA (sample-level QC) ───────────────────────────────────────────────────
+# Outputs go to pca/{sample_set}/{view}_*.pdf — PC1/PC2, PC3/PC4, scree,
+# coordinates, and a removeBatchEffect panel per combination.
+#
+# The reference is hg38_plus_vectors, so EGFP / mCherry are real rows in
+# counts.txt.  Verify the exact IDs against the custom GTF with
+#   grep -o 'gene_id "[^"]*"' hg38_plus_vectors.gtf | sort -u
+# pca.R prints a WARNING to logs/PCA/*.log for any entry that matches nothing.
+#
+# PCA reads the counts matrix downstream of design_qc's total_feature
+# substitution and downstream_exclude_genes (see DesignQC below): ATRX_FL,
+# ATRX_IFF, EGFP and mCherry no longer exist as separate rows there (ATRX is
+# the pooled ATRX_Total), so exclude_genes below has nothing left to do for
+# them - left empty rather than listing entries that would only ever warn.
+PCA:
+  exclude_genes: []
+  exclude_gene_patterns: []
+  exclude_contigs: []
+  # The transgene (pooled total, post-substitution).  ATRX is the variable
+  # under study, so a PCA that includes it partly re-plots the design; the
+  # third view drops it to show what the ATRX difference does downstream
+  # rather than the difference itself.
+  transgene_genes:
+    - ATRX
+  ntop: 500
+
+  # ── Sample subsets ─────────────────────────────────────────────────────────
+  # PC1 of the full PCA separates TP53 from everything E6-derived — the clonal
+  # background, which is confounded with the ATRX genotype and cannot be
+  # removed.  Dropping TP53 lets the vector and rescue effects use PC1/PC2
+  # instead of being compressed into the higher components.
+  subsets:
+    E6_derived:
+      - E6
+      - EmptyVector
+      - ATRX_FL
+      - ATRX_IFF
+    # The three transduced groups only: removes the transduction step as well,
+    # leaving the ATRX construct as the only intended difference.
+    transduced_only:
+      - EmptyVector
+      - ATRX_FL
+      - ATRX_IFF
+
+  # ── Visualisation-only batch removal ───────────────────────────────────────
+  # Transduction status.  For LOOKING ONLY — it never enters a DESeq2 design.
+  # Every condition maps to exactly one batch here, so the batch effect is not
+  # separable from the condition effect; pca.R detects this, subtracts the batch
+  # means anyway to produce the panel, and stamps a red warning onto the figure.
+  # Within transduced_only every sample shares one label and the script says so
+  # instead of drawing a meaningless plot.
+  batch:
+    TP53:        untransduced
+    E6:          untransduced
+    EmptyVector: transduced
+    ATRX_FL:     transduced
+    ATRX_IFF:    transduced
+
+# ─── Design QC ───────────────────────────────────────────────────────────────
+# Library size, featureCounts assignment rates, genes detected, reporter and
+# transgene expression, and the sample-sample correlation/distance structure —
+# all samples on one figure.
+DesignQC:
+  # Defaults to PCA.exclude_genes + PCA.transgene_genes; listed explicitly here
+  # so the endogenous ATRX locus is plotted next to the vector-borne variants.
+  genes:
+    - ATRX
+    - ATRX_FL
+    - ATRX_IFF
+    - EGFP
+    - mCherry
+  # Endogenous genes of interest, plotted in their own panel
+  # (design_qc/goi_expression.pdf).  These stay in the size-factor estimation -
+  # they are ordinary genes, not constructs absent from some groups.
+  genes_of_interest:
+    - HOXB2
+    - HOXB4
+    - HOXB6
+    - HOXB7
+    - IGF2BP1
+
+  # Facet-strip renaming for the design QC panels only. The count matrix, the
+  # CSVs and every other output keep the real feature IDs.
+  plot_labels:
+    ATRX: ATRX_wt
+
+  # Total ATRX output from every source: the endogenous locus plus both
+  # vector-borne constructs, pooled into one meta-feature and counted with
+  # -M --fraction so the fragments that are ambiguous between them (most of the
+  # ATRX coding sequence) are counted once rather than discarded.
+  total_feature:
+    name: ATRX_Total
+    genes:
+      - ATRX
+      - ATRX_FL
+      - ATRX_IFF
+    # Everything downstream of design_qc (DESeq2, DESeq2Interaction, PCA, and
+    # - since they all key off DESeq2's own results - GSEA, GO, signature
+    # reversal, the proteomics overlay) should see one ATRX number: the total
+    # across all three sources, not the endogenous locus alone. Setting this
+    # produces a derived count matrix where `genes` above are dropped and
+    # total_feature's pooled counts (rounded to the nearest integer - DESeq2
+    # needs integers, unlike the fractional QC panel) stand in for this gene
+    # id. quantify/counts.txt itself is never modified; design_qc still runs
+    # on the untouched matrix and keeps plotting ATRX/ATRX_FL/ATRX_IFF
+    # separately. Leave unset to run every analysis on the raw matrix.
+    substitute_as: ATRX
+
+  # Reporter genes: no ATRX-biology content, nothing to substitute them with -
+  # just drop them from the same derived matrix DESeq2/DESeq2Interaction/PCA
+  # read (see total_feature.substitute_as above; quantify/counts.txt itself is
+  # never modified and design_qc keeps plotting them via `genes` above).
+  downstream_exclude_genes:
+    - EGFP
+    - mCherry
+
+  # Twin-Strep-tag + 10xHis, nt 1-117 of both construct contigs (39 codons:
+  # StrepII + GGGSx3 linker + StrepII + 10xHis), immediately followed by the
+  # ATRX start codon.  Identical in ATRX_FL and ATRX_IFF and absent from hg38,
+  # so it reports transgene expression without distinguishing the two - which is
+  # fine here, since each condition carries a known single construct.
+  tag:
+    name: Tag
+    regions:
+      - {contig: ATRX_FL,  start: 1, end: 117, strand: "+"}
+      - {contig: ATRX_IFF, start: 1, end: 117, strand: "+"}
+    min_overlap: 25
+
 # ─── Optional proteomics limma overlay for separate proteomics volcano plots ──
 Proteomics:
   enabled: True
-  limma_xlsx: /home/arthur_d/bioinf_isilon/Research/TASCHNERMANDL/Internal/users/arthur_d/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx
+  limma_xlsx: /nobackup/lab_taschner-mandl/arthurdondi/projects/epicode/251128_limmaResult_IP_MRa_051_LFQ_Experiment1_V3_filtered-KK.xlsx
   sheet: "limma result filtered"
   gene_column: "Gene"
   # Wide-format Excel: comparison_column is empty; logfc_column and fdr_column
@@ -180,32 +345,81 @@ Proteomics:
   fdr_column: "_FDR"
   logfc_column: "_LOG2FC"
   fdr_threshold: 0.05
+  # Absolute log2 fold-change threshold for proteomics significance (wide
+  # format example column: "S1744_vs_control_LOG2FC").
+  lfc_threshold: 1.0
   # Sample code mapping used below:
   #   S1011 = ATRX_FL  |  S1744 = ATRX_IFF  |  S1760 = EmptyVector
   #   SE6   = E6  |  control = TP53
   #
+  # DIRECTION: the proteomics column names read {numerator}_vs_{denominator},
+  # the same convention as the DESeq2 contrast names above.  Every mapping below
+  # has been checked to pair the same numerator and denominator on both sides,
+  # e.g. ATRX_FL_vs_TP53 (log2FC = ATRX_FL/TP53) -> S1011_vs_control (=
+  # ATRX_FL/TP53). Getting this backwards would invert the concordance
+  # colouring on the proteomics volcano, so re-check it whenever a mapping is
+  # added.
+  #
   # Note: ATRX_Ctrl (DESeq2 combined NoVector+EmptyVector) has no direct
   # proteomics equivalent; the vs-control comparisons are the closest match.
   deseq2_to_proteomics_comparison:
-    #TP53_vs_E6:       "SE6_vs_control"
-    E6_vs_EmptyVector:  "S1760_vs_SE6"
-    #EmptyVector_vs_ATRX_FL:        "S1011_vs_S1760"
-    #EmptyVector_vs_ATRX_IFF:       "S1744_vs_S1760"
+    #E6_vs_TP53:        "SE6_vs_control"
+    EmptyVector_vs_E6:  "S1760_vs_SE6"
+    #ATRX_FL_vs_EmptyVector:        "S1011_vs_S1760"
+    #ATRX_IFF_vs_EmptyVector:       "S1744_vs_S1760"
     ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
-    TP53_vs_ATRX_FL:               "S1011_vs_control" 
-    TP53_vs_ATRX_IFF:              "S1744_vs_control"   
+    ATRX_FL_vs_TP53:               "S1011_vs_control"
+    ATRX_IFF_vs_TP53:              "S1744_vs_control"
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
   collections:
     - H
     - C2:CP:REACTOME
+    - C2:CP:KEGG
+    - KEGG_CURRENT        # fetched from the KEGG REST API, not MSigDB
     - C5:GO:BP
   min_size: 9
   max_size: 500
   nperm: 1000
   rank_metric: stat
   custom_gmt_files: []
+
+  # One panel per KEGG BRITE category, under gsea/{contrast}/kegg/, drawing every
+  # pathway in the category rather than the collection dotplot's top 15.
+  # C2:CP:KEGG is frozen at ~2011 and lacks 17 of the 32 pathways in these
+  # categories, so slice the live KEGG definitions instead (see collections).
+  kegg_source_collection: KEGG_CURRENT
+  kegg_categories:
+    - replication_and_repair          # Replication and repair
+    - chromosome                      # Chromosome
+    - cell_growth_and_death           # Cell growth and death
+    - nervous_system                  # Nervous system
+    - development_and_regeneration    # Development and regeneration
+  kegg_padj_cutoff: 0.05
+
+  # Same five groupings applied to GO, under gsea/{contrast}/go/. These are
+  # keyword matches on GO term names, not an ontology grouping - see the README.
+  go_source_collection: C5:GO:BP
+  go_categories_top_n: 25
+  go_categories:
+    - replication_and_repair
+    - chromosome
+    - cell_growth_and_death
+    - nervous_system
+    - development_and_regeneration
+
+  # Same five groupings applied to Reactome, under gsea/{contrast}/reactome/.
+  # Keyword matches on Reactome pathway names, not Reactome's own hierarchy -
+  # see the README.
+  reactome_source_collection: C2:CP:REACTOME
+  reactome_categories_top_n: 25
+  reactome_categories:
+    - replication_and_repair
+    - chromosome
+    - cell_growth_and_death
+    - nervous_system
+    - development_and_regeneration
 
 # ─── GO enrichment parameters ────────────────────────────────────────────────
 GO:
@@ -216,14 +430,120 @@ GO:
   max_gs_size: 500
   gene_id_type: SYMBOL
 
+# ─── Signature reversal (rescue scoring) ─────────────────────────────────────
+# The primary rescue readout.  Both contrasts in each pair sit inside a single
+# background, so the clonal difference between TP53 and the E6 lineage never
+# enters the comparison.
+#
+# E6_vs_TP53 has E6 as numerator, so its log2FC is "KO relative to ATRX-WT".
+# ATRX_FL_vs_EmptyVector has ATRX_FL as numerator, so its log2FC is "rescue
+# relative to the transduced control".  A working rescue makes the second the
+# mirror image of the first: negative slope, reversal score near 1.
+SignatureReversal:
+  - name: ATRX_FL_reverses_KO_signature
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_FL_vs_EmptyVector
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+  - name: ATRX_IFF_reverses_KO_signature
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_IFF_vs_EmptyVector
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+  # The same two comparisons with the signature restricted to genes that moved
+  # substantially in the KO.  With lfc_threshold 0.0 the signature is ~8600 genes
+  # - close to half the transcriptome - because the E6/TP53 contrast carries the
+  # whole clonal difference, not just ATRX loss.  Most of those genes cannot
+  # respond to ATRX at all, and their noisy log2FCs flatten the slope through
+  # regression dilution.  Requiring |log2FC| >= 1 keeps the genes where a real
+  # effect exists.  Both versions are run so the two can be compared.
+  - name: ATRX_FL_reverses_KO_signature_lfc1
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_FL_vs_EmptyVector
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
+    restored_fraction: 0.5
+  - name: ATRX_IFF_reverses_KO_signature_lfc1
+    signature_contrast: E6_vs_TP53
+    response_contrast:  ATRX_IFF_vs_EmptyVector
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
+    restored_fraction: 0.5
+
+  # ── Negative control ───────────────────────────────────────────────────────
+  # Answers the question the permutation null cannot: is the reversal specific to
+  # ATRX, or would any transduced-vs-untransduced comparison score the same?
+  #
+  # Signature = the vector-transduction effect (EmptyVector / E6).
+  # Response  = the FL-vs-IFF difference, which shares no sample with it
+  #             ({E6, EmptyVector} vs {ATRX_FL, ATRX_IFF}) and has no mechanistic
+  #             reason to reverse a transduction signature.
+  #
+  # Matched to the _lfc1 comparisons above so it calibrates them directly.
+  # Expected result: excess_over_null near 0, perm_p not significant. If instead
+  # it scores like ATRX_FL does, the metric is picking up generic structure
+  # rather than ATRX biology, and the rescue scores mean much less.
+  - name: NEGATIVE_CONTROL_vector_signature_vs_FL_IFF
+    signature_contrast: EmptyVector_vs_E6
+    response_contrast:  ATRX_IFF_vs_ATRX_FL
+    padj_threshold: 0.05
+    lfc_threshold: 1.0
+    restored_fraction: 0.5
+
+  # NOTE: there is deliberately no EmptyVector-vs-E6 negative control here.  The only
+  # candidate, E6_vs_TP53 against EmptyVector_vs_E6, shares the E6 group: E6
+  # enters the signature as the numerator and the response as the denominator,
+  # so its sampling noise appears with opposite signs on the two axes and
+  # manufactures a negative correlation with no biology involved.  On pure noise
+  # that pair scores ~66% "reversed" with rho ~ -0.5.  The script now detects any
+  # shared condition, flags the comparison as not interpretable, and stamps the
+  # warning onto the figure.
+  #
+  # The baseline instead comes from the permutation null computed inside every
+  # comparison (n_perm, default 1000): the response log2FCs are shuffled across
+  # genes, which preserves both sign distributions and gives the true baseline
+  # for this statistic on this data.  Read excess_over_null and perm_p in
+  # reversal_stats.csv, not pct_reversed against an assumed 50%.
+
 # ─── Contrast comparisons ────────────────────────────────────────────────────
 # "Normalise" IFF-vs-FL by subtracting the IFF-vs-Ctrl baseline.
+#
+# CAUTION on this entry.  At gene level the subtraction collapses:
+#   (ATRX_IFF - ATRX_FL) - (ATRX_IFF - TP53)  =  TP53 - ATRX_FL
+# so it is a TP53-vs-ATRX_FL comparison in disguise — it crosses the clonal and
+# transduction boundaries rather than removing anything.  Meanwhile
+# ATRX_IFF_vs_ATRX_FL on its own already needs no normalisation: both groups sit
+# in the same clone with the same vector, so those effects cancel by
+# construction.  Kept here because ΔNES on ranks is not exactly the gene-level
+# algebra, but treat the output as exploratory and prefer the two
+# SignatureReversal scores above for comparing FL against IFF as rescues.
 ContrastComparisons:
   - name: IFF_vs_FL_normalised_by_IFF_vs_Ctrl
     contrast_A: ATRX_IFF_vs_ATRX_FL
-    contrast_B: TP53_vs_ATRX_IFF
+    contrast_B: ATRX_IFF_vs_TP53
     delta_nes: True
     residual_rank: True
+
+# ─── Genes shared by two contrasts with the same denominator ─────────────────
+# Genes significant in the same direction in contrast_A and contrast_B
+# (DESeq2 padj / lfc thresholds above) - the centres of the report's Venn
+# diagrams - and an over-representation test on each centre. The centre is a
+# gene set, not a ranking, hence over-representation rather than GSEA.
+# Outputs: shared_genes/{name}/genes.csv, ora_{up,down}_{collection}.csv.
+SharedGenes:
+  collections:            # MSigDB collections, or KEGG_CURRENT (see GSEA)
+    - H
+    - KEGG_CURRENT
+    - C5:GO:BP
+  exclude_genes: [ATRX]   # pooled ATRX_Total: a construct, not biology
+  min_size: 10            # gene-set size within the universe
+  max_size: 500
+  comparisons:
+    - name: ATRX_FL_and_ATRX_IFF_vs_EmptyVector
+      contrast_A: ATRX_FL_vs_EmptyVector
+      contrast_B: ATRX_IFF_vs_EmptyVector
 
 # ─── Tool parameters ─────────────────────────────────────────────────────────
 TrimGalore:

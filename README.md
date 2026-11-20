@@ -58,11 +58,22 @@ BulkRNAPipe/
 │   │   └── gsea.yaml               # fgsea + msigdbr + clusterProfiler
 │   └── scripts/
 │       ├── deseq2.R                # DESeq2 differential expression
-│       ├── pca.R                   # PCA plot
+│       ├── pca.R                   # PCA grid (sample sets x gene views)
+│       ├── design_qc.R              # Library-level confounder QC
+│       ├── substitute_total_feature.R  # Swaps a pooled total in for one gene downstream
+│       ├── deseq2_interaction.R     # Difference-of-differences contrasts
+│       ├── signature_reversal.R     # Rescue scored as signature reversal
 │       ├── generate_hox_gmt.R      # Auto-generates HOX gene-set GMT
 │       ├── gsea.R                  # fgsea enrichment per contrast
+│       ├── gsea_kegg.R             # KEGG BRITE category panels
+│       ├── generate_kegg_gmt.R     # Current KEGG pathways from the KEGG API
+│       ├── gsea_go_categories.R    # GO keyword category panels
+│       ├── gsea_reactome_categories.R  # Reactome keyword category panels
 │       ├── go.R                    # GO enrichment per contrast
-│       └── gsea_compare.R          # ΔNES + residual-rank comparison
+│       ├── gsea_compare.R          # ΔNES + residual-rank comparison
+│       └── shared_genes.R          # Genes shared by two contrasts + over-representation
+├── report/
+│   └── analysis_report.Rmd         # Rendered analysis report template
 ├── run_BulkRNAPipe.sh              # Local (non-SLURM) run script
 └── run_BulkRNAPipe_slurm.sh        # SLURM cluster run script
 ```
@@ -144,8 +155,8 @@ DESeq2:
 
   contrasts:
     # Contrast against the combined reference
-    - [ATRX_VectorControl_vs_ATRX_FL,  ATRX_FL,  ATRX_VectorControl]
-    - [ATRX_VectorControl_vs_ATRX_IFF, ATRX_IFF, ATRX_VectorControl]
+    - [ATRX_FL_vs_ATRX_VectorControl,  ATRX_FL,  ATRX_VectorControl]
+    - [ATRX_IFF_vs_ATRX_VectorControl, ATRX_IFF, ATRX_VectorControl]
 ```
 
 **How it works**: Snakemake replaces each sample's original condition label with
@@ -200,7 +211,7 @@ submit the controller batch job (it runs Snakemake on `longq` and dispatches
 each rule as its own SLURM job):
 
 ```bash
-sbatch run_BulkRNAPipe_slurm.sh                          # uses config/config.yaml
+sbatch run_BulkRNAPipe_slurm.sh                          # uses config/config_epicode.yaml
 sbatch run_BulkRNAPipe_slurm.sh config/config_myproject.yaml
 ```
 
@@ -253,6 +264,36 @@ output_dir/
 ├── trim/{sample}/                            # Trimmed FASTQs
 ├── align/{sample}/                           # BAM files + STAR logs
 ├── quantify/counts.txt                       # Gene × sample count matrix
+├── pca/{sample_set}/
+│   ├── {view}_pc12.pdf                       # PC1 vs PC2
+│   ├── {view}_pc34.pdf                       # PC3 vs PC4
+│   ├── {view}_scree.pdf                      # Variance explained per PC
+│   ├── {view}_pc12_batch_removed.pdf         # removeBatchEffect panel (visualisation only)
+│   ├── {view}_coords.csv                     # PC coordinates
+│   └── {view}_excluded_genes.csv             # Features dropped by this view
+├── design_qc/
+│   ├── library_size.pdf                      # Assigned reads per sample
+│   ├── assignment_rates.pdf                  # featureCounts assignment breakdown
+│   ├── genes_detected.pdf                    # Genes with >= 1 count
+│   ├── marker_expression.pdf                 # Reporter / transgene expression (log10)
+│   ├── marker_expression_linear.pdf          # Same panel, linear axis
+│   ├── total_feature_counts.txt              # Pooled gene_ids, -M --fraction (optional)
+│   ├── counts_substituted.txt                # Derived matrix (optional, see substitute_as)
+│   ├── tag_counts.txt                        # Vector tag window, -M --fraction (optional)
+│   ├── goi_expression.pdf                    # Endogenous genes of interest
+│   ├── sample_correlation.pdf                # Spearman correlation, all samples
+│   ├── sample_distance.pdf                   # Euclidean distance, all samples
+│   └── design_qc_summary.csv                 # Per-sample summary table
+├── deseq2_interaction/{interaction}/
+│   ├── results.csv                           # Difference-of-differences results
+│   ├── components.csv                        # Interaction next to both component effects
+│   ├── volcano.pdf                           # Volcano plot
+│   └── ma_plot.pdf                           # MA plot
+├── signature_reversal/{comparison}/
+│   ├── reversal_scatter.pdf                  # Response log2FC vs signature log2FC
+│   ├── recovery_distribution.pdf             # Per-gene recovered fraction
+│   ├── reversal_stats.csv                    # Reversal score, rho, % reversed
+│   └── reversal_genes.csv                    # Per-gene table
 ├── deseq2/{contrast}/
 │   ├── results.csv                           # DE results table
 │   ├── normalized_counts.csv                 # DESeq2-normalized counts
@@ -261,9 +302,22 @@ output_dir/
 │   └── ma_plot.pdf                           # MA plot (direction-annotated)
 ├── resources/generated_gmts/
 │   └── hox.gmt                              # Auto-generated HOX gene sets
+├── gsea_interaction/{interaction}/
+│   ├── {collection}_results.csv             # fgsea on the difference-of-differences
+│   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
 ├── gsea/{contrast}/
 │   ├── {collection}_results.csv             # fgsea results per collection
-│   └── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+│   ├── {collection}_dotplot.pdf             # Dotplot of top enriched pathways
+│   ├── {collection}_pathway_audit.csv       # Every set: size, detected, testable
+│   ├── kegg/
+│   │   ├── {category}_results.csv           # KEGG BRITE category slice
+│   │   └── {category}_dotplot.pdf           # Every pathway in that category
+│   ├── go/
+│   │   ├── {category}_results.csv           # All GO terms matching the category
+│   │   └── {category}_dotplot.pdf           # Top terms, keyword-matched
+│   └── reactome/
+│       ├── {category}_results.csv           # All Reactome pathways matching the category
+│       └── {category}_dotplot.pdf           # Top pathways, keyword-matched
 ├── go/{contrast}/
 │   ├── go_{ont}_{dir}_results.csv           # Raw GO enrichment (up/down)
 │   ├── go_{ont}_{dir}_results_simplified.csv# Redundancy-reduced GO results
@@ -277,9 +331,517 @@ output_dir/
 │   ├── delta_nes_barplot.pdf                # ΔNES bar plot
 │   └── residual_rank/
 │       └── residual_rank_{collection}.csv   # Residual-rank fgsea per collection
+├── shared_genes/{name}/
+│   ├── genes.csv                            # log2FC/padj in both contrasts, up/down group
+│   └── ora_{up,down}_{collection}.csv       # Over-representation of the shared genes
 ├── logs/                                     # Per-rule log files
 └── benchmark/                                # Per-rule benchmark files
 ```
+
+## Confounded designs: PCA views, interactions and signature reversal
+
+These four modules exist for experiments where the groups differ by more than
+the intended variable — a different parental clone, an extra transduction step,
+a selection round. In that situation the nuisance effect is a deterministic
+function of the group label, which means it **cannot be estimated as a
+covariate**: the model matrix becomes rank-deficient and DESeq2 refuses to fit
+it. There is no group whose mean would pin the effect down, and replicates do
+not help — they sharpen the group means without adding a new one.
+
+`docs/design_confounding_plan.md` works through the arithmetic and explains why
+RUV, ComBat and friends do not rescue this. The short version: the modules below
+avoid the confounding rather than correcting it.
+
+### PCA views and sample subsets
+
+The `PCA` rule runs a grid of (sample set × gene view) into
+`pca/{sample_set}/{view}_*`. For each combination you get PC1/PC2, PC3/PC4, a
+scree plot, the coordinates as CSV and a supplementary batch-removal panel.
+
+Gene views (all three always run):
+
+| View | Genes used |
+| --- | --- |
+| `all_genes` | every gene in `counts.txt` |
+| `no_vector_genes` | minus `exclude_genes` / `exclude_gene_patterns` / `exclude_contigs` |
+| `no_vector_no_transgene` | minus those, and minus `transgene_genes` |
+
+Features are dropped from the raw counts **before** the `DESeqDataSet` is built,
+so size factors and the VST are re-estimated on the retained genes. This matters:
+a reporter that is absent in one group and highly expressed in another shifts the
+library-size normalisation of every other gene, not just its own row.
+
+The third view exists because the transgene is, by construction, the largest
+single difference between the groups. A PCA that includes it partly re-plots the
+experimental design instead of showing its downstream consequences.
+
+```yaml
+PCA:
+  exclude_genes: [EGFP, mCherry]          # exact IDs from the Geneid column
+  exclude_gene_patterns: []               # regexes, for shared naming prefixes
+  exclude_contigs: []                     # genes whose exons all sit here
+  transgene_genes: [ATRX, ATRX_FL, ATRX_IFF]
+  ntop: 500
+
+  subsets:                                # extra sample sets beyond "all"
+    E6_derived: [E6, EmptyVector, ATRX_FL, ATRX_IFF]
+
+  batch:                                  # visualisation-only, see below
+    TP53:        untransduced
+    EmptyVector: transduced
+```
+
+Subsets are how you stop one dominant axis from compressing everything else into
+the higher PCs: drop the group that sits on its own clonal branch and the
+remaining effects get to use PC1/PC2.
+
+Entries matching nothing are not an error, but `pca.R` prints a `WARNING` to
+`logs/PCA/*.log` — check there if two views come out identical unexpectedly.
+List the IDs your GTF actually uses with:
+
+```bash
+grep -o 'gene_id "[^"]*"' /path/to/genome_plus_vectors.gtf | sort -u
+```
+
+**The batch-removal panel is for looking, not for evidence.** When `PCA.batch`
+varies within at least one condition, `limma::removeBatchEffect` runs with the
+condition means protected. When every condition maps to exactly one batch, the
+batch effect is not estimable at all — limma returns `NA` coefficients if the
+design is supplied — so the script subtracts the batch means outright, which
+produces the tidy figure people expect by deleting the real between-group
+difference along with any technical one. In that case a red warning is printed
+**onto the figure**, because a PDF outlives its log file.
+
+### Interaction contrasts (difference of differences)
+
+`(A1 − A2) − (B1 − B2)`, estimated from the plain `~ condition` fit. Since it is
+a linear combination of group means, it is estimable where a free-standing
+nuisance term is not, and any effect shared by both pairs cancels.
+
+```yaml
+DESeq2:
+  interactions:
+    - name: ATRX_FL_rescue_shortfall
+      group_A: [ATRX_FL, EmptyVector]     # how far the rescue moved the gene
+      group_B: [TP53, E6]                 # how far it had to move (restoration target)
+```
+
+`log2FC ≈ 0` means both comparisons move the gene by the same amount — for a
+rescue experiment, that the rescue put the gene back where the knockout took it
+from. Negative means it fell short, positive that it overshot. `components.csv`
+reports the interaction next to both component effects so a large value can be
+traced to whichever pair moved.
+
+**Mind the direction of `group_B`.** For a rescue you want the restoration
+target (`[wildtype, mutant]`), not the perturbation (`[mutant, wildtype]`).
+Flipping it reports the sum of the two effects rather than the residual, and a
+complete rescue scores twice the effect size instead of zero.
+
+Note also what this is *not* needed for. When both sides of a comparison share a
+nuisance factor it cancels on its own: `ATRX_FL` vs `EmptyVector` is already free
+of the vector effect, because subtracting a separately-measured vector effect is
+algebraically identical to using `EmptyVector` as the denominator —
+`(FL − E6) − (EmptyVector − E6) = FL − EmptyVector`. Interactions are for
+crossing a boundary that no shared control spans.
+
+This assumes the nuisance effect is the same size in both pairs. With one group
+per condition that is untestable, so state it in the methods.
+
+**GSEA on the interaction.** When `Run.gsea` is on, each interaction also gets
+its own enrichment run in `gsea_interaction/{interaction}/`, via a rule separate
+from the per-contrast `GSEA` so it cannot disturb results already on disk. This
+matters because a plain contrast crossing a confounded boundary is dominated by
+whatever separates those groups — typically the proliferation/inflammation axis,
+which Hallmark reports through many heavily overlapping sets, making one latent
+variable look like a dozen findings. Ranking on the interaction cancels the
+nuisance effects instead, so the enrichment answers which pathways the
+intervention failed to restore (`NES < 0`) or overshot (`NES > 0`). The dotplot
+labels both halves explicitly, e.g. `ATRX_FL/EmptyVector > TP53/E6`.
+
+### Signature reversal
+
+Scores an intervention by how far it reverses a perturbation signature, using
+two contrasts that each sit entirely inside one background — so the boundary is
+never crossed and there is nothing to correct.
+
+```yaml
+SignatureReversal:
+  - name: ATRX_FL_reverses_KO_signature
+    signature_contrast: E6_vs_TP53              # defines which genes are scored
+    response_contrast:  ATRX_FL_vs_EmptyVector  # measured on those genes
+    padj_threshold: 0.05
+    lfc_threshold: 0.0
+    restored_fraction: 0.5
+```
+
+`reversal_stats.csv` reports:
+
+| Field | Meaning |
+| --- | --- |
+| `reversal_score` | −slope of the total-least-squares fit; 1 = complete reversal, 0 = no response |
+| `pct_reversed` | % of signature genes moving the opposite way |
+| `null_pct_reversed` / `excess_over_null` / `perm_p` | permutation baseline, the excess over it, and its empirical p-value |
+| `shares_condition` / `interpretable` | flags a pair whose contrasts share a group, which invalidates the score |
+| `pct_restored` | % recovering at least `restored_fraction` of the perturbation |
+| `spearman_rho` | rank correlation between the two fold-change vectors — is the reversal *consistent* (rank-based, ignores magnitude) |
+| `r_squared` | squared Pearson correlation — how much of the response variance the signature explains |
+
+Total least squares rather than ordinary least squares: both axes are estimated
+with comparable noise, and OLS would bias the slope toward zero. The slope
+answers "how far back did it go", `spearman_rho` answers "how consistently" —
+they are different questions, so both are reported, and both are drawn in a box
+inside the plot panel rather than only in the subtitle, which gets clipped once
+the figure is embedded or scaled.
+
+**The two contrasts must not share a condition.** If they do, that group's
+sampling noise enters one log2FC positively and the other negatively, creating a
+negative correlation out of nothing — on pure noise, sharing one group of three
+replicates gives ~66% "reversed" and rho ~ -0.5. The script detects this, sets
+`interpretable = FALSE`, and stamps the warning onto the figure. It rules out the
+obvious-looking negative control (a knockout signature against
+`control vs control+empty_vector`), which shares the knockout group.
+
+**Read `excess_over_null`, not `pct_reversed`.** Every comparison builds a
+permutation null by shuffling the response log2FCs across genes, which preserves
+both sign distributions and gives the baseline this statistic actually has on
+this data. The binomial test against 50% is also reported, but it assumes
+balanced signs in both contrasts and is optimistic when they are skewed.
+
+**Beware a signature that is too broad.** Selecting on a contrast whose groups
+differ by more than the intended variable admits genes no intervention could
+reverse, which dilutes the slope toward zero. Raising `lfc_threshold` restricts
+the signature to genes with a substantial effect.
+
+### KEGG BRITE category panels
+
+The collection dotplot shows the top 15 pathways in each direction. That is the
+wrong shape for a question like *"what happened to replication and repair?"* — a
+KEGG category is a small, fixed, pre-specified list, and the pathways that did
+**not** move are part of the answer. Listing category slugs writes one extra
+panel each under `gsea/{contrast}/kegg/`, drawing every pathway in the category,
+with filled points for `padj < kegg_padj_cutoff` and hollow ones for the rest.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, C2:CP:KEGG, C5:GO:BP]   # C2:CP:KEGG required
+  kegg_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                    nervous_system, development_and_regeneration]
+  kegg_padj_cutoff: 0.05
+```
+
+These **re-plot** an existing collection's results rather than re-running fgsea,
+so they are cheap and cannot disagree with the collection-level figure. The rule
+fails fast if `kegg_source_collection` is missing from `collections`.
+
+#### Use current KEGG, not the frozen snapshot
+
+MSigDB's `C2:CP:KEGG` is a **snapshot of KEGG from around 2011** and never gains
+new pathways. In practice that means 17 of the 32 pathways in the five categories
+above are simply absent — everything KEGG added from 2011 on, including both
+pathways in `Chromosome`, all five synapse pathways, `Ferroptosis`,
+`Cellular senescence` and `Axon regeneration`.
+
+`KEGG_CURRENT` is a pseudo-collection that fetches the live definitions from the
+KEGG REST API instead, via `GenerateKeggGmt` →
+`resources/generated_gmts/kegg_current.gmt`:
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  kegg_source_collection: KEGG_CURRENT
+```
+
+Gene-set names reproduce the MSigDB convention (`DNA replication` →
+`KEGG_DNA_REPLICATION`), so a category file written against the legacy names
+resolves unchanged. `kegg_current_pathways.tsv` is written alongside the GMT with
+`kegg_id`/`kegg_name`/`gs_name`/`n_genes` — use it to check a category file
+against real KEGG names.
+
+**Requires outbound HTTPS to `rest.kegg.jp` on whichever node runs the rule.**
+The rule is retried twice and only runs when `KEGG_CURRENT` is in `collections`,
+so the other collections never pull a network call into their dependency graph.
+KEGG is free for academic use; see <https://www.kegg.jp/kegg/legal.html>.
+
+Slugs come from the first column of `workflow/resources/kegg_categories.tsv`,
+which maps [KEGG BRITE categories](https://www.genome.jp/kegg/pathway.html) to
+MSigDB gene-set names (`DNA replication` → `KEGG_DNA_REPLICATION`). Rows are in
+the order KEGG lists them and carry the KEGG pathway number, so the file can be
+diffed against the KEGG page directly. Species-specific pathways (`Cell cycle -
+yeast`, `Apoptosis - fly`, …) are omitted. Edit the file to add, drop or rename
+entries — nothing else needs changing; point `kegg_categories_file` elsewhere to
+use your own.
+
+#### When a pathway is missing from a panel
+
+Every gene set listed in the file but absent from the results is reported in
+`logs/GSEAKeggCategories/{contrast}.log`, **with the reason**, both inline and as
+a summary block at the end of the run:
+
+```
+==== KEGG category summary ====
+  development_and_regeneration     4/5 plotted
+       missing  KEGG_OSTEOCLAST_DIFFERENTIATION: FILTERED BY SIZE - only 6 of
+                its 128 genes are detected here, below min_size=9
+  chromosome                       0/2 plotted
+       missing  KEGG_POLYCOMB_REPRESSIVE_COMPLEX: NOT IN THE COLLECTION - no
+                gene set by this name. Check the spelling in the category file,
+                or whether this collection version contains it.
+===============================
+```
+
+The two verdicts need different fixes, which is why they are separated:
+
+- **`FILTERED BY SIZE`** — the collection has it, but `min_size`/`max_size` apply
+  to the number of its genes actually **detected in your data**, not its nominal
+  size. A pathway whose genes are largely unexpressed in the cell type under
+  study drops out even though it exists. Lower `min_size` if you want it tested.
+- **`NOT IN THE COLLECTION`** — no gene set by that name. Either the category file
+  has a typo, or this collection version lacks it. `C2:CP:KEGG` is the legacy
+  MSigDB collection, frozen at an older KEGG release; `C2:CP:KEGG_MEDICUS` tracks
+  current KEGG but uses different gene-set names, so the category file would have
+  to be rewritten for it.
+
+This works because `gsea.R` writes `{collection}_pathway_audit.csv` next to the
+results — every set in the collection with its nominal size, how many of its
+genes were detected, and whether it was testable. The results file alone cannot
+answer the question, since it only contains sets that were tested. The audit is
+written for every collection, so it also explains gaps outside KEGG.
+
+A sparse panel therefore means "not tested", **not** "nothing moved" — the panel
+subtitle reports how many of the category's sets were tested, and the log says
+why the rest were not.
+
+One thing the log cannot catch: gene-set names are uppercase, so `grep
+osteoclast` over the results finds nothing even when the pathway is there. Use
+`grep -i`.
+
+### GO keyword category panels
+
+The same five groupings applied to GO, under `gsea/{contrast}/go/`.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  go_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                  nervous_system, development_and_regeneration]
+  go_source_collection: C5:GO:BP
+  go_categories_top_n: 25
+```
+
+**These are not an ontology grouping.** GO has no equivalent of KEGG's BRITE
+categories, so each group is a **regular expression matched against the GO term
+name** — a text search, not a graph traversal. It pulls in terms that merely
+share a word and misses terms that describe the same biology differently. Read a
+panel as *"GO terms whose names mention X"*, never as *"everything GO knows about
+X"*. The plot subtitle and the log both say so. Categories overlap by design:
+`GOBP_NEURON_DIFFERENTIATION` matches `nervous_system` and could equally match
+`development_and_regeneration`.
+
+The include/exclude regexes live in `workflow/resources/go_categories.tsv`, one
+row per category — that is the file to tune, and tuning it is expected rather
+than exceptional.
+
+A keyword can match hundreds of terms, so **the figure is truncated** to
+`go_categories_top_n` ranked by `padj`. The truncation is never silent: the
+subtitle reads *"top 25 of 143 matched terms by padj"*, the log names how many
+were dropped, and `{category}_results.csv` keeps **all** matched terms
+untruncated. The log summary reports matched / significant / plotted per
+category:
+
+```
+==== GO category summary ====
+  (keyword matches on GO term names - not an ontology grouping)
+  replication_and_repair             87 matched,   31 significant,  25 plotted
+  chromosome                        112 matched,   44 significant,  25 plotted
+=============================
+```
+
+### Reactome keyword category panels
+
+The same five groupings applied to Reactome, under `gsea/{contrast}/reactome/`.
+
+```yaml
+GSEA:
+  collections: [H, C2:CP:REACTOME, KEGG_CURRENT, C5:GO:BP]
+  reactome_categories: [replication_and_repair, chromosome, cell_growth_and_death,
+                        nervous_system, development_and_regeneration]
+  reactome_source_collection: C2:CP:REACTOME
+  reactome_categories_top_n: 25
+```
+
+**These are not Reactome's own hierarchy.** Reactome does curate a pathway
+tree, but MSigDB's `C2:CP:REACTOME` ships it flattened — one gene set per
+pathway, no parent/child links — so like GO there is no ready "category →
+member pathways" file to slice. Each group here is instead a **regular
+expression matched against the pathway name**, the same mechanism as the GO
+panels above (down to the same `workflow/resources/reactome_categories.tsv`
+column layout): it pulls in pathways that merely share a word and misses
+pathways that describe the same biology differently. Read a panel as
+*"Reactome pathways whose names mention X"*, never as *"everything Reactome
+knows about X"*. Categories overlap by design.
+
+Same truncation behaviour as the GO panels: the figure is capped at
+`reactome_categories_top_n` by `padj`, the subtitle and log say how many
+pathways were matched vs. plotted, and `{category}_results.csv` keeps every
+matched pathway untruncated.
+
+### Design QC
+
+`design_qc/` plots library size, featureCounts assignment rates, genes detected,
+per-gene expression panels, and the sample–sample correlation and distance
+structure, with all samples on one figure — a group-linked technical shift is
+invisible one sample at a time.
+
+Two gene panels, configured separately because they are normalised differently:
+
+```yaml
+DesignQC:
+  genes:              [ATRX, ATRX_FL, ATRX_IFF, EGFP, mCherry]   # marker_expression.pdf
+  genes_of_interest:  [HOXB2, HOXB4, HOXB6, HOXB7, IGF2BP1]      # goi_expression.pdf
+```
+
+`genes` are the reporter and transgene features. They are **excluded from
+size-factor estimation**, because a construct present in only some groups would
+otherwise shift the normalisation of every other gene. `genes_of_interest` are
+ordinary endogenous genes and **stay in** the size factors — dropping real genes
+from the normalisation would be wrong. Both panels are drawn from the same
+normalised matrix, so the two are directly comparable.
+
+Genes absent from the count matrix are reported as a `WARNING` in
+`logs/DesignQC/design_qc.log` and skipped; the panel still renders.
+
+#### Recovering reads the unique-only rule throws away
+
+Both panels above count what the main matrix counts: unique alignments. When the
+reference carries cDNA copies of a gene that also exists in the genome — a
+transgene next to its endogenous locus — most of that gene's reads align equally
+well to two or three places. STAR marks them `NH >= 2` (MAPQ 3), and
+`featureCounts` with `-Q 10` and no `-M` discards them. Neither the endogenous
+feature nor the construct features then report the gene's real output, and the
+bar heights between them are not comparable: each one reflects how wide its
+uniquely-mappable window happens to be.
+
+Two optional rows recover it from the **same BAMs, with no re-alignment**. Both
+re-count with `-Q 0 -M --fraction`, so every alignment of an ambiguous fragment
+lands in the same meta-feature and contributes `1/NH` — the fragment is counted
+exactly once, whichever copy it came from.
+
+```yaml
+DesignQC:
+  total_feature:                    # one row: the gene's output from every source
+    name: ATRX_Total
+    genes: [ATRX, ATRX_FL, ATRX_IFF]
+  tag:                              # one row: a window shared by the vector contigs
+    name: Tag
+    regions:
+      - {contig: ATRX_FL,  start: 1, end: 117, strand: "+"}
+      - {contig: ATRX_IFF, start: 1, end: 117, strand: "+"}
+    min_overlap: 25
+```
+
+They are drawn at the **top** of `marker_expression.pdf`, above the unique-only
+rows, and normalised with the same size factors. The same panel is written a
+second time on a linear axis as `marker_expression_linear.pdf` — log10 keeps a
+feature that is zero in one group and thousands in another legible at all, but it
+flattens the differences it does show, so the two views answer different
+questions and both are produced. The tag window is sequence that
+is absent from the genome, so it measures transgene output regardless of which
+construct a sample carries — it deliberately does not distinguish between them.
+
+Leave `genes` / `regions` empty to disable either one. Three caveats:
+
+- **The tag is a coordinate range, not a sequence match.** It is only correct if
+  the contigs begin at the construct's first base — check `start`/`end` against
+  the reference FASTA.
+- **Counts are fractional** and are not valid DESeq2 input on their own. These
+  rows never enter `quantify/counts.txt`, so size factors, the VST and the
+  correlation heatmaps are untouched — unless `total_feature.substitute_as` is
+  set (below), which feeds a rounded copy into a *separate*, derived matrix.
+- **The pooled row is not on the same footing as the rows below it**, since it
+  includes multimappers and they do not. The panel subtitle says so.
+
+Read it alongside the MultiQC reports in `QC/`, which carry duplication, adapter
+and coverage-uniformity metrics that are not recomputed here.
+
+#### Feeding `total_feature` downstream
+
+By default `total_feature` is a QC row only — DESeq2 and everything after it
+keep seeing the endogenous locus and each construct as separate genes. Set
+`substitute_as` to make the pooled total the gene those analyses actually use:
+
+```yaml
+DesignQC:
+  total_feature:
+    name: ATRX_Total
+    genes: [ATRX, ATRX_FL, ATRX_IFF]
+    substitute_as: ATRX   # pooled total stands in for this gene id downstream
+```
+
+This writes `design_qc/counts_substituted.txt` — `quantify/counts.txt` itself
+is **never modified** — where `genes` are dropped and `total_feature`'s pooled
+counts, rounded to the nearest integer, stand in for `substitute_as`. `DESeq2`,
+`DESeq2Interaction` and `PCA` read that matrix instead of the raw one; GSEA, GO,
+signature reversal and the proteomics overlay all key off DESeq2's own results
+rather than the count matrix, so they inherit the substitution automatically.
+`design_qc` itself is unaffected — it always runs on the untouched matrix and
+keeps plotting the endogenous locus and each construct separately, since that
+per-source breakdown is the whole point of the QC panel.
+
+Leave `substitute_as` empty (the default) to run every analysis on the raw
+matrix.
+
+**Dropping genes downstream with no substitute.** `downstream_exclude_genes`
+is the same idea for genes that have nothing to be pooled into — typically
+reporter genes:
+
+```yaml
+DesignQC:
+  downstream_exclude_genes: [EGFP, mCherry]
+```
+
+Independent of `total_feature.substitute_as` — either or both may be set, and
+both write to the same `design_qc/counts_substituted.txt`. `quantify/counts.txt`
+is still never modified, and `design_qc` still plots these genes if they are
+also listed in `DesignQC.genes`.
+
+## Analysis report
+
+`report/analysis_report.Rmd` renders a single self-contained HTML (or PDF)
+summarising a whole run, for people who will not open the pipeline directory.
+It reads the CSV files the pipeline writes and **rebuilds every figure**, rather
+than embedding the PDFs — so the styling is consistent, the HTML needs no
+external assets, and any plot can be edited in one place.
+
+```bash
+snakemake -s workflow/Snakefile --configfile config/config_epicode.yaml \
+    --use-conda --conda-frontend conda --cores 1 report/analysis_report.html
+```
+
+or directly, which is usually easier while editing:
+
+```bash
+Rscript -e 'rmarkdown::render("report/analysis_report.Rmd",
+            params = list(outdir = "/path/to/output_dir"),
+            output_file = "analysis_report.html")'
+```
+
+It is **not** part of the default target. The report is a document you edit by
+hand, and rebuilding it on every run would overwrite that work.
+
+Sections: experimental design → QC (library metrics, sample correlation, ATRX
+and vector markers) → PCA → differential expression (headline contrast first,
+then genes of interest, then the rest) → GSEA → rescue assessment (signature
+reversal and interaction contrasts) → summary.
+
+Two things worth knowing when you edit it:
+
+- **Every section degrades gracefully.** A missing pipeline output produces a
+  visible note and the report still renders, so it can be built before a run
+  finishes.
+- **Blockquoted text is placeholder interpretation.** Each figure is followed by
+  a `>` paragraph saying what to look for — rewrite those; they are prompts, not
+  conclusions. The `params` block at the top sets `outdir`, thresholds, the
+  condition order and palette, and which contrast leads.
 
 ## GSEA / GO enrichment modules
 
@@ -407,6 +969,32 @@ preferably the DESeq2 Wald `stat`).  fgsea is then run on these residuals.
 - This is a gene-level "subtraction" that highlights programs unique to the
   numerator contrast.
 
+### Genes shared by two contrasts (Venn centres)
+
+`SharedGenes` takes pairs of contrasts with the same denominator and finds the
+genes significant in the same direction in both (DESeq2 `padj_threshold` /
+`lfc_threshold`): `up` = higher in both numerators, `down` = higher in the
+shared denominator. The genes shared in each direction are the centres of the
+report's Venn diagrams; each centre is tested for over-representation
+(one-sided hypergeometric, as in clusterProfiler's `enricher()`) against the
+configured collections, with all genes tested in both contrasts as the
+universe and BH adjustment per direction and collection. A centre is a gene
+set, not a ranking, so this is over-representation rather than GSEA.
+
+```yaml
+SharedGenes:
+  collections: [H, KEGG_CURRENT, C5:GO:BP]   # MSigDB collections, or KEGG_CURRENT
+  exclude_genes: [ATRX]                      # left out of the sets and the universe
+  min_size: 10                               # gene-set size within the universe
+  max_size: 500
+  comparisons:
+    - name: ATRX_FL_and_ATRX_IFF_vs_EmptyVector
+      contrast_A: ATRX_FL_vs_EmptyVector
+      contrast_B: ATRX_IFF_vs_EmptyVector
+```
+
+Outputs appear under `shared_genes/{name}/`.
+
 ---
 
 ## Interpreting directionality
@@ -432,7 +1020,8 @@ If `Proteomics.enabled: True`, the separate `DESeq2Proteomic` step writes
 in `Proteomics.deseq2_to_proteomics_comparison`**. Contrasts without a mapped
 proteomics comparison are skipped (no overlay is produced for them). The plot is
 restricted to genes that are significant in the mapped proteomics comparison
-from the limma Excel sheet (`FDR <= Proteomics.fdr_threshold`). RNA-significant
+from the limma Excel sheet (`FDR <= Proteomics.fdr_threshold` and
+`|log2FC| > Proteomics.lfc_threshold`, default `0.05` and `1.0`). RNA-significant
 points are all annotated and colored by RNA/protein direction agreement:
 
 - **green**: RNA and proteomics change in the same direction
