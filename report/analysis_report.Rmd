@@ -56,6 +56,25 @@ params:
   # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
   # this repository.
   atrx_interactors: ""
+  # Section "Patient cohort: ATRX DEL, MNA and nMNA". Differential expression
+  # is tested on the normalised counts WITHOUT the library-layout correction,
+  # with the layout in the model instead: removeBatchEffect output is for
+  # plotting, not testing (its residual degrees of freedom are overstated).
+  # nb_covariates is the covariates_table.txt written by the same analysis
+  # (omics_id, histology, material, library_layout). Both stay on the cluster.
+  # Point nb_counts at "" to skip the section; without nb_covariates it runs
+  # with no layout term and says so.
+  nb_counts: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts.csv"
+  nb_covariates: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/covariates_table.txt"
+  # Gene-set size limits for the patient GSEA, as GSEA.min_size / max_size in
+  # config_epicode.yaml.
+  gsea_min_size: 9
+  gsea_max_size: 500
+  # Every plot as its own PDF in <export_dir>/figures/<section>/, every table
+  # as a CSV in <export_dir>/tables/<section>/. "" = <outdir>/report, next to
+  # the HTML the Snakemake rule writes. Both folders are emptied at each render.
+  export: TRUE
+  export_dir: ""
 output:
   html_document:
     toc: true
@@ -96,6 +115,9 @@ HOW THIS WORKS
   and the report still renders. So you can run it before the pipeline finishes.
 
   Text in > blockquotes is placeholder interpretation - rewrite it.
+
+  Every plot is also saved as a PDF under <export_dir>/figures/<section>/ and
+  every table as a CSV under <export_dir>/tables/<section>/ (params$export).
 -->
 
 ```{r setup, include = FALSE}
@@ -110,6 +132,103 @@ suppressPackageStartupMessages({
 
 OUT <- params$outdir
 LEV <- params$condition_levels
+
+# ── Per-plot PDFs and per-table CSVs ─────────────────────────────────────────
+# <export_dir>/figures/<NN_section>/ and <export_dir>/tables/<NN_section>/, the
+# section folders numbered and named after the report's top-level headings.
+# Plots knitr draws are saved by a second graphics device (PDF next to the PNG
+# it embeds) and copied over by the last chunk; plots drawn through
+# show_plot() and tables printed through kable() are written straight away.
+# Files are named <chunk label>-<n> unless export_as() names them.
+EXPORT <- isTRUE(params$export)
+EXPORT_DIR <- if (nzchar(params$export_dir)) params$export_dir else file.path(OUT, "report")
+FIG_DIR <- file.path(EXPORT_DIR, "figures")
+TAB_DIR <- file.path(EXPORT_DIR, "tables")
+# cairo_pdf embeds the non-ASCII characters (★, ≤, —) the plots use; pdf() would not.
+PDF_DEV <- if (isTRUE(capabilities("cairo"))) "cairo_pdf" else "pdf"
+if (EXPORT) {
+  unlink(c(FIG_DIR, TAB_DIR), recursive = TRUE)
+  dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
+  dir.create(TAB_DIR, recursive = TRUE, showWarnings = FALSE)
+  knitr::opts_chunk$set(dev = c("png", PDF_DEV))
+}
+
+# Chunk label -> section folder, read from this file's own top-level headings
+# (number_sections numbers them in the same order). Lines inside code chunks
+# are skipped: an R comment also starts with "# ".
+SECTION_OF <- local({
+  slug <- function(x) gsub("^_|_$", "", gsub("[^A-Za-z0-9]+", "_", x))
+  lines <- readLines(knitr::current_input(dir = TRUE), warn = FALSE, encoding = "UTF-8")
+  in_chunk <- FALSE; sec <- "00_setup"; i <- 0; map <- character()
+  for (l in lines) {
+    if (grepl("^\\s*```", l)) {
+      lab <- regmatches(l, regexec("^\\s*```\\{r[ ,]+([A-Za-z0-9_.-]+)\\s*[,}]", l))[[1]]
+      if (!in_chunk && length(lab) == 2) map[lab[2]] <- sec
+      in_chunk <- !in_chunk
+      next
+    }
+    if (!in_chunk && grepl("^# ", l)) {
+      i <- i + 1
+      sec <- sprintf("%02d_%s", i, slug(sub("^# +", "", l)))
+    }
+  }
+  map
+})
+cur_section <- function(label = knitr::opts_current$get("label")) {
+  s <- if (is.null(label)) NA else SECTION_OF[label]
+  if (is.na(s)) "unsorted" else unname(s)
+}
+
+# One-shot names for the next exported plot and/or table, e.g.
+# export_as("all/ATRX_DEL_vs_MNA_volcano"); "/" makes subfolders.
+.export <- new.env()
+.export$n <- list()
+export_as <- function(plot = NULL, table = NULL) {
+  .export$plot <- plot
+  .export$table <- table
+}
+export_path <- function(root, kind, ext, name = NULL) {
+  label <- knitr::opts_current$get("label")
+  if (is.null(label)) label <- "chunk"
+  if (is.null(name)) {
+    name <- .export[[kind]]
+    .export[[kind]] <- NULL
+  }
+  if (is.null(name)) {
+    key <- paste(kind, label)
+    .export$n[[key]] <- (if (is.null(.export$n[[key]])) 0 else .export$n[[key]]) + 1
+    # "-fig" keeps these apart from knitr's own <label>-<n>.pdf in the same chunk.
+    name <- sprintf("%s-%s%d", label, if (kind == "plot") "fig" else "", .export$n[[key]])
+  }
+  f <- file.path(root, cur_section(label), paste0(name, ext))
+  dir.create(dirname(f), recursive = TRUE, showWarnings = FALSE)
+  f
+}
+export_plot <- function(p, width, height, name = NULL) {
+  if (!EXPORT) return(invisible())
+  try(ggsave(export_path(FIG_DIR, "plot", ".pdf", name), p, width = width,
+             height = height, device = get(PDF_DEV)), silent = TRUE)
+}
+# HTML markup (bold totals, line breaks) is stripped from the CSV, and fmt_p()'s
+# non-breaking hyphens turned back into plain minus signs.
+export_table <- function(x, name = NULL) {
+  if (!EXPORT) return(invisible())
+  d <- as.data.frame(x, check.names = FALSE, stringsAsFactors = FALSE)
+  for (j in seq_along(d)) {
+    if (is.list(d[[j]])) d[[j]] <- vapply(d[[j]], paste, "", collapse = ";")
+    if (is.character(d[[j]]) || is.factor(d[[j]]))
+      d[[j]] <- gsub("\u2011", "-", gsub("<[^>]+>", "", as.character(d[[j]])), fixed = TRUE)
+  }
+  rn <- !identical(rownames(d), as.character(seq_len(nrow(d))))
+  try(write.csv(d, export_path(TAB_DIR, "table", ".csv", name), row.names = rn),
+      silent = TRUE)
+}
+# Every table in the report goes through kable(), so this wrapper exports each
+# one as it is printed.
+kable <- function(x, ...) {
+  export_table(x)
+  knitr::kable(x, ...)
+}
 
 # Condition palette from the lab colour sheet (20261021_Colors.pdf): one fixed
 # colour per line, keyed by name so editing condition_levels cannot reshuffle
@@ -152,8 +271,9 @@ int_breaks <- function(lim) {
 # Draw a plot as an image of the given size (inches). scroll = TRUE puts it in
 # a horizontally scrollable box at full width, so long pathway names do not
 # squeeze the panel.
-show_plot <- function(p, width, height, scroll = FALSE) {
-  if (!knitr::is_html_output()) return(print(p))
+show_plot <- function(p, width, height, scroll = FALSE, name = NULL) {
+  if (!knitr::is_html_output()) return(print(p))  # knitr's devices export it
+  export_plot(p, width, height, name)
   f <- tempfile(fileext = ".png")
   ggsave(f, p, width = width, height = height, dpi = 150)
   # Tag built with paste0, not a sprintf template: rmarkdown scans the whole
@@ -1773,3 +1893,331 @@ atrx_rows("IFF")
 ```
 
 
+---
+
+# Patient cohort: ATRX DEL, MNA and nMNA
+
+Genome-wide differential expression between the three tumour groups of the
+patient cohort in the previous section, tested pairwise: **ATRX DEL vs MNA**,
+**ATRX DEL vs nMNA** and **MNA vs nMNA**. Each comparison is run four times: on
+every tumour sample together, then on primary tumours at diagnosis (Tum dx),
+bone marrow at diagnosis (DTC dx) and bone marrow at relapse (DTC rel) alone.
+The tumour-free bone marrow (BMn) is not part of these comparisons. Groups,
+categories and excluded samples are the ones defined in the
+[patient cohort](#patient-cohort) table above. The one difference is that
+categories with too few patients to plot there are kept in the combined
+analysis.
+
+**Data.** The normalised counts from the same reanalysis, *without* the
+library-layout correction (`full_omics_expression_data_normalized_counts.csv`).
+`removeBatchEffect` output is meant for plotting, not for testing: it treats the
+corrected values as if no degrees of freedom had been spent on the batch, so
+p-values computed from it are too small
+([limma `removeBatchEffect` help page](https://rdrr.io/bioc/limma/man/removebatcheffect.html)).
+The library layout (single-end unstranded, single-end stranded, paired-end, from
+Celine's `covariates_table.txt`) is put in the model instead.
+
+**Model.** [limma](https://doi.org/10.1093/nar/gkv007) on log2(normalised
+counts + 1). It uses the "limma-trend" approach of
+[Law et al. 2014](https://doi.org/10.1186/gb-2014-15-2-r29) for log-counts:
+an empirical Bayes variance trend on mean expression, with robust hyperparameters.
+The design is `~ 0 + group + layout`, plus the sample category (Tum dx, Tum TRE,
+DTC dx, …) in the combined analysis. A covariate is dropped where it has a
+single level. Where one patient contributes several samples (always in the
+combined analysis), the patient is a blocking factor, with the within-patient
+correlation estimated by `duplicateCorrelation`
+([Smyth et al. 2005](https://doi.org/10.1093/bioinformatics/bti270)). Each
+analysis tests only genes with a value above 1 in at least as many samples as
+its smallest group. Significant genes: BH-adjusted p < `r params$padj` and
+|log2FC| ≥ `r params$lfc`, the thresholds used everywhere in this report.
+
+**Enrichment.** [fgsea](https://doi.org/10.1101/060012) on the genes ranked by
+the limma moderated t. The collections are MSigDB
+[Hallmark](https://doi.org/10.1016/j.cels.2015.12.004) and GO biological process
+(via `msigdbr`), and KEGG. Plots and tables follow the
+[GSEA section](#pathway-enrichment-gsea): significant pathways only (padj <
+`r params$padj`), the top 12 by |NES| on each side. The complete results,
+significant or not, are in the exported tables.
+
+**Direction.** In "A vs B", log2FC > 0 and NES > 0 mean higher in A.
+
+Every comparison is also exported: the volcano and enrichment plots as PDFs under
+`figures/`, and the full limma and fgsea results plus the up/down gene lists as
+CSVs under `tables/`. Both sit in one folder per analysis (`all_combined`,
+`tumour_dx`, `BM_dx`, `BM_relapse`).
+
+```{r patient-de, results = "asis"}
+# ── Comparisons ──────────────────────────────────────────────────────────────
+NB_GROUPS <- c("ATRX DEL", "MNA", "nMNA")
+NB_PAIRS  <- list(c("ATRX DEL", "MNA"), c("ATRX DEL", "nMNA"), c("MNA", "nMNA"))
+# EDIT: the four analyses. categories = NULL takes every tumour category.
+NB_SETS <- list(
+  all_combined = list(title = "All tumour samples",           categories = NULL),
+  tumour_dx    = list(title = "Primary tumour, diagnosis",    categories = "Tum dx"),
+  BM_dx        = list(title = "Bone marrow (DTC), diagnosis", categories = "DTC dx"),
+  BM_relapse   = list(title = "Bone marrow (DTC), relapse",   categories = "DTC rel"))
+NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samples
+
+nbde <- NULL
+pkgs <- c("limma", "fgsea", "msigdbr")
+pkgs_ok <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
+counts10 <- read_param(params$nb_counts, stringsAsFactors = FALSE)
+meta10   <- read_param(params$nb_metadata, colClasses = "character")
+if (!all(pkgs_ok)) {
+  cat("\n> **Not available.** R package(s)", paste(pkgs[!pkgs_ok], collapse = ", "),
+      "missing; see `workflow/envs/report.yaml`.\n\n")
+} else if (is.null(counts10) || is.null(meta10)) {
+  cat("\n> **Not available.** `params$nb_counts` or `params$nb_metadata` was not",
+      "found; this section is skipped.\n\n")
+} else {
+  # ── Samples: the previous section's selection, minus BMn ───────────────────
+  samples10 <- setdiff(colnames(counts10), c("GeneID", "gene_name"))
+  s10 <- nb_select(meta10, samples10)
+  s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
+
+  cov10 <- if (nzchar(params$nb_covariates) && file.exists(params$nb_covariates))
+    read.delim(params$nb_covariates, check.names = FALSE, colClasses = "character")
+  if (is.null(cov10) || !"library_layout" %in% names(cov10)) {
+    cat("\n> **No library layout.** `params$nb_covariates` was not found or has no",
+        "`library_layout` column: the models below have **no layout term**, so",
+        "layout differences between groups are not accounted for.\n\n")
+    s10$layout <- "all"
+  } else {
+    # write.table(row.names = TRUE) leaves the IDs as row names.
+    ids <- if ("omics_id" %in% names(cov10)) cov10$omics_id else rownames(cov10)
+    s10$layout <- cov10$library_layout[match(s10$omics_id, ids)]
+    if (any(is.na(s10$layout))) {
+      cat("\nNo library layout in `covariates_table.txt`, left out:",
+          paste(sort(s10$omics_id[is.na(s10$layout)]), collapse = ", "), "\n\n")
+      s10 <- s10[!is.na(s10$layout), ]
+    }
+  }
+
+  # ── Expression: log2, one row per gene symbol ──────────────────────────────
+  raw <- as.matrix(counts10[, s10$omics_id, drop = FALSE])
+  storage.mode(raw) <- "double"
+  # The file is expected on the linear scale; a log-scale one (negative values
+  # or nothing above 50) is used as it is.
+  is_log <- any(raw < 0, na.rm = TRUE) || max(raw, na.rm = TRUE) < 50
+  lx <- if (is_log) raw else log2(raw + 1)
+  cat(sprintf("\n%s, %s genes; values read as %s.\n\n",
+              basename(params$nb_counts), format(nrow(lx), big.mark = ","),
+              if (is_log) "already log2 (used as they are)" else "linear (log2(x + 1) taken)"))
+  sym <- ifelse(is.na(counts10$gene_name) | !nzchar(counts10$gene_name),
+                counts10$GeneID, counts10$gene_name)
+  # Symbols on several Ensembl IDs: keep the most expressed, so each gene is
+  # ranked once in GSEA.
+  o <- order(-rowMeans(lx))
+  o <- o[!duplicated(sym[o])]
+  ens10 <- setNames(counts10$GeneID[o], sym[o])
+  lx <- lx[o, , drop = FALSE]
+  rownames(lx) <- sym[o]
+
+  # ── Gene sets ──────────────────────────────────────────────────────────────
+  msig <- function(category, subcategory = NULL) {
+    m <- if (is.null(subcategory)) msigdbr::msigdbr(species = "Homo sapiens", category = category)
+         else msigdbr::msigdbr(species = "Homo sapiens", category = category,
+                               subcategory = subcategory)
+    split(m$gene_symbol, m$gs_name)
+  }
+  # The pipeline's current-KEGG GMT if this run built it (Run.gsea with
+  # KEGG_CURRENT), else MSigDB's frozen ~2011 KEGG.
+  kegg_gmt <- file.path(OUT, "resources", "generated_gmts", "kegg_current.gmt")
+  NB_COLLECTIONS <- list(
+    Hallmark = msig("H"),
+    KEGG = if (file.exists(kegg_gmt)) fgsea::gmtPathways(kegg_gmt) else msig("C2", "CP:KEGG"),
+    `GO:BP` = msig("C5", "GO:BP"))
+  cat(sprintf("\nKEGG gene sets: %s.\n\n", if (file.exists(kegg_gmt))
+    "current KEGG (`resources/generated_gmts/kegg_current.gmt`)" else
+    "MSigDB C2:CP:KEGG (the pipeline's current-KEGG GMT was not found)"))
+
+  # ── One limma fit per analysis, the three pairs as contrasts ───────────────
+  nb_fit <- function(d) {
+    grp <- factor(d$status, NB_GROUPS)
+    n_grp <- table(grp)
+    X <- model.matrix(~ 0 + grp)
+    colnames(X) <- make.names(levels(grp))
+    terms <- "~ 0 + group"
+    for (v in c("category", "layout")) {
+      f <- factor(d[[v]])
+      if (nlevels(f) > 1) {
+        X <- cbind(X, model.matrix(~ f)[, -1, drop = FALSE])
+        terms <- paste(terms, "+", v)
+      }
+    }
+    X <- X[, colSums(X != 0) > 0, drop = FALSE]  # groups absent here
+    ne <- limma::nonEstimable(X)
+    if (length(ne)) X <- X[, setdiff(colnames(X), ne), drop = FALSE]
+    n_min <- max(2, min(n_grp[n_grp > 0]))
+    E <- lx[, d$omics_id, drop = FALSE]
+    E <- E[rowSums(E > NB_EXPR_MIN) >= n_min, , drop = FALSE]
+    corr <- NA
+    if (anyDuplicated(d$patient)) {
+      corr <- limma::duplicateCorrelation(E, X, block = d$patient)$consensus.correlation
+      fit <- limma::lmFit(E, X, block = d$patient, correlation = corr)
+    } else {
+      fit <- limma::lmFit(E, X)
+    }
+    res <- list()
+    for (pr in NB_PAIRS) {
+      a <- make.names(pr[1]); b <- make.names(pr[2])
+      if (any(n_grp[pr] < 2) || !all(c(a, b) %in% colnames(X))) next
+      cm <- matrix(0, ncol(X), 1, dimnames = list(colnames(X), NULL))
+      cm[a, 1] <- 1; cm[b, 1] <- -1
+      f2 <- limma::eBayes(limma::contrasts.fit(fit, cm), trend = TRUE, robust = TRUE)
+      tt <- limma::topTable(f2, coef = 1, number = Inf, sort.by = "none")
+      de <- data.frame(gene_id = rownames(tt), ensembl_id = unname(ens10[rownames(tt)]),
+                       AveExpr = tt$AveExpr, log2FoldChange = tt$logFC, stat = tt$t,
+                       pvalue = tt$P.Value, padj = tt$adj.P.Val)
+      st <- sort(setNames(de$stat, de$gene_id), decreasing = TRUE)
+      gs <- lapply(NB_COLLECTIONS, function(sets) {
+        set.seed(1)
+        # capture.output: fgsea's progress bar would print into this asis chunk.
+        utils::capture.output(g <- suppressWarnings(fgsea::fgsea(
+          sets, st, minSize = params$gsea_min_size, maxSize = params$gsea_max_size,
+          nproc = 1)))
+        g <- as.data.frame(g[order(g$padj), ])
+        g$leadingEdge <- vapply(g$leadingEdge, paste, "", collapse = ";")
+        g
+      })
+      res[[paste(pr, collapse = " vs ")]] <- list(num = pr[1], den = pr[2], de = de, gsea = gs)
+    }
+    list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res,
+         layouts = table(factor(d$status, NB_GROUPS), d$layout))
+  }
+
+  nbde <- lapply(NB_SETS, function(set) {
+    d <- if (is.null(set$categories)) s10 else s10[s10$category %in% set$categories, ]
+    c(set, list(n_patients = tapply(d$patient, factor(d$status, NB_GROUPS),
+                                    function(p) length(unique(p)))),
+      if (nrow(d)) nb_fit(d))
+  })
+
+  # ── Samples per analysis ───────────────────────────────────────────────────
+  tab <- t(vapply(nbde, function(x) {
+    np <- x$n_patients; np[is.na(np)] <- 0
+    ns <- if (is.null(x$n)) setNames(rep(0, 3), NB_GROUPS) else x$n
+    sprintf("%d (%d)", as.integer(ns[NB_GROUPS]), as.integer(np[NB_GROUPS]))
+  }, character(3)))
+  colnames(tab) <- NB_GROUPS
+  rownames(tab) <- vapply(nbde, `[[`, "", "title")
+  cat("\n\n")
+  print(kable(tab, align = "c", caption = paste(
+    "Samples (patients) per analysis. A comparison needs at least 2 samples per group.")))
+  cat("\n\n")
+}
+
+# ── Drawing one analysis ─────────────────────────────────────────────────────
+# Significant genes in two scrollable lists side by side, ranked like
+# top_genes(): -log10(padj) x |log2FC|.
+nb_gene_lists <- function(r, num, den, base) {
+  sig <- r %>% filter(!is.na(padj), padj < params$padj,
+                      abs(log2FoldChange) >= params$lfc) %>%
+    mutate(score = -log10(padj) * abs(log2FoldChange)) %>% arrange(desc(score))
+  side <- function(d, title, name) {
+    cat('<div style="flex: 1 1 340px; min-width: 0;">\n\n')
+    cat(sprintf("**%s** (%s genes)\n\n", title, format(nrow(d), big.mark = ",")))
+    if (nrow(d)) {
+      export_as(table = name)
+      scroll_table(transmute(d, gene = gene_id, log2FC = round(log2FoldChange, 2),
+                             padj = fmt_p(padj), AveExpr = round(AveExpr, 1)),
+                   max_height = 320)
+    } else cat("None.\n\n")
+    cat("</div>\n\n")
+  }
+  cat('<div style="display: flex; flex-wrap: wrap; column-gap: 1.5em;">\n\n')
+  side(filter(sig, log2FoldChange > 0), paste("Higher in", num),
+       paste0(base, "_higher_in_", make.names(num)))
+  side(filter(sig, log2FoldChange < 0), paste("Higher in", den),
+       paste0(base, "_higher_in_", make.names(den)))
+  cat("</div>\n\n")
+}
+
+nb_show <- function(key) {
+  x <- nbde[[key]]
+  if (is.null(x)) return(invisible())
+  if (!length(x$res)) {
+    cat("\n> No comparison possible: fewer than 2 samples in every pair of groups.\n\n")
+    return(invisible())
+  }
+  cat(sprintf("\nModel `%s`, %s genes tested%s.\n\n", x$terms,
+              format(x$n_genes, big.mark = ","),
+              if (is.na(x$corr)) "" else sprintf(
+                "; patients blocked, within-patient correlation %.2f", x$corr)))
+  lay <- unclass(x$layouts)
+  if (ncol(lay) > 1) {
+    print(kable(as.data.frame.matrix(x$layouts), caption = "Samples per library layout"))
+    cat("\n\n")
+  }
+  for (pr in names(x$res)) {
+    r <- x$res[[pr]]
+    base <- file.path(key, gsub(" ", "_", pr))
+    cat("\n\n###", pr, "\n\n")
+    export_table(r$de, name = paste0(base, "_limma_all_genes"))
+    show_plot(volcano(r$de, paste0(x$title, ": ", pr), num = r$num, den = r$den),
+              width = 8.4, height = 6.2, name = paste0(base, "_volcano"))
+    nb_gene_lists(r$de, r$num, r$den, base)
+    for (coll in names(r$gsea)) {
+      g <- r$gsea[[coll]]
+      slug <- gsub("[^A-Za-z]", "", coll)
+      export_table(g, name = paste0(base, "_gsea_", slug, "_all"))
+      cat(sprintf("\n\n**%s**\n\n", coll))
+      g <- mutate(g, numerator = r$num, denominator = r$den,
+                  pathway = sub("^GOBP_", "", pathway))
+      export_as(plot = paste0(base, "_gsea_", slug), table = paste0(base, "_gsea_", slug))
+      gsea_dot(g, paste0(coll, ": ", x$title, ", ", pr))
+      export_as()  # gsea_dot draws nothing when no pathway is significant
+    }
+  }
+}
+```
+
+## All tumour samples
+
+Every primary tumour and bone-marrow sample, whatever its timepoint, with the
+category as a covariate and patients blocked.
+
+```{r patient-all, results = "asis"}
+nb_show("all_combined")
+```
+
+## Primary tumour at diagnosis
+
+```{r patient-tum-dx, results = "asis"}
+nb_show("tumour_dx")
+```
+
+## Bone marrow at diagnosis
+
+Disseminated tumour cells (DTC dx).
+
+```{r patient-bm-dx, results = "asis"}
+nb_show("BM_dx")
+```
+
+## Bone marrow at relapse
+
+Disseminated tumour cells (DTC rel).
+
+```{r patient-bm-rel, results = "asis"}
+nb_show("BM_relapse")
+```
+
+```{r export-figures, include = FALSE}
+# Last chunk: copy the PDFs knitr's second device saved next to each embedded
+# PNG (<label>-<n>.pdf) into figures/<section>/. Chunks drawn through
+# show_plot() have already written theirs.
+if (EXPORT) {
+  fig_rel <- dirname(knitr::fig_path(".pdf"))
+  roots <- unique(c(knitr::opts_knit$get("base.dir"), knitr::opts_knit$get("output.dir"),
+                    getwd()))
+  src <- unique(unlist(lapply(roots, function(r)
+    list.files(file.path(r, fig_rel), pattern = "\\.pdf$", full.names = TRUE))))
+  for (f in src) {
+    label <- sub("-[0-9]+\\.pdf$", "", basename(f))
+    dest <- file.path(FIG_DIR, cur_section(label))
+    dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+    file.copy(f, file.path(dest, basename(f)), overwrite = TRUE)
+  }
+}
+```
