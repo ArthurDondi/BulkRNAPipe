@@ -56,16 +56,9 @@ params:
   # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
   # this repository.
   atrx_interactors: ""
-  # Section "Patient cohort: ATRX DEL, MNA and nMNA". Differential expression
-  # is tested on the normalised counts WITHOUT the library-layout correction,
-  # with the layout in the model instead: removeBatchEffect output is for
-  # plotting, not testing (its residual degrees of freedom are overstated).
-  # nb_covariates is the covariates_table.txt written by the same analysis
-  # (omics_id, histology, material, library_layout). Both stay on the cluster.
-  # Point nb_counts at "" to skip the section; without nb_covariates it runs
-  # with no layout term and says so.
-  nb_counts: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts.csv"
-  nb_covariates: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/covariates_table.txt"
+  # Section "Patient cohort: ATRX DEL, MNA and nMNA" tests differential
+  # expression on nb_expression above, the library-layout-corrected matrix,
+  # transformed exactly as for the boxplots: log2(max(value, 0) + 1).
   # Gene-set size limits for the patient GSEA, as GSEA.min_size / max_size in
   # config_epicode.yaml.
   gsea_min_size: 9
@@ -1908,22 +1901,22 @@ categories and excluded samples are the ones defined in the
 categories with too few patients to plot there are kept in the combined
 analysis.
 
-**Data.** The normalised counts from the same reanalysis, *without* the
-library-layout correction (`full_omics_expression_data_normalized_counts.csv`).
-`removeBatchEffect` output is meant for plotting, not for testing: it treats the
-corrected values as if no degrees of freedom had been spent on the batch, so
-p-values computed from it are too small
+**Data.** The library-layout-corrected matrix used for the boxplots above
+(`full_omics_expression_data_normalized_counts_liblayout_corrected.csv`), as
+log2(value + 1), with negative values set to 0 first. Because the layout effect
+was already removed, the model has no layout term. One caveat: limma's
+documentation notes that `removeBatchEffect` output is meant for plotting
+rather than testing. The fit does not know that degrees of freedom were spent
+on the layout, so p-values are somewhat smaller than they should be. Read
+borderline genes with that in mind
 ([limma `removeBatchEffect` help page](https://rdrr.io/bioc/limma/man/removebatcheffect.html)).
-The library layout (single-end unstranded, single-end stranded, paired-end, from
-Celine's `covariates_table.txt`) is put in the model instead.
 
 **Model.** [limma](https://doi.org/10.1093/nar/gkv007) on log2(normalised
 counts + 1). It uses the "limma-trend" approach of
 [Law et al. 2014](https://doi.org/10.1186/gb-2014-15-2-r29) for log-counts:
 an empirical Bayes variance trend on mean expression, with robust hyperparameters.
-The design is `~ 0 + group + layout`, plus the sample category (Tum dx, Tum TRE,
-DTC dx, …) in the combined analysis. A covariate is dropped where it has a
-single level. Where one patient contributes several samples (always in the
+The design is `~ 0 + group`, plus the sample category (Tum dx, Tum TRE, DTC dx,
+…) in the combined analysis. Where one patient contributes several samples (always in the
 combined analysis), the patient is a blocking factor, with the within-patient
 correlation estimated by `duplicateCorrelation`
 ([Smyth et al. 2005](https://doi.org/10.1093/bioinformatics/bti270)). Each
@@ -1961,13 +1954,13 @@ NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samp
 nbde <- NULL
 pkgs <- c("limma", "fgsea", "msigdbr")
 pkgs_ok <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
-counts10 <- read_param(params$nb_counts, stringsAsFactors = FALSE)
+counts10 <- read_param(params$nb_expression, stringsAsFactors = FALSE)
 meta10   <- read_param(params$nb_metadata, colClasses = "character")
 if (!all(pkgs_ok)) {
   cat("\n> **Not available.** R package(s)", paste(pkgs[!pkgs_ok], collapse = ", "),
       "missing; see `workflow/envs/report.yaml`.\n\n")
 } else if (is.null(counts10) || is.null(meta10)) {
-  cat("\n> **Not available.** `params$nb_counts` or `params$nb_metadata` was not",
+  cat("\n> **Not available.** `params$nb_expression` or `params$nb_metadata` was not",
       "found; this section is skipped.\n\n")
 } else {
   # ── Samples: the previous section's selection, minus BMn ───────────────────
@@ -1975,34 +1968,15 @@ if (!all(pkgs_ok)) {
   s10 <- nb_select(meta10, samples10)
   s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
 
-  cov10 <- if (nzchar(params$nb_covariates) && file.exists(params$nb_covariates))
-    read.delim(params$nb_covariates, check.names = FALSE, colClasses = "character")
-  if (is.null(cov10) || !"library_layout" %in% names(cov10)) {
-    cat("\n> **No library layout.** `params$nb_covariates` was not found or has no",
-        "`library_layout` column: the models below have **no layout term**, so",
-        "layout differences between groups are not accounted for.\n\n")
-    s10$layout <- "all"
-  } else {
-    # write.table(row.names = TRUE) leaves the IDs as row names.
-    ids <- if ("omics_id" %in% names(cov10)) cov10$omics_id else rownames(cov10)
-    s10$layout <- cov10$library_layout[match(s10$omics_id, ids)]
-    if (any(is.na(s10$layout))) {
-      cat("\nNo library layout in `covariates_table.txt`, left out:",
-          paste(sort(s10$omics_id[is.na(s10$layout)]), collapse = ", "), "\n\n")
-      s10 <- s10[!is.na(s10$layout), ]
-    }
-  }
 
   # ── Expression: log2, one row per gene symbol ──────────────────────────────
   raw <- as.matrix(counts10[, s10$omics_id, drop = FALSE])
   storage.mode(raw) <- "double"
-  # The file is expected on the linear scale; a log-scale one (negative values
-  # or nothing above 50) is used as it is.
-  is_log <- any(raw < 0, na.rm = TRUE) || max(raw, na.rm = TRUE) < 50
-  lx <- if (is_log) raw else log2(raw + 1)
-  cat(sprintf("\n%s, %s genes; values read as %s.\n\n",
-              basename(params$nb_counts), format(nrow(lx), big.mark = ","),
-              if (is_log) "already log2 (used as they are)" else "linear (log2(x + 1) taken)"))
+  # Same transform as the boxplots in the previous section.
+  cat(sprintf("\n%s: %s genes, %d samples; %s negative values set to 0 before log2(value + 1).\n\n",
+              basename(params$nb_expression), format(nrow(raw), big.mark = ","), ncol(raw),
+              format(sum(raw < 0, na.rm = TRUE), big.mark = ",")))
+  lx <- log2(pmax(raw, 0) + 1)
   sym <- ifelse(is.na(counts10$gene_name) | !nzchar(counts10$gene_name),
                 counts10$GeneID, counts10$gene_name)
   # Symbols on several Ensembl IDs: keep the most expressed, so each gene is
@@ -2038,7 +2012,7 @@ if (!all(pkgs_ok)) {
     X <- model.matrix(~ 0 + grp)
     colnames(X) <- make.names(levels(grp))
     terms <- "~ 0 + group"
-    for (v in c("category", "layout")) {
+    for (v in "category") {
       f <- factor(d[[v]])
       if (nlevels(f) > 1) {
         X <- cbind(X, model.matrix(~ f)[, -1, drop = FALSE])
@@ -2082,8 +2056,7 @@ if (!all(pkgs_ok)) {
       })
       res[[paste(pr, collapse = " vs ")]] <- list(num = pr[1], den = pr[2], de = de, gsea = gs)
     }
-    list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res,
-         layouts = table(factor(d$status, NB_GROUPS), d$layout))
+    list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res)
   }
 
   nbde <- lapply(NB_SETS, function(set) {
@@ -2144,11 +2117,6 @@ nb_show <- function(key) {
               format(x$n_genes, big.mark = ","),
               if (is.na(x$corr)) "" else sprintf(
                 "; patients blocked, within-patient correlation %.2f", x$corr)))
-  lay <- unclass(x$layouts)
-  if (ncol(lay) > 1) {
-    print(kable(as.data.frame.matrix(x$layouts), caption = "Samples per library layout"))
-    cat("\n\n")
-  }
   for (pr in names(x$res)) {
     r <- x$res[[pr]]
     base <- file.path(key, gsub(" ", "_", pr))

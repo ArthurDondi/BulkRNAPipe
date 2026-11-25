@@ -34,5 +34,3 @@ Thumbs.db
 analysis/**/*.xlsx
 # Patient metadata for the report's ATRX-interactor section (cluster only)
 metadata_table.csv
-# Patient sample covariates for the report's patient-cohort section (cluster only)
-covariates_table.txt
