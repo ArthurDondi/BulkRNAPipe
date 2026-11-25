@@ -2127,9 +2127,9 @@ nb_gene_lists <- function(r, num, den, base) {
   }
   cat('<div style="display: flex; flex-wrap: wrap; column-gap: 1.5em;">\n\n')
   side(filter(sig, log2FoldChange > 0), paste("Higher in", num),
-       paste0(base, "_higher_in_", make.names(num)))
+       paste0(base, "_higher_in_", gsub(" ", "_", num)))
   side(filter(sig, log2FoldChange < 0), paste("Higher in", den),
-       paste0(base, "_higher_in_", make.names(den)))
+       paste0(base, "_higher_in_", gsub(" ", "_", den)))
   cat("</div>\n\n")
 }
 
@@ -2208,11 +2208,13 @@ nb_show("BM_relapse")
 # PNG (<label>-<n>.pdf) into figures/<section>/. Chunks drawn through
 # show_plot() have already written theirs.
 if (EXPORT) {
-  fig_rel <- dirname(knitr::fig_path(".pdf"))
-  roots <- unique(c(knitr::opts_knit$get("base.dir"), knitr::opts_knit$get("output.dir"),
-                    getwd()))
-  src <- unique(unlist(lapply(roots, function(r)
-    list.files(file.path(r, fig_rel), pattern = "\\.pdf$", full.names = TRUE))))
+  # rmarkdown hands knitr an absolute fig.path; a relative one is resolved
+  # against knitr's base or output directory.
+  fig_dir <- dirname(knitr::fig_path(".pdf"))
+  if (!grepl("^(/|[A-Za-z]:)", fig_dir))
+    fig_dir <- file.path(c(knitr::opts_knit$get("base.dir"),
+                           knitr::opts_knit$get("output.dir"), getwd()), fig_dir)
+  src <- unique(list.files(unique(fig_dir), pattern = "\\.pdf$", full.names = TRUE))
   for (f in src) {
     label <- sub("-[0-9]+\\.pdf$", "", basename(f))
     dest <- file.path(FIG_DIR, cur_section(label))
