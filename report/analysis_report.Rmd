@@ -2391,9 +2391,11 @@ nb_anova_show <- function(a, coll, title, tum, base) {
   if (!nrow(sig)) return(invisible())
   sig$pathway <- sub("^(HALLMARK|GOBP)_", "", sig$pathway)
   means <- grep("^mean ", names(sig), value = TRUE)
-  # Rows grouped by the tumour group with the highest mean, then by F.
-  top <- tum[max.col(as.matrix(sig[paste("mean", tum)]), ties.method = "first")]
-  sig <- sig[order(match(top, tum), -sig$F), ]
+  # Rows ranked by the ATRXdel - MYCNamp difference (highest in ATRXdel on
+  # top), or by the first pair's difference when one of the two is absent.
+  rank_col <- if ("diff ATRXdel - MYCNamp" %in% names(sig)) "diff ATRXdel - MYCNamp" else
+    grep("^diff ", names(sig), value = TRUE)[1]
+  sig <- sig[order(-sig[[rank_col]]), ]
   long <- sig %>% select(pathway, all_of(means)) %>%
     pivot_longer(-pathway, names_to = "group", values_to = "score") %>%
     mutate(group = factor(sub("^mean ", "", group), NB_GROUPS),
@@ -2404,8 +2406,9 @@ nb_anova_show <- function(a, coll, title, tum, base) {
     scale_fill_gradient2(low = "#0d366b", mid = "white", high = "#B72656",
                          midpoint = 0, limits = c(-lim, lim), name = "mean GSVA\nscore") +
     labs(title = paste0(coll, ": ", title, ", pathways across the tumour groups"),
-         subtitle = sprintf("F-test padj < %s, top %d by p",
-                            params$padj, nrow(sig)), x = NULL, y = NULL) +
+         subtitle = sprintf("F-test padj < %s, top %d by p; rows ranked by %s",
+                            params$padj, nrow(sig), sub("^diff ", "", rank_col)),
+         x = NULL, y = NULL) +
     theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 30, hjust = 1),
           axis.text.y = element_text(size = 8))
   show_enrich(p, sig$pathway, nrow(sig) + 2, panel_width = 0.7 * nlevels(droplevels(long$group)),
