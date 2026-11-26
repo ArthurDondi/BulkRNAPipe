@@ -835,8 +835,11 @@ reversal and interaction contrasts) → ATRX interactors → patient cohort.
 
 The last section compares the patient groups ATRXdel, MYCNamp and
 ATRXwtMYCNwt pairwise (limma-trend on the uncorrected normalised counts with
-library layout as a covariate, fgsea on Hallmark, KEGG and GO:BP). Groups
-come from the `classification` column of `metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
+library layout as a covariate, fgsea on Hallmark, KEGG and GO:BP), and each
+against the control bone marrow. Each analysis opens with a pathway-level
+F-test across the three tumour groups (GSVA scores, limma moderated F) and a
+heatmap of the group means. Groups come from the `classification` column of
+`metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
 diagnosis, bone marrow at diagnosis and bone marrow at relapse. Its inputs are
 the `nb_*` params, which point at files that stay on the cluster.
 

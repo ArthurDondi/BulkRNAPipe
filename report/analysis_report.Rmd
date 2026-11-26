@@ -288,7 +288,7 @@ show_plot <- function(p, width, height, scroll = FALSE, name = NULL) {
 # least 4 in tall so the legends fit; titles start at the left edge, not over
 # the panel, which long labels push far right. `labels` is kept for callers
 # but no longer used: the measurement covers it.
-show_enrich <- function(p, labels, n_rows, panel_width = 3.5) {
+show_enrich <- function(p, labels, n_rows, panel_width = 3.5, name = NULL) {
   p <- p + theme(plot.title.position = "plot")
   # Text widths need a device: a null PDF, closed straight away, then the
   # device knitr draws on made current again (dev.off() would otherwise pick
@@ -302,7 +302,7 @@ show_enrich <- function(p, labels, n_rows, panel_width = 3.5) {
   grDevices::dev.off(dev)
   if (prev > 1) grDevices::dev.set(prev)
   show_plot(p, width = max(8.4, around + panel_width),
-            height = max(4, 1.8 + 0.26 * n_rows), scroll = TRUE)
+            height = max(4, 1.8 + 0.26 * n_rows), scroll = TRUE, name = name)
 }
 
 # A table in a scrollable box (both directions), under the plot it lists.
@@ -1967,6 +1967,19 @@ the limma moderated t. The collections are MSigDB
 `r params$padj`), the top 12 by |NES| on each side. The complete results,
 significant or not, are in the exported tables.
 
+**Pathways across groups.** Each analysis opens with one test per pathway
+instead of one per pair. Every pathway gets a score per sample from
+[GSVA](https://doi.org/10.1186/1471-2105-14-7) (Gaussian kernel, on the same
+log2 values). limma then fits the design above to the scores, and a moderated
+F-test ([Smyth 2004](https://doi.org/10.2202/1544-6115.1027)) asks whether the
+three tumour groups differ at all. Post-hoc pairwise differences show which
+groups drive it. The control's mean score is shown for reference but is not
+part of the test. Because this tests samples rather than genes, correlation
+between the genes of a set does not inflate it. fgsea's gene-permutation
+p-values below are inflated by that correlation, increasingly so for large sets
+([Wu & Smyth 2012](https://doi.org/10.1093/nar/gks461)). The F-test is
+therefore the better guide to how strongly a pathway separates the groups.
+
 **Direction.** In "A vs B", log2FC > 0 and NES > 0 mean higher in A.
 
 Every comparison is also exported: the volcano and enrichment plots as PDFs under
@@ -1991,7 +2004,7 @@ NB_SETS <- list(
 NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samples
 
 nbde <- NULL
-pkgs <- c("limma", "fgsea", "msigdbr")
+pkgs <- c("limma", "fgsea", "msigdbr", "GSVA")
 pkgs_ok <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
 counts10 <- read_param(params$nb_counts, stringsAsFactors = FALSE)
 meta10   <- read_nb_meta()
@@ -2078,9 +2091,58 @@ if (!all(pkgs_ok)) {
     Hallmark = msig("H"),
     KEGG = if (file.exists(kegg_gmt)) fgsea::gmtPathways(kegg_gmt) else msig("C2", "CP:KEGG"),
     `GO:BP` = msig("C5", "GO:BP"))
+  # msigdbr lists a symbol once per Entrez ID, so some sets repeat a gene.
+  NB_COLLECTIONS <- lapply(NB_COLLECTIONS, function(sets) lapply(sets, unique))
   cat(sprintf("\nKEGG gene sets: %s.\n\n", if (file.exists(kegg_gmt))
     "current KEGG (`resources/generated_gmts/kegg_current.gmt`)" else
     "MSigDB C2:CP:KEGG (the pipeline's current-KEGG GMT was not found)"))
+
+  # ── Pathways across the tumour groups: GSVA scores, moderated F ────────────
+  # One GSVA score per pathway and sample, on this analysis's samples (controls
+  # included, so they can be shown), then the same limma design as the genes.
+  # The F-test asks whether the tumour groups differ at all (contrasts among
+  # them only; the control is not tested). Being a test across samples, it is
+  # not inflated by correlation between the genes of a set, unlike fgsea's
+  # gene-permutation p-values. Scores need no trend: robust eBayes only.
+  nb_pathway_anova <- function(E, sets, X, d, tum) {
+    capture.output(S <- suppressWarnings(suppressMessages(GSVA::gsva(
+      GSVA::gsvaParam(E, sets, minSize = params$gsea_min_size,
+                      maxSize = params$gsea_max_size, kcdf = "Gaussian"),
+      verbose = FALSE, BPPARAM = BiocParallel::SerialParam()))))
+    fit <- if (anyDuplicated(d$patient)) {
+      corr <- limma::duplicateCorrelation(S, X, block = d$patient)$consensus.correlation
+      limma::lmFit(S, X, block = d$patient, correlation = corr)
+    } else limma::lmFit(S, X)
+    contrast <- function(a, b) {
+      v <- setNames(rep(0, ncol(X)), colnames(X))
+      v[make.names(a)] <- 1; v[make.names(b)] <- -1
+      v
+    }
+    # F over the tumour groups: the first against each of the others.
+    # cbind, not sapply: with two groups sapply would return a plain vector.
+    cm_f <- do.call(cbind, lapply(tum[-1], function(b) contrast(tum[1], b)))
+    tt <- limma::topTable(limma::eBayes(limma::contrasts.fit(fit, cm_f), robust = TRUE),
+                          coef = seq_len(ncol(cm_f)), number = Inf, sort.by = "none")
+    out <- data.frame(pathway = rownames(S),
+                      size = vapply(sets[rownames(S)], function(g) sum(g %in% rownames(E)), 0L),
+                      F = if ("F" %in% names(tt)) tt$F else tt$t^2,
+                      pvalue = tt$P.Value, padj = tt$adj.P.Val, check.names = FALSE)
+    # Raw group means of the score, controls included (for display).
+    grp <- factor(d$status, NB_GROUPS)
+    for (g in levels(droplevels(grp)))
+      out[[paste("mean", g)]] <- rowMeans(S[, grp == g, drop = FALSE])
+    # Post hoc: every pair of tumour groups, BH within each pair.
+    pairs <- utils::combn(tum, 2, simplify = FALSE)
+    cm_p <- do.call(cbind, lapply(pairs, function(pr) contrast(pr[1], pr[2])))
+    f_p <- limma::eBayes(limma::contrasts.fit(fit, cm_p), robust = TRUE)
+    for (k in seq_along(pairs)) {
+      tk <- limma::topTable(f_p, coef = k, number = Inf, sort.by = "none")
+      lab <- paste(pairs[[k]], collapse = " - ")
+      out[[paste("diff", lab)]] <- tk$logFC
+      out[[paste("padj", lab)]] <- tk$adj.P.Val
+    }
+    out[order(out$pvalue), ]
+  }
 
   # ── One limma fit per analysis, the three pairs as contrasts ───────────────
   nb_fit <- function(d) {
@@ -2147,7 +2209,11 @@ if (!all(pkgs_ok)) {
       })
       res[[paste(pr, collapse = " vs ")]] <- list(num = pr[1], den = pr[2], de = de, gsea = gs)
     }
+    tum <- NB_TUMOUR[n_grp[NB_TUMOUR] >= 2 & make.names(NB_TUMOUR) %in% colnames(X)]
+    anova <- if (length(tum) >= 2)
+      lapply(NB_COLLECTIONS, function(sets) nb_pathway_anova(E, sets, X, d, tum))
     list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res,
+         anova = anova, anova_groups = tum,
          layouts = table(factor(d$status, NB_GROUPS), d$layout))
   }
 
@@ -2200,6 +2266,53 @@ nb_gene_lists <- function(r, num, den, base) {
   cat("</div>\n\n")
 }
 
+# Pathway F-test: heatmap of the group means of the significant pathways (top
+# NB_ANOVA_TOP by p), the control drawn apart as an untested reference, then
+# the same pathways as a table with the post-hoc pairwise differences.
+NB_ANOVA_TOP <- 30
+nb_anova_show <- function(a, coll, title, tum, base) {
+  slug <- gsub("[^A-Za-z]", "", coll)
+  export_table(a, name = paste0(base, "pathway_Ftest_", slug, "_all"))
+  cat(sprintf("\n\n**%s**: %d of %d pathways differ among the tumour groups (padj < %s).\n\n",
+              coll, sum(a$padj < params$padj), nrow(a), params$padj))
+  sig <- head(a[a$padj < params$padj, , drop = FALSE], NB_ANOVA_TOP)
+  if (!nrow(sig)) return(invisible())
+  sig$pathway <- sub("^(HALLMARK|GOBP)_", "", sig$pathway)
+  means <- grep("^mean ", names(sig), value = TRUE)
+  # Rows grouped by the tumour group with the highest mean, then by F.
+  top <- tum[max.col(as.matrix(sig[paste("mean", tum)]), ties.method = "first")]
+  sig <- sig[order(match(top, tum), -sig$F), ]
+  long <- sig %>% select(pathway, all_of(means)) %>%
+    pivot_longer(-pathway, names_to = "group", values_to = "score") %>%
+    mutate(group = factor(sub("^mean ", "", group), NB_GROUPS),
+           panel = factor(ifelse(group == "control", "reference", "tested"),
+                          c("tested", "reference")),
+           pathway = factor(pathway, rev(sig$pathway)))
+  lim <- max(abs(long$score))
+  p <- ggplot(long, aes(group, pathway, fill = score)) +
+    geom_tile(colour = "white", linewidth = 0.4) +
+    facet_grid(. ~ panel, scales = "free_x", space = "free_x") +
+    scale_fill_gradient2(low = "#0d366b", mid = "white", high = "#B72656",
+                         midpoint = 0, limits = c(-lim, lim), name = "mean GSVA\nscore") +
+    labs(title = paste0(coll, ": ", title, ", pathways across the tumour groups"),
+         subtitle = sprintf("F-test padj < %s, top %d by p; the control is shown, not tested",
+                            params$padj, nrow(sig)), x = NULL, y = NULL) +
+    theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 30, hjust = 1),
+          axis.text.y = element_text(size = 8))
+  show_enrich(p, sig$pathway, nrow(sig) + 2, panel_width = 0.7 * nlevels(droplevels(long$group)),
+              name = paste0(base, "pathway_Ftest_", slug))
+  # The table: F, padj, then each pair's difference with its padj in brackets.
+  tab <- data.frame(pathway = sig$pathway, size = sig$size, F = round(sig$F, 1),
+                    padj = fmt_p(sig$padj), check.names = FALSE)
+  for (m in means) tab[[sub("^mean ", "", m)]] <- round(sig[[m]], 2)
+  for (dcol in grep("^diff ", names(sig), value = TRUE)) {
+    lab <- sub("^diff ", "", dcol)
+    tab[[lab]] <- sprintf("%.2f (%s)", sig[[dcol]], fmt_p(sig[[paste("padj", lab)]]))
+  }
+  export_as(table = paste0(base, "pathway_Ftest_", slug))
+  scroll_table(tab)
+}
+
 nb_show <- function(key) {
   x <- nbde[[key]]
   if (is.null(x)) return(invisible())
@@ -2213,6 +2326,15 @@ nb_show <- function(key) {
                 "; patients blocked, within-patient correlation %.2f", x$corr)))
   print(kable(as.data.frame.matrix(x$layouts), caption = "Samples per library layout"))
   cat("\n\n")
+  if (!is.null(x$anova)) {
+    cat("\n\n### Pathways across the tumour groups\n\n")
+    cat(sprintf(paste0("\nGSVA score per pathway and sample; moderated F-test across %s ",
+                       "(same design as above). Colour: mean score per group. Post-hoc ",
+                       "columns: difference in mean score (padj).\n\n"),
+                paste(x$anova_groups, collapse = ", ")))
+    for (coll in names(x$anova))
+      nb_anova_show(x$anova[[coll]], coll, x$title, x$anova_groups, paste0(key, "/"))
+  }
   for (pr in names(x$res)) {
     r <- x$res[[pr]]
     base <- file.path(key, gsub(" ", "_", pr))

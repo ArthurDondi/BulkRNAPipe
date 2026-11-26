@@ -26,3 +26,5 @@ dependencies:
   - bioconductor-limma=3.62.1
   - bioconductor-fgsea=1.32.0
   - r-msigdbr=7.5.1
+  # Per-sample pathway scores for the patient pathway F-test.
+  - bioconductor-gsva=2.0.0
