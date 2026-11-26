@@ -841,8 +841,8 @@ DTCs pooled, DTCs at diagnosis and DTCs at relapse. The control bone marrow is
 shown in the ATRX-interactor section but not tested. An overview PCA comes
 first; each analysis opens with a pathway-level F-test across the three
 groups (GSVA scores, limma moderated F) and a heatmap of the group means, and
-each comparison with a QC line (group sizes, ATRX as a positive control), a
-raw p-value histogram and a PCA of its two groups. Groups come from the `classification` column of
+each comparison with a QC line (group sizes), a raw p-value histogram and a
+PCA of its two groups. Groups come from the `classification` column of
 `metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
 diagnosis, bone marrow at diagnosis and bone marrow at relapse. Its inputs are
 the `nb_*` params, which point at files that stay on the cluster.

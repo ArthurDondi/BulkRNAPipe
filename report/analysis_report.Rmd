@@ -2013,11 +2013,10 @@ CSVs under `tables/`. Both sit in one folder per analysis (`all_combined`,
 **Checks.** An overview PCA of every tumour sample comes first. Each
 comparison then opens with a QC line and two plots:
 - the number of samples and patients per group;
-- ATRX itself, as a positive control for the ATRXdel comparisons;
 - the histogram of raw p-values ([Robinson 2014](http://varianceexplained.org/statistics/interpreting-pvalue-histogram/)):
   flat means no signal, a spike at 0 means signal, a pile-up near 1 means the
   model fits poorly;
-- a PCA of the two groups' samples alone.
+- a PCA of the two groups' samples alone, on the layout-corrected file.
 
 ```{r patient-de, results = "asis"}
 # ── Comparisons ──────────────────────────────────────────────────────────────
@@ -2040,15 +2039,14 @@ NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samp
 NB_GROUP_COL  <- c(ATRXdel = "#D55E00", MYCNamp = "#0072B2", ATRXwtMYCNwt = "#009E73")
 NB_LAYOUT_COL <- c("#CC79A7", "#E69F00", "#56B4E9", "#999999")
 
-# PCA of samples on the 2,000 most variable expressed genes. layout_removed:
-# the library-layout effect is taken out first with removeBatchEffect, the
-# groups protected in its design. For display only: the tests use the layout
-# as a covariate instead.
-nb_pca <- function(E, d, layout_removed = FALSE, n_top = 2000) {
+# PCA of samples on the 2,000 most variable expressed genes of a log2 matrix:
+# the counts as tested, or the layout-corrected file (for display only; the
+# tests use the layout as a covariate instead). Samples missing from the
+# matrix are left out of the plot.
+nb_pca <- function(E, d, n_top = 2000) {
+  d <- d[d$omics_id %in% colnames(E), , drop = FALSE]
+  E <- E[, d$omics_id, drop = FALSE]
   E <- E[rowSums(E > NB_EXPR_MIN) >= 2, , drop = FALSE]
-  if (layout_removed && length(unique(d$layout)) > 1)
-    E <- limma::removeBatchEffect(E, batch = d$layout,
-                                  design = model.matrix(~ factor(d$status)))
   v <- apply(E, 1, var)
   E <- E[order(-v)[seq_len(min(n_top, nrow(E)))], , drop = FALSE]
   pc <- prcomp(t(E))
@@ -2058,12 +2056,15 @@ nb_pca <- function(E, d, layout_removed = FALSE, n_top = 2000) {
   attr(out, "ve") <- 100 * pc$sdev[1:2]^2 / sum(pc$sdev^2)
   out
 }
+NB_PCA_LEGEND <- c(group = "ATRX/MYCN group", layout = "Library layout",
+                   category = "Sample type")
 nb_pca_panel <- function(pc, colour, title, values = NULL) {
   ve <- attr(pc, "ve")
   p <- ggplot(pc, aes(PC1, PC2, colour = .data[[colour]], shape = tissue)) +
     geom_point(size = 1.8, alpha = 0.85) +
     labs(title = title, x = sprintf("PC1 (%.1f%%)", ve[1]),
-         y = sprintf("PC2 (%.1f%%)", ve[2]), shape = NULL) +
+         y = sprintf("PC2 (%.1f%%)", ve[2]), shape = NULL,
+         colour = NB_PCA_LEGEND[[colour]]) +
     theme(legend.position = "bottom", legend.box = "vertical",
           plot.title = element_text(size = 10, face = "bold"),
           legend.text = element_text(size = 8))
@@ -2169,6 +2170,15 @@ if (!all(pkgs_ok)) {
   ens10 <- setNames(gene_ids[o], sym[o])
   lx <- lx[o, , drop = FALSE]
   rownames(lx) <- sym[o]
+  # The layout-corrected file (previous section), for the PCAs only, with the
+  # same transform as its boxplots.
+  lx_corr <- NULL
+  if (!is.null(nb_expr)) {
+    ids <- intersect(s10$omics_id, colnames(nb_expr))
+    lx_corr <- as.matrix(nb_expr[, ids, drop = FALSE])
+    storage.mode(lx_corr) <- "double"
+    lx_corr <- log2(pmax(lx_corr, 0) + 1)
+  }
 
   # ── Gene sets ──────────────────────────────────────────────────────────────
   msig <- function(category, subcategory = NULL) {
@@ -2307,7 +2317,7 @@ if (!all(pkgs_ok)) {
       sel <- d$status %in% pr
       res[[paste(pr, collapse = " vs ")]] <- list(
         num = pr[1], den = pr[2], de = de, gsea = gs,
-        pca = nb_pca(E[, sel, drop = FALSE], d[sel, ], layout_removed = TRUE))
+        pca = nb_pca(if (!is.null(lx_corr)) lx_corr else E, d[sel, ]))
     }
     tum <- NB_TUMOUR[n_grp[NB_TUMOUR] >= 2 & make.names(NB_TUMOUR) %in% colnames(X)]
     anova <- if (length(tum) >= 2)
@@ -2408,20 +2418,14 @@ nb_anova_show <- function(a, coll, title, tum, base) {
   scroll_table(tab)
 }
 
-# QC for one comparison: group sizes, ATRX as a positive control, the raw
-# p-value histogram, and a PCA of the two groups' samples.
+# QC for one comparison: group sizes, the raw p-value histogram, and a PCA of
+# the two groups' samples.
 nb_qc <- function(r, x, base) {
   g2 <- c(r$num, r$den)
   ns <- as.integer(x$n[g2]); np <- as.integer(x$n_patients[g2])
-  atrx <- r$de[toupper(r$de$gene_id) == "ATRX", , drop = FALSE]
-  cat(sprintf(paste0("\n**QC.** Samples (patients): %s %d (%d), %s %d (%d). ",
-                     "%s genes tested. %s\n\n"),
+  cat(sprintf("\n**QC.** Samples (patients): %s %d (%d), %s %d (%d). %s genes tested.\n\n",
               g2[1], ns[1], np[1], g2[2], ns[2], np[2],
-              format(nrow(r$de), big.mark = ","),
-              if (nrow(atrx)) sprintf("ATRX: log2FC %.2f, p %s, padj %s.",
-                                      atrx$log2FoldChange[1], fmt_p(atrx$pvalue[1]),
-                                      fmt_p(atrx$padj[1])) else
-                "ATRX is not among the tested genes."))
+              format(nrow(r$de), big.mark = ",")))
   h <- ggplot(r$de, aes(pvalue)) +
     geom_histogram(breaks = seq(0, 1, by = 0.02), fill = "#6D8AB6", colour = "white",
                    linewidth = 0.1) +
@@ -2429,7 +2433,8 @@ nb_qc <- function(r, x, base) {
     labs(title = "Raw p-values", subtitle = "dashed: expected if no gene differs",
          x = "p-value", y = "genes") +
     theme(plot.title = element_text(size = 10, face = "bold"))
-  pc <- nb_pca_panel(r$pca, "group", "PCA of the two groups (layout removed)",
+  pc <- nb_pca_panel(r$pca, "group", sprintf("PCA of the two groups (%s)",
+                     if (is.null(lx_corr)) "as tested" else "layout-corrected file"),
                      NB_GROUP_COL)
   show_plot(nb_row(list(h, pc)), width = 9.4, height = 4.6, name = paste0(base, "_qc"))
 }
@@ -2486,23 +2491,32 @@ nb_show <- function(key) {
 ## Sample overview
 
 Every tumour sample of this section (the control excluded), on the 2,000 most
-variable genes. Top row: the log2 values as tested. Bottom row: the
-library-layout effect removed, for display only. Shape: primary tumour or
-bone marrow (DTC).
+variable genes:
+- top row: `full_omics_expression_data_normalized_counts.csv`, the values
+  tested;
+- bottom row: `full_omics_expression_data_normalized_counts_liblayout_corrected.csv`,
+  the layout-corrected file the previous section plots.
+
+Both rows are taken as log2(max(value, 0) + 1). Colour: ATRX/MYCN group,
+library layout, sample type. Shape: primary tumour or bone marrow (DTC).
 
 ```{r patient-pca, results = "asis"}
 if (!is.null(nbde)) {
-  E_all <- lx[, s10$omics_id, drop = FALSE]
-  for (lr in c(FALSE, TRUE)) {
-    pc <- nb_pca(E_all, s10, layout_removed = lr)
-    tag <- if (lr) "layout removed" else "as tested"
+  sources <- list(`normalised counts` = lx, `layout-corrected` = lx_corr)
+  files <- c(`normalised counts` = "as_tested", `layout-corrected` = "layout_corrected")
+  for (src in names(sources)) {
+    if (is.null(sources[[src]])) {
+      cat("\n> No layout-corrected matrix (`params$nb_expression`): second row skipped.\n\n")
+      next
+    }
+    pc <- nb_pca(sources[[src]], s10)
+    lay <- sort(unique(pc$layout))
     show_plot(nb_row(list(
-      nb_pca_panel(pc, "group", paste("Group,", tag), NB_GROUP_COL),
-      nb_pca_panel(pc, "layout", paste("Library layout,", tag),
-                   setNames(NB_LAYOUT_COL[seq_along(unique(pc$layout))], sort(unique(pc$layout)))),
-      nb_pca_panel(pc, "category", paste("Category,", tag)))),
-      width = 13, height = 5, scroll = TRUE,
-      name = paste0("overview_pca_", if (lr) "layout_removed" else "as_tested"))
+      nb_pca_panel(pc, "group", paste0("ATRX/MYCN group (", src, ")"), NB_GROUP_COL),
+      nb_pca_panel(pc, "layout", paste0("Library layout (", src, ")"),
+                   setNames(NB_LAYOUT_COL[seq_along(lay)], lay)),
+      nb_pca_panel(pc, "category", paste0("Sample type (", src, ")")))),
+      width = 13, height = 5, scroll = TRUE, name = paste0("overview_pca_", files[[src]]))
   }
 }
 ```
