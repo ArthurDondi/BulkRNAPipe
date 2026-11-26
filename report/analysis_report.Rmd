@@ -1989,8 +1989,34 @@ if (!all(pkgs_ok)) {
   cat("\n> **Not available.** `params$nb_counts` or `params$nb_metadata` was not",
       "found; this section is skipped.\n\n")
 } else {
+  # ── Gene columns ───────────────────────────────────────────────────────────
+  # The two matrices are not written alike: the gene ID column can be GeneID,
+  # another name, or a blank header (row names written by write.csv). Any
+  # non-numeric column is annotation, not a sample; the ID is GeneID or else
+  # the first such column, the symbol gene_name or else looked up from the
+  # corrected matrix (GeneID -> gene_name), else the ID itself.
+  # Columns picked by position: counts10[[""]] cannot select a blank header.
+  annot_i <- which(!vapply(counts10, is.numeric, logical(1)))
+  annot <- names(counts10)[annot_i]
+  id_i <- if ("GeneID" %in% annot) match("GeneID", names(counts10)) else
+    annot_i[annot != "gene_name"][1]
+  id_col <- names(counts10)[id_i]  # NA when there is no ID column
+  gene_ids <- if (!is.na(id_i)) as.character(counts10[[id_i]]) else rownames(counts10)
+  strip_version <- function(x) sub("\\.[0-9]+$", "", x)
+  gene_sym <- if ("gene_name" %in% annot) as.character(counts10$gene_name) else
+    if (!is.null(nb_expr) && all(c("GeneID", "gene_name") %in% names(nb_expr)))
+      nb_expr$gene_name[match(strip_version(gene_ids), strip_version(nb_expr$GeneID))] else
+    rep(NA_character_, length(gene_ids))
+  cat(sprintf("\nGene columns in `%s`: ID from %s, symbol from %s.\n\n",
+              basename(params$nb_counts),
+              if (is.na(id_col)) "the row names" else
+                if (nzchar(id_col)) sprintf("`%s`", id_col) else "the unnamed first column",
+              if ("gene_name" %in% annot) "`gene_name`" else
+                if (!all(is.na(gene_sym))) "the corrected matrix (matched on gene ID)" else
+                "nowhere (gene IDs used instead)"))
+
   # ── Samples: the previous section's selection, minus the controls ──────────
-  samples10 <- setdiff(colnames(counts10), c("GeneID", "gene_name"))
+  samples10 <- if (length(annot_i)) colnames(counts10)[-annot_i] else colnames(counts10)
   s10 <- nb_select(meta10, samples10)
   s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
   if (any(!nzchar(s10$layout))) {
@@ -2016,13 +2042,12 @@ if (!all(pkgs_ok)) {
     cat("\n> **Check the input scale:** no value above 30, so this file may",
         "already be on a log scale, in which case log2(value + 1) is wrong.\n\n")
   lx <- log2(pmax(raw, 0) + 1)
-  sym <- ifelse(is.na(counts10$gene_name) | !nzchar(counts10$gene_name),
-                counts10$GeneID, counts10$gene_name)
+  sym <- ifelse(is.na(gene_sym) | !nzchar(gene_sym), gene_ids, gene_sym)
   # Symbols on several Ensembl IDs: keep the most expressed, so each gene is
   # ranked once in GSEA.
   o <- order(-rowMeans(lx))
   o <- o[!duplicated(sym[o])]
-  ens10 <- setNames(counts10$GeneID[o], sym[o])
+  ens10 <- setNames(gene_ids[o], sym[o])
   lx <- lx[o, , drop = FALSE]
   rownames(lx) <- sym[o]
 
