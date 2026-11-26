@@ -35,7 +35,10 @@ rule Report:
         html_name  = "analysis_report.html",
     threads: 1
     resources:
-        mem_mb        = 8000,
+        # 64 GB: 8 GB ran out in the patient section (MSigDB through msigdbr,
+        # GSVA on GO:BP per analysis, 24 comparisons kept in memory) on the
+        # ~250-sample cohort.
+        mem_mb        = 64000,
         # The patient section fits 4 limma models and runs 72 fgsea analyses
         # (24 comparisons x 3 collections; GO:BP is the slow one). 120 min is
         # also the tinyq limit (profile/slurm/config.yaml).
