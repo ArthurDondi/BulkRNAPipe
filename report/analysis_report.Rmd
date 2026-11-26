@@ -272,7 +272,10 @@ int_breaks <- function(lim) {
 # a horizontally scrollable box at full width, so long pathway names do not
 # squeeze the panel.
 show_plot <- function(p, width, height, scroll = FALSE, name = NULL) {
-  if (!knitr::is_html_output()) return(print(p))  # knitr's devices export it
+  if (!knitr::is_html_output()) {  # knitr's devices export it
+    if (inherits(p, "gtable")) { grid::grid.newpage(); grid::grid.draw(p); return(invisible()) }
+    return(print(p))
+  }
   export_plot(p, width, height, name)
   f <- tempfile(fileext = ".png")
   ggsave(f, p, width = width, height = height, dpi = 150)
@@ -1940,18 +1943,16 @@ atrx_rows("IFF")
 
 Genome-wide differential expression between the three tumour groups of the
 patient cohort in the previous section, tested pairwise: **ATRXdel vs MYCNamp**,
-**ATRXdel vs ATRXwtMYCNwt** and **MYCNamp vs ATRXwtMYCNwt**, then each of the
-three against the tumour-free **control** bone marrow. Each comparison is run
-four times: on every tumour sample together, then on primary tumours at
-diagnosis (Tum dx), bone marrow at diagnosis (DTC dx) and bone marrow at relapse
-(DTC rel) alone. Every control sample is part of every analysis.
+**ATRXdel vs ATRXwtMYCNwt** and **MYCNamp vs ATRXwtMYCNwt**. Each comparison is
+run five times:
+- every tumour sample together;
+- primary tumours at diagnosis (Tum dx);
+- every bone-marrow sample pooled (DTC, all timepoints);
+- bone marrow at diagnosis (DTC dx);
+- bone marrow at relapse (DTC rel).
 
-The control comparisons are cleanest in the two bone-marrow analyses, where
-disseminated tumour cells and controls are the same tissue. Against primary
-tumours (Tum dx, and the primary tumours within the combined analysis), most
-of the difference is tumour tissue versus bone marrow rather than the tumour
-group: read those for what is specific to one group, by comparing the three
-"vs control" results with each other. Groups,
+The control bone marrow is left out: it is not the same cells, so it is not
+compared against. Groups,
 categories and excluded samples are the ones defined in the
 [patient cohort](#patient-cohort) table above. The one difference is that
 categories with too few patients to plot there are kept in the combined
@@ -1971,12 +1972,11 @@ counts + 1). It uses the "limma-trend" approach of
 [Law et al. 2014](https://doi.org/10.1186/gb-2014-15-2-r29) for log-counts:
 an empirical Bayes variance trend on mean expression, with robust hyperparameters.
 The design is `~ 0 + group + layout`, plus the sample category (Tum dx, Tum TRE,
-DTC dx, …) in the combined analysis. A covariate is dropped in an analysis
+DTC dx, …) in the two pooled analyses. A covariate is dropped in an analysis
 where it has a single level. In the combined analysis, category is coded so
 that each tumour group's estimate is its average over the tumour categories
-(sum-to-zero coding among tumour samples). "Group vs control" there compares
-that average with the controls, not one arbitrary category. Where one patient contributes several samples (always in the
-combined analysis), the patient is a blocking factor, with the within-patient
+(sum-to-zero coding). Where one patient contributes several samples (as in the
+pooled analyses), the patient is a blocking factor, with the within-patient
 correlation estimated by `duplicateCorrelation`
 ([Smyth et al. 2005](https://doi.org/10.1093/bioinformatics/bti270)). Each
 analysis tests only genes with a value above 1 in at least as many samples as
@@ -1997,8 +1997,7 @@ instead of one per pair. Every pathway gets a score per sample from
 log2 values). limma then fits the design above to the scores, and a moderated
 F-test ([Smyth 2004](https://doi.org/10.2202/1544-6115.1027)) asks whether the
 three tumour groups differ at all. Post-hoc pairwise differences show which
-groups drive it. The control's mean score is shown for reference but is not
-part of the test. Because this tests samples rather than genes, correlation
+groups drive it. Because this tests samples rather than genes, correlation
 between the genes of a set does not inflate it. fgsea's gene-permutation
 p-values below are inflated by that correlation, increasingly so for large sets
 ([Wu & Smyth 2012](https://doi.org/10.1093/nar/gks461)). The F-test is
@@ -2009,23 +2008,70 @@ therefore the better guide to how strongly a pathway separates the groups.
 Every comparison is also exported: the volcano and enrichment plots as PDFs under
 `figures/`, and the full limma and fgsea results plus the up/down gene lists as
 CSVs under `tables/`. Both sit in one folder per analysis (`all_combined`,
-`tumour_dx`, `BM_dx`, `BM_relapse`).
+`tumour_dx`, `BM_pooled`, `BM_dx`, `BM_relapse`).
+
+**Checks.** An overview PCA of every tumour sample comes first. Each
+comparison then opens with a QC line and two plots:
+- the number of samples and patients per group;
+- ATRX itself, as a positive control for the ATRXdel comparisons;
+- the histogram of raw p-values ([Robinson 2014](http://varianceexplained.org/statistics/interpreting-pvalue-histogram/)):
+  flat means no signal, a spike at 0 means signal, a pile-up near 1 means the
+  model fits poorly;
+- a PCA of the two groups' samples alone.
 
 ```{r patient-de, results = "asis"}
 # ── Comparisons ──────────────────────────────────────────────────────────────
+# The control bone marrow is not the same cells: it is shown in the previous
+# section but not tested here.
 NB_TUMOUR <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt")
-NB_GROUPS <- c(NB_TUMOUR, "control")
-# The three tumour groups against each other, then each against the control.
-NB_PAIRS  <- c(list(c("ATRXdel", "MYCNamp"), c("ATRXdel", "ATRXwtMYCNwt"),
-                    c("MYCNamp", "ATRXwtMYCNwt")),
-               lapply(NB_TUMOUR, function(g) c(g, "control")))
+NB_GROUPS <- NB_TUMOUR
+NB_PAIRS  <- list(c("ATRXdel", "MYCNamp"), c("ATRXdel", "ATRXwtMYCNwt"),
+                  c("MYCNamp", "ATRXwtMYCNwt"))
 # EDIT: the four analyses. categories = NULL takes every tumour category.
 NB_SETS <- list(
   all_combined = list(title = "All tumour samples",           categories = NULL),
   tumour_dx    = list(title = "Primary tumour, diagnosis",    categories = "Tum dx"),
+  BM_pooled    = list(title = "Bone marrow (DTC), all timepoints",
+                      categories = c("DTC dx", "DTC TRE", "DTC rel")),
   BM_dx        = list(title = "Bone marrow (DTC), diagnosis", categories = "DTC dx"),
   BM_relapse   = list(title = "Bone marrow (DTC), relapse",   categories = "DTC rel"))
 NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samples
+# Okabe-Ito colours: distinct from the cell-line condition palette.
+NB_GROUP_COL  <- c(ATRXdel = "#D55E00", MYCNamp = "#0072B2", ATRXwtMYCNwt = "#009E73")
+NB_LAYOUT_COL <- c("#CC79A7", "#E69F00", "#56B4E9", "#999999")
+
+# PCA of samples on the 2,000 most variable expressed genes. layout_removed:
+# the library-layout effect is taken out first with removeBatchEffect, the
+# groups protected in its design. For display only: the tests use the layout
+# as a covariate instead.
+nb_pca <- function(E, d, layout_removed = FALSE, n_top = 2000) {
+  E <- E[rowSums(E > NB_EXPR_MIN) >= 2, , drop = FALSE]
+  if (layout_removed && length(unique(d$layout)) > 1)
+    E <- limma::removeBatchEffect(E, batch = d$layout,
+                                  design = model.matrix(~ factor(d$status)))
+  v <- apply(E, 1, var)
+  E <- E[order(-v)[seq_len(min(n_top, nrow(E)))], , drop = FALSE]
+  pc <- prcomp(t(E))
+  out <- data.frame(group = factor(d$status, NB_GROUPS), category = d$category,
+                    layout = d$layout, tissue = sub(" .*$", "", d$category),
+                    PC1 = pc$x[, 1], PC2 = pc$x[, 2])
+  attr(out, "ve") <- 100 * pc$sdev[1:2]^2 / sum(pc$sdev^2)
+  out
+}
+nb_pca_panel <- function(pc, colour, title, values = NULL) {
+  ve <- attr(pc, "ve")
+  p <- ggplot(pc, aes(PC1, PC2, colour = .data[[colour]], shape = tissue)) +
+    geom_point(size = 1.8, alpha = 0.85) +
+    labs(title = title, x = sprintf("PC1 (%.1f%%)", ve[1]),
+         y = sprintf("PC2 (%.1f%%)", ve[2]), shape = NULL) +
+    theme(legend.position = "bottom", legend.box = "vertical",
+          plot.title = element_text(size = 10, face = "bold"),
+          legend.text = element_text(size = 8))
+  if (!is.null(values)) p <- p + scale_colour_manual(values = values, drop = TRUE)
+  p
+}
+# Plots side by side as one image (heights matched, legends kept).
+nb_row <- function(plots) do.call(cbind, c(lapply(plots, ggplotGrob), size = "max"))
 
 nbde <- NULL
 pkgs <- c("limma", "fgsea", "msigdbr", "GSVA")
@@ -2145,10 +2191,10 @@ if (!all(pkgs_ok)) {
     "MSigDB C2:CP:KEGG (the pipeline's current-KEGG GMT was not found)"))
 
   # ── Pathways across the tumour groups: GSVA scores, moderated F ────────────
-  # One GSVA score per pathway and sample, on this analysis's samples (controls
-  # included, so they can be shown), then the same limma design as the genes.
+  # One GSVA score per pathway and sample, on this analysis's samples, then
+  # the same limma design as the genes.
   # The F-test asks whether the tumour groups differ at all (contrasts among
-  # them only; the control is not tested). Being a test across samples, it is
+  # them). Being a test across samples, it is
   # not inflated by correlation between the genes of a set, unlike fgsea's
   # gene-permutation p-values. Scores need no trend: robust eBayes only.
   nb_pathway_anova <- function(E, sets, X, d, tum) {
@@ -2174,7 +2220,7 @@ if (!all(pkgs_ok)) {
                       size = vapply(sets[rownames(S)], function(g) sum(g %in% rownames(E)), 0L),
                       F = if ("F" %in% names(tt)) tt$F else tt$t^2,
                       pvalue = tt$P.Value, padj = tt$adj.P.Val, check.names = FALSE)
-    # Raw group means of the score, controls included (for display).
+    # Raw group means of the score (for display).
     grp <- factor(d$status, NB_GROUPS)
     for (g in levels(droplevels(grp)))
       out[[paste("mean", g)]] <- rowMeans(S[, grp == g, drop = FALSE])
@@ -2200,13 +2246,10 @@ if (!all(pkgs_ok)) {
     X <- model.matrix(~ 0 + grp)
     colnames(X) <- make.names(levels(grp))
     terms <- "~ 0 + group"
-    # Category, among tumour samples only, in sum-to-zero coding: each tumour
-    # group's coefficient is then its mean over the categories, so "group vs
-    # control" compares that mean with the controls (with treatment coding it
-    # would silently be one reference category vs control). Controls, a
-    # category of their own, get 0. Tumour-vs-tumour contrasts do not depend
-    # on the coding.
-    cat_f <- factor(ifelse(d$status == "control", NA, d$category))
+    # Category in sum-to-zero coding: each group's coefficient is its mean
+    # over the categories. Group-vs-group contrasts do not depend on the
+    # coding; it only keeps the group coefficients interpretable.
+    cat_f <- factor(d$category)
     if (nlevels(cat_f) > 1) {
       C <- contr.sum(nlevels(cat_f))[as.integer(cat_f), , drop = FALSE]
       C[is.na(cat_f), ] <- 0
@@ -2261,7 +2304,10 @@ if (!all(pkgs_ok)) {
         g$leadingEdge <- vapply(g$leadingEdge, paste, "", collapse = ";")
         g
       })
-      res[[paste(pr, collapse = " vs ")]] <- list(num = pr[1], den = pr[2], de = de, gsea = gs)
+      sel <- d$status %in% pr
+      res[[paste(pr, collapse = " vs ")]] <- list(
+        num = pr[1], den = pr[2], de = de, gsea = gs,
+        pca = nb_pca(E[, sel, drop = FALSE], d[sel, ], layout_removed = TRUE))
     }
     tum <- NB_TUMOUR[n_grp[NB_TUMOUR] >= 2 & make.names(NB_TUMOUR) %in% colnames(X)]
     anova <- if (length(tum) >= 2)
@@ -2272,9 +2318,7 @@ if (!all(pkgs_ok)) {
   }
 
   nbde <- lapply(NB_SETS, function(set) {
-    # The controls join every analysis.
-    d <- if (is.null(set$categories)) s10 else
-      s10[s10$category %in% c(set$categories, "control"), ]
+    d <- if (is.null(set$categories)) s10 else s10[s10$category %in% set$categories, ]
     c(set, list(n_patients = tapply(d$patient, factor(d$status, NB_GROUPS),
                                     function(p) length(unique(p)))),
       if (nrow(d)) nb_fit(d))
@@ -2321,7 +2365,7 @@ nb_gene_lists <- function(r, num, den, base) {
 }
 
 # Pathway F-test: heatmap of the group means of the significant pathways (top
-# NB_ANOVA_TOP by p), the control drawn apart as an untested reference, then
+# NB_ANOVA_TOP by p), then
 # the same pathways as a table with the post-hoc pairwise differences.
 NB_ANOVA_TOP <- 30
 nb_anova_show <- function(a, coll, title, tum, base) {
@@ -2339,17 +2383,14 @@ nb_anova_show <- function(a, coll, title, tum, base) {
   long <- sig %>% select(pathway, all_of(means)) %>%
     pivot_longer(-pathway, names_to = "group", values_to = "score") %>%
     mutate(group = factor(sub("^mean ", "", group), NB_GROUPS),
-           panel = factor(ifelse(group == "control", "reference", "tested"),
-                          c("tested", "reference")),
            pathway = factor(pathway, rev(sig$pathway)))
   lim <- max(abs(long$score))
   p <- ggplot(long, aes(group, pathway, fill = score)) +
     geom_tile(colour = "white", linewidth = 0.4) +
-    facet_grid(. ~ panel, scales = "free_x", space = "free_x") +
     scale_fill_gradient2(low = "#0d366b", mid = "white", high = "#B72656",
                          midpoint = 0, limits = c(-lim, lim), name = "mean GSVA\nscore") +
     labs(title = paste0(coll, ": ", title, ", pathways across the tumour groups"),
-         subtitle = sprintf("F-test padj < %s, top %d by p; the control is shown, not tested",
+         subtitle = sprintf("F-test padj < %s, top %d by p",
                             params$padj, nrow(sig)), x = NULL, y = NULL) +
     theme(panel.grid = element_blank(), axis.text.x = element_text(angle = 30, hjust = 1),
           axis.text.y = element_text(size = 8))
@@ -2365,6 +2406,32 @@ nb_anova_show <- function(a, coll, title, tum, base) {
   }
   export_as(table = paste0(base, "pathway_Ftest_", slug))
   scroll_table(tab)
+}
+
+# QC for one comparison: group sizes, ATRX as a positive control, the raw
+# p-value histogram, and a PCA of the two groups' samples.
+nb_qc <- function(r, x, base) {
+  g2 <- c(r$num, r$den)
+  ns <- as.integer(x$n[g2]); np <- as.integer(x$n_patients[g2])
+  atrx <- r$de[toupper(r$de$gene_id) == "ATRX", , drop = FALSE]
+  cat(sprintf(paste0("\n**QC.** Samples (patients): %s %d (%d), %s %d (%d). ",
+                     "%s genes tested. %s\n\n"),
+              g2[1], ns[1], np[1], g2[2], ns[2], np[2],
+              format(nrow(r$de), big.mark = ","),
+              if (nrow(atrx)) sprintf("ATRX: log2FC %.2f, p %s, padj %s.",
+                                      atrx$log2FoldChange[1], fmt_p(atrx$pvalue[1]),
+                                      fmt_p(atrx$padj[1])) else
+                "ATRX is not among the tested genes."))
+  h <- ggplot(r$de, aes(pvalue)) +
+    geom_histogram(breaks = seq(0, 1, by = 0.02), fill = "#6D8AB6", colour = "white",
+                   linewidth = 0.1) +
+    geom_hline(yintercept = nrow(r$de) / 50, linetype = "dashed", linewidth = 0.3) +
+    labs(title = "Raw p-values", subtitle = "dashed: expected if no gene differs",
+         x = "p-value", y = "genes") +
+    theme(plot.title = element_text(size = 10, face = "bold"))
+  pc <- nb_pca_panel(r$pca, "group", "PCA of the two groups (layout removed)",
+                     NB_GROUP_COL)
+  show_plot(nb_row(list(h, pc)), width = 9.4, height = 4.6, name = paste0(base, "_qc"))
 }
 
 nb_show <- function(key) {
@@ -2396,6 +2463,7 @@ nb_show <- function(key) {
     r <- x$res[[pr]]
     base <- file.path(key, gsub(" ", "_", pr))
     cat("\n\n###", pr, "\n\n")
+    nb_qc(r, x, base)
     export_table(r$de, name = paste0(base, "_limma_all_genes"))
     show_plot(volcano(r$de, paste0(x$title, ": ", pr), num = r$num, den = r$den),
               width = 8.4, height = 6.2, name = paste0(base, "_volcano"))
@@ -2415,10 +2483,34 @@ nb_show <- function(key) {
 }
 ```
 
+## Sample overview
+
+Every tumour sample of this section (the control excluded), on the 2,000 most
+variable genes. Top row: the log2 values as tested. Bottom row: the
+library-layout effect removed, for display only. Shape: primary tumour or
+bone marrow (DTC).
+
+```{r patient-pca, results = "asis"}
+if (!is.null(nbde)) {
+  E_all <- lx[, s10$omics_id, drop = FALSE]
+  for (lr in c(FALSE, TRUE)) {
+    pc <- nb_pca(E_all, s10, layout_removed = lr)
+    tag <- if (lr) "layout removed" else "as tested"
+    show_plot(nb_row(list(
+      nb_pca_panel(pc, "group", paste("Group,", tag), NB_GROUP_COL),
+      nb_pca_panel(pc, "layout", paste("Library layout,", tag),
+                   setNames(NB_LAYOUT_COL[seq_along(unique(pc$layout))], sort(unique(pc$layout)))),
+      nb_pca_panel(pc, "category", paste("Category,", tag)))),
+      width = 13, height = 5, scroll = TRUE,
+      name = paste0("overview_pca_", if (lr) "layout_removed" else "as_tested"))
+  }
+}
+```
+
 ## All tumour samples
 
 Every primary tumour and bone-marrow sample, whatever its timepoint, with the
-category as a covariate and patients blocked.
+category as a covariate and patients blocked. The control is not included.
 
 ```{r patient-all, results = "asis"}
 nb_show("all_combined")
@@ -2428,6 +2520,15 @@ nb_show("all_combined")
 
 ```{r patient-tum-dx, results = "asis"}
 nb_show("tumour_dx")
+```
+
+## Bone marrow, all timepoints
+
+Every disseminated-tumour-cell sample (DTC dx, TRE and rel), with the timepoint
+as a covariate and patients blocked.
+
+```{r patient-bm-pooled, results = "asis"}
+nb_show("BM_pooled")
 ```
 
 ## Bone marrow at diagnosis
