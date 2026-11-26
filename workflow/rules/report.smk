@@ -36,9 +36,10 @@ rule Report:
     threads: 1
     resources:
         mem_mb        = 8000,
-        # The patient section fits 4 limma models and runs 36 fgsea analyses
-        # (GO:BP is the slow one).
-        runtime       = 90,
+        # The patient section fits 4 limma models and runs 72 fgsea analyses
+        # (24 comparisons x 3 collections; GO:BP is the slow one). 120 min is
+        # also the tinyq limit (profile/slurm/config.yaml).
+        runtime       = 120,
         cpus_per_task = 1,
     conda:
         "../envs/report.yaml"

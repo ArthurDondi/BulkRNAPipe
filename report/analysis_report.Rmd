@@ -1916,11 +1916,18 @@ atrx_rows("IFF")
 
 Genome-wide differential expression between the three tumour groups of the
 patient cohort in the previous section, tested pairwise: **ATRXdel vs MYCNamp**,
-**ATRXdel vs ATRXwtMYCNwt** and **MYCNamp vs ATRXwtMYCNwt**. Each comparison is
-run four times: on every tumour sample together, then on primary tumours at
+**ATRXdel vs ATRXwtMYCNwt** and **MYCNamp vs ATRXwtMYCNwt**, then each of the
+three against the tumour-free **control** bone marrow. Each comparison is run
+four times: on every tumour sample together, then on primary tumours at
 diagnosis (Tum dx), bone marrow at diagnosis (DTC dx) and bone marrow at relapse
-(DTC rel) alone. The tumour-free control bone marrow is not part of these
-comparisons. Groups,
+(DTC rel) alone. Every control sample is part of every analysis.
+
+The control comparisons are cleanest in the two bone-marrow analyses, where
+disseminated tumour cells and controls are the same tissue. Against primary
+tumours (Tum dx, and the primary tumours within the combined analysis), most
+of the difference is tumour tissue versus bone marrow rather than the tumour
+group: read those for what is specific to one group, by comparing the three
+"vs control" results with each other. Groups,
 categories and excluded samples are the ones defined in the
 [patient cohort](#patient-cohort) table above. The one difference is that
 categories with too few patients to plot there are kept in the combined
@@ -1941,7 +1948,10 @@ counts + 1). It uses the "limma-trend" approach of
 an empirical Bayes variance trend on mean expression, with robust hyperparameters.
 The design is `~ 0 + group + layout`, plus the sample category (Tum dx, Tum TRE,
 DTC dx, …) in the combined analysis. A covariate is dropped in an analysis
-where it has a single level. Where one patient contributes several samples (always in the
+where it has a single level. In the combined analysis, category is coded so
+that each tumour group's estimate is its average over the tumour categories
+(sum-to-zero coding among tumour samples). "Group vs control" there compares
+that average with the controls, not one arbitrary category. Where one patient contributes several samples (always in the
 combined analysis), the patient is a blocking factor, with the within-patient
 correlation estimated by `duplicateCorrelation`
 ([Smyth et al. 2005](https://doi.org/10.1093/bioinformatics/bti270)). Each
@@ -1966,9 +1976,12 @@ CSVs under `tables/`. Both sit in one folder per analysis (`all_combined`,
 
 ```{r patient-de, results = "asis"}
 # ── Comparisons ──────────────────────────────────────────────────────────────
-NB_GROUPS <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt")
-NB_PAIRS  <- list(c("ATRXdel", "MYCNamp"), c("ATRXdel", "ATRXwtMYCNwt"),
-                  c("MYCNamp", "ATRXwtMYCNwt"))
+NB_TUMOUR <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt")
+NB_GROUPS <- c(NB_TUMOUR, "control")
+# The three tumour groups against each other, then each against the control.
+NB_PAIRS  <- c(list(c("ATRXdel", "MYCNamp"), c("ATRXdel", "ATRXwtMYCNwt"),
+                    c("MYCNamp", "ATRXwtMYCNwt")),
+               lapply(NB_TUMOUR, function(g) c(g, "control")))
 # EDIT: the four analyses. categories = NULL takes every tumour category.
 NB_SETS <- list(
   all_combined = list(title = "All tumour samples",           categories = NULL),
@@ -2015,7 +2028,7 @@ if (!all(pkgs_ok)) {
                 if (!all(is.na(gene_sym))) "the corrected matrix (matched on gene ID)" else
                 "nowhere (gene IDs used instead)"))
 
-  # ── Samples: the previous section's selection, minus the controls ──────────
+  # ── Samples: the previous section's selection ──────────────────────────────
   samples10 <- if (length(annot_i)) colnames(counts10)[-annot_i] else colnames(counts10)
   s10 <- nb_select(meta10, samples10)
   s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
@@ -2076,12 +2089,26 @@ if (!all(pkgs_ok)) {
     X <- model.matrix(~ 0 + grp)
     colnames(X) <- make.names(levels(grp))
     terms <- "~ 0 + group"
-    for (v in c("category", "layout")) {
-      f <- factor(d[[v]])
-      if (nlevels(f) > 1) {
-        X <- cbind(X, model.matrix(~ f)[, -1, drop = FALSE])
-        terms <- paste(terms, "+", v)
-      }
+    # Category, among tumour samples only, in sum-to-zero coding: each tumour
+    # group's coefficient is then its mean over the categories, so "group vs
+    # control" compares that mean with the controls (with treatment coding it
+    # would silently be one reference category vs control). Controls, a
+    # category of their own, get 0. Tumour-vs-tumour contrasts do not depend
+    # on the coding.
+    cat_f <- factor(ifelse(d$status == "control", NA, d$category))
+    if (nlevels(cat_f) > 1) {
+      C <- contr.sum(nlevels(cat_f))[as.integer(cat_f), , drop = FALSE]
+      C[is.na(cat_f), ] <- 0
+      colnames(C) <- paste0("category:", levels(cat_f)[-nlevels(cat_f)])
+      X <- cbind(X, C)
+      terms <- paste(terms, "+ category")
+    }
+    lay_f <- factor(d$layout)
+    if (nlevels(lay_f) > 1) {
+      L <- model.matrix(~ lay_f)[, -1, drop = FALSE]
+      colnames(L) <- paste0("layout:", levels(lay_f)[-1])
+      X <- cbind(X, L)
+      terms <- paste(terms, "+ layout")
     }
     X <- X[, colSums(X != 0) > 0, drop = FALSE]  # groups absent here
     ne <- limma::nonEstimable(X)
@@ -2125,7 +2152,9 @@ if (!all(pkgs_ok)) {
   }
 
   nbde <- lapply(NB_SETS, function(set) {
-    d <- if (is.null(set$categories)) s10 else s10[s10$category %in% set$categories, ]
+    # The controls join every analysis.
+    d <- if (is.null(set$categories)) s10 else
+      s10[s10$category %in% c(set$categories, "control"), ]
     c(set, list(n_patients = tapply(d$patient, factor(d$status, NB_GROUPS),
                                     function(p) length(unique(p)))),
       if (nrow(d)) nb_fit(d))
@@ -2134,9 +2163,9 @@ if (!all(pkgs_ok)) {
   # ── Samples per analysis ───────────────────────────────────────────────────
   tab <- t(vapply(nbde, function(x) {
     np <- x$n_patients; np[is.na(np)] <- 0
-    ns <- if (is.null(x$n)) setNames(rep(0, 3), NB_GROUPS) else x$n
+    ns <- if (is.null(x$n)) setNames(rep(0, length(NB_GROUPS)), NB_GROUPS) else x$n
     sprintf("%d (%d)", as.integer(ns[NB_GROUPS]), as.integer(np[NB_GROUPS]))
-  }, character(3)))
+  }, character(length(NB_GROUPS))))
   colnames(tab) <- NB_GROUPS
   rownames(tab) <- vapply(nbde, `[[`, "", "title")
   cat("\n\n")
