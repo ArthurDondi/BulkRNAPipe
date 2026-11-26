@@ -833,9 +833,10 @@ and vector markers) → PCA → differential expression (headline contrast first
 then genes of interest, then the rest) → GSEA → rescue assessment (signature
 reversal and interaction contrasts) → ATRX interactors → patient cohort.
 
-The last section compares the patient groups ATRX DEL, MNA and nMNA pairwise
-(limma-trend on the library-layout-corrected matrix the ATRX-interactor
-boxplots use, fgsea on Hallmark, KEGG and GO:BP). It runs on all tumour samples together, then on primary tumour at
+The last section compares the patient groups ATRXdel, MYCNamp and
+ATRXwtMYCNwt pairwise (limma-trend on the uncorrected normalised counts with
+library layout as a covariate, fgsea on Hallmark, KEGG and GO:BP). Groups
+come from the `classification` column of `metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
 diagnosis, bone marrow at diagnosis and bone marrow at relapse. Its inputs are
 the `nb_*` params, which point at files that stay on the cluster.
 

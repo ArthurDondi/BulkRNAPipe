@@ -48,17 +48,20 @@ params:
   # Section "ATRX interactors": internal neuroblastoma cohort, reprocessed by
   # Celine Prakash (full_omics_analysis.html, 2023-11-17). nb_expression is the
   # library-layout-corrected matrix (GeneID, gene_name, one column per
-  # omics_id). nb_metadata (omics_id, material_general, tp, mna, atrx,
-  # exclusion, comment) is patient data: it stays on the cluster and is never
-  # committed. Point either at "" to skip the patient panels.
+  # omics_id), plotted in "ATRX interactors". nb_counts is the same matrix
+  # WITHOUT the layout correction, tested in "Patient cohort: ATRXdel, MYCNamp
+  # and ATRXwtMYCNwt" with the layout in the model. nb_metadata is an Excel
+  # sheet (omics_id, sample_id, classification, library_layout); tissue,
+  # patient and timepoint are read from omics_id, TISSUE_PATIENT_TIMEPOINT_N.
+  # All three are patient data: they stay on the cluster and are never
+  # committed. Point nb_metadata at "" to skip both patient sections.
   nb_expression: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts_liblayout_corrected.csv"
-  nb_metadata: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/metadata_table.csv"
+  nb_counts: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts.csv"
+  nb_metadata: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/metadata_table_wStage.xlsx"
+  nb_metadata_sheet: 1
   # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
   # this repository.
   atrx_interactors: ""
-  # Section "Patient cohort: ATRX DEL, MNA and nMNA" tests differential
-  # expression on nb_expression above, the library-layout-corrected matrix,
-  # transformed exactly as for the boxplots: log2(max(value, 0) + 1).
   # Gene-set size limits for the patient GSEA, as GSEA.min_size / max_size in
   # config_epicode.yaml.
   gsea_min_size: 9
@@ -1603,9 +1606,14 @@ with tximeta. edgeR's `filterByExpr` kept 14,604 of 38,269 genes, and limma's
 `removeBatchEffect` removed the library-layout effect (single-end unstranded,
 single-end stranded, paired-end), with the material kept in the design.
 
+Samples are grouped by the `classification` column of `metadata_table_wStage.xlsx`;
+tissue, patient and timepoint are read from the sample ID
+(`TISSUE_PATIENT_TIMEPOINT_N`, e.g. `DTC_021_REL_2`).
+
 Nomenclature:
-- **ATRX DEL**: ATRX deletion. **MNA** / **nMNA**: ATRX wild type, with /
-  without MYCN amplification. **BMn**: bone marrow negative for tumour cells, control.
+- **ATRXdel**: ATRX deletion. **MYCNamp**: MYCN amplification, ATRX wild type.
+  **ATRXwtMYCNwt**: ATRX and MYCN wild type. **control**: bone marrow negative
+  for tumour cells.
 - **Tum**: primary tumour. **DTC**: disseminated tumour cells. **dx**: diagnosis. **TRE**: treatment. **rel**:
   relapse.
 
@@ -1627,8 +1635,23 @@ if (is.null(nc)) missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
 # Patients: both files are needed.
 read_param <- function(f, ...)
   if (nzchar(f) && file.exists(f)) read.csv(f, check.names = FALSE, ...) else NULL
+# The sample sheet, every column as text; NULL (with a note) if the file or
+# one of the columns used is missing.
+read_nb_meta <- function() {
+  f <- params$nb_metadata
+  if (!nzchar(f) || !file.exists(f)) return(NULL)
+  m <- as.data.frame(readxl::read_excel(f, sheet = params$nb_metadata_sheet,
+                                        col_types = "text"))
+  need <- c("omics_id", "classification", "library_layout")
+  if (!all(need %in% names(m))) {
+    cat("\n> **Not available.** `", basename(f), "` lacks column(s) ",
+        paste(setdiff(need, names(m)), collapse = ", "), ".\n\n", sep = "")
+    return(NULL)
+  }
+  m[!is.na(m$omics_id) & nzchar(trimws(m$omics_id)), , drop = FALSE]
+}
 nb_expr <- read_param(params$nb_expression, stringsAsFactors = FALSE)
-nb_meta <- read_param(params$nb_metadata, colClasses = "character")
+nb_meta <- read_nb_meta()
 if (is.null(nb_expr) || is.null(nb_meta)) {
   cat("\n> **Not available.** `params$nb_expression` or `params$nb_metadata` was",
       "not found; the patient panels are skipped.\n\n")
@@ -1636,60 +1659,45 @@ if (is.null(nb_expr) || is.null(nb_meta)) {
 }
 
 # ── Patient samples: group, category, and why a sample is left out ──────────
-NB_STATUS   <- c("ATRX DEL", "MNA", "nMNA", "BMn")
-NB_CATEGORY <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "BMn")
+NB_STATUS   <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt", "control")
+NB_CATEGORY <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "control")
+NB_TIMEPOINT <- c(DX = "dx", TRE = "TRE", REL = "rel")  # third field of omics_id
 NB_MIN_N    <- 2  # a category is drawn only with more patients than this
 
-# Reasons computed here; samples flagged in metadata_table.csv's exclusion
-# column carry the reason from its comment column instead.
+# A sample whose classification is blank or not one of NB_STATUS is left out
+# with that value as its reason; the rules below catch the rest.
 NB_REASONS <- c(
   removed   = "dropped in preprocessing (low depth)",
-  material  = "material not annotated",
-  status    = "no ATRX/MYCN status",
-  ambiguous = "ambiguous status (ATRX gain or Xq loss, heterogeneous MNA)",
-  timepoint = "no timepoint",
+  tissue    = "tumour classification, but tissue not TUM or DTC",
+  timepoint = "no timepoint (not DX, TRE or REL)",
   small     = sprintf("not shown, category with ≤ %d patients", NB_MIN_N))
 
 nb_select <- function(meta, samples) {
   clean <- function(x) trimws(ifelse(is.na(x), "", x))
-  up <- function(x) toupper(clean(x))
-  field <- function(x) if (x %in% names(meta)) meta[[x]] else rep("", nrow(meta))
-  m <- data.frame(omics_id = meta$omics_id, material = up(meta$material_general),
-                  tp = up(meta$tp), mna = up(meta$mna), atrx = up(meta$atrx),
-                  excluded = up(field("exclusion")) %in% c("TRUE", "YES", "1"),
-                  comment = clean(field("comment")), stringsAsFactors = FALSE)
-  m$comment[m$excluded & !nzchar(m$comment)] <- "excluded in metadata_table.csv"
+  m <- data.frame(omics_id = clean(meta$omics_id),
+                  classification = clean(meta$classification),
+                  layout = clean(meta$library_layout), stringsAsFactors = FALSE)
+  # omics_id is TISSUE_PATIENT_TIMEPOINT_N, e.g. DTC_021_REL_2.
+  parts <- strsplit(m$omics_id, "_", fixed = TRUE)
+  piece <- function(i) toupper(vapply(parts, function(x) if (length(x) >= i) x[i] else "", ""))
+  m$tissue  <- piece(1)
+  m$patient <- piece(2)
+  m$tp      <- piece(3)
   # MNCs and cell lines are not part of this comparison: left out silently.
-  m <- m[!m$material %in% c("MNC", "CL"), ]
-  m$patient <- sub("^[^_]+_([^_]+)_.*$", "\\1", m$omics_id)
-  # An ATRX deletion overrides the MYCN call; otherwise MYCN splits the ATRX
-  # wild type (atrx Normal, NO or blank, as in the omics tables).
-  ambiguous <- m$atrx %in% c("GAIN", "XQ LOSS") | m$mna == "HETMNA"
-  m$status <- case_when(
-    m$material == "BMN"              ~ "BMn",
-    !m$material %in% c("TUM", "DTC") ~ NA_character_,
-    m$atrx == "DELETION"             ~ "ATRX DEL",
-    ambiguous                        ~ NA_character_,
-    m$mna == "YES"                   ~ "MNA",
-    m$mna == "NO"                    ~ "nMNA",
-    TRUE                             ~ NA_character_)
-  type <- ifelse(m$material == "TUM", "Tum", "DTC")
-  m$category <- case_when(
-    m$material == "BMN" ~ "BMn",
-    m$tp == "DE"        ~ paste(type, "dx"),
-    m$tp == "TRE"       ~ paste(type, "TRE"),
-    m$tp == "REL"       ~ paste(type, "rel"),
-    TRUE                ~ NA_character_)
-  # metadata_table.csv's exclusion / comment columns come first; the rules
-  # below only catch what a metadata file does not flag.
+  m <- m[!m$tissue %in% c("MNC", "CL"), ]
+  m$status <- ifelse(m$classification %in% NB_STATUS, m$classification, NA_character_)
+  type <- c(TUM = "Tum", DTC = "DTC")[m$tissue]
+  m$category <- ifelse(
+    m$status %in% "control", "control",
+    ifelse(!is.na(type) & m$tp %in% names(NB_TIMEPOINT),
+           paste(type, NB_TIMEPOINT[m$tp]), NA_character_))
   m$reason <- case_when(
-    m$excluded                              ~ m$comment,
-    !m$omics_id %in% samples                ~ NB_REASONS[["removed"]],
-    !m$material %in% c("TUM", "DTC", "BMN") ~ NB_REASONS[["material"]],
-    is.na(m$status) & ambiguous             ~ NB_REASONS[["ambiguous"]],
-    is.na(m$status)                         ~ NB_REASONS[["status"]],
-    is.na(m$category)                       ~ NB_REASONS[["timepoint"]],
-    TRUE                                    ~ NA_character_)
+    !m$omics_id %in% samples          ~ NB_REASONS[["removed"]],
+    !nzchar(m$classification)         ~ "no classification",
+    is.na(m$status)                   ~ paste("classification:", m$classification),
+    m$status != "control" & is.na(type) ~ NB_REASONS[["tissue"]],
+    is.na(m$category)                 ~ NB_REASONS[["timepoint"]],
+    TRUE                              ~ NA_character_)
   # Counted in patients: the libraries of one patient become one point.
   key <- paste(m$status, m$category)
   ok  <- is.na(m$reason)
@@ -1725,14 +1733,12 @@ if (!is.null(nb_meta) && !is.null(ai)) {
   # Every sample left out, by reason; matrix columns missing from the metadata
   # are listed too.
   ex <- nb[!is.na(nb$reason), ]
-  # Order: preprocessing, the metadata exclusions, the reasons above, then the
-  # hidden categories in plotting order.
+  # Order: preprocessing, the classifications left out, the reasons above,
+  # then the hidden categories in plotting order.
   small <- ex[ex$small, ]
   small <- small[order(match(small$status, NB_STATUS), match(small$category, NB_CATEGORY)), ]
-  meta_why <- sort(unique(ex$comment[ex$excluded]))
-  meta_why <- c(meta_why[!startsWith(meta_why, "not shown")],
-                meta_why[startsWith(meta_why, "not shown")])
-  lev <- unique(c(NB_REASONS[["removed"]], meta_why,
+  class_why <- sort(unique(ex$reason[startsWith(ex$reason, "classification:")]))
+  lev <- unique(c(NB_REASONS[["removed"]], "no classification", class_why,
                   NB_REASONS[names(NB_REASONS) != "small"], small$reason))
   ex_tab <- data.frame(reason = lev[lev %in% ex$reason])
   ex_tab$n <- vapply(ex_tab$reason, function(r) sum(ex$reason == r), integer(1))
@@ -1740,7 +1746,7 @@ if (!is.null(nb_meta) && !is.null(ai)) {
     paste(sort(ex$omics_id[ex$reason == r]), collapse = ", "), character(1))
   no_meta <- setdiff(samples[!grepl("^(MNC|CL)_", samples)], nb_meta$omics_id)
   if (length(no_meta)) ex_tab <- rbind(ex_tab, data.frame(
-    reason = "not in metadata_table.csv", n = length(no_meta),
+    reason = paste("not in", basename(params$nb_metadata)), n = length(no_meta),
     samples = paste(no_meta, collapse = ", ")))
   ex_tab <- rbind(ex_tab, data.frame(reason = "<b>Total</b>",
                                      n = sprintf("<b>%d</b>", sum(ex_tab$n)), samples = ""))
@@ -1803,7 +1809,7 @@ if (!is.null(nc) && !is.null(meta) && !is.null(ai)) {
 # SK-N-SH on the left on its own y-axis, the patient groups on the right on
 # one shared y-axis: two plots joined side by side, since one facet grid cannot
 # give a single panel its own y-axis. Patient boxes are blue for tumour
-# samples and grey for the tumour-free BMn control, so the condition colours
+# samples and grey for the tumour-free control, so the condition colours
 # stay unique to SK-N-SH.
 ATRX_FILL  <- c(tumour = "#6D8AB6", control = "#D9D9D9")
 atrx_theme <- theme_bw(base_size = 10) +
@@ -1852,7 +1858,7 @@ atrx_patient_plot <- function(d, title = NULL, empty = FALSE) {
   lab <- sub("^.*\\|", "", names(n))
   if (!empty) lab <- sprintf("%s (%d)", lab, n)
   atrx_boxes(ggplot(d, aes(key, value,
-                           fill = ifelse(status == "BMn", "control", "tumour"))), empty) +
+                           fill = ifelse(status == "control", "control", "tumour"))), empty) +
     facet_grid(. ~ status, scales = "free_x", space = "free_x") +
     scale_x_discrete(labels = setNames(lab, names(n))) +
     scale_fill_manual(values = ATRX_FILL) +
@@ -1906,35 +1912,36 @@ atrx_rows("IFF")
 
 ---
 
-# Patient cohort: ATRX DEL, MNA and nMNA
+# Patient cohort: ATRXdel, MYCNamp and ATRXwtMYCNwt
 
 Genome-wide differential expression between the three tumour groups of the
-patient cohort in the previous section, tested pairwise: **ATRX DEL vs MNA**,
-**ATRX DEL vs nMNA** and **MNA vs nMNA**. Each comparison is run four times: on
-every tumour sample together, then on primary tumours at diagnosis (Tum dx),
-bone marrow at diagnosis (DTC dx) and bone marrow at relapse (DTC rel) alone.
-The tumour-free bone marrow (BMn) is not part of these comparisons. Groups,
+patient cohort in the previous section, tested pairwise: **ATRXdel vs MYCNamp**,
+**ATRXdel vs ATRXwtMYCNwt** and **MYCNamp vs ATRXwtMYCNwt**. Each comparison is
+run four times: on every tumour sample together, then on primary tumours at
+diagnosis (Tum dx), bone marrow at diagnosis (DTC dx) and bone marrow at relapse
+(DTC rel) alone. The tumour-free control bone marrow is not part of these
+comparisons. Groups,
 categories and excluded samples are the ones defined in the
 [patient cohort](#patient-cohort) table above. The one difference is that
 categories with too few patients to plot there are kept in the combined
 analysis.
 
-**Data.** The library-layout-corrected matrix used for the boxplots above
-(`full_omics_expression_data_normalized_counts_liblayout_corrected.csv`), as
-log2(value + 1), with negative values set to 0 first. Because the layout effect
-was already removed, the model has no layout term. One caveat: limma's
-documentation notes that `removeBatchEffect` output is meant for plotting
-rather than testing. The fit does not know that degrees of freedom were spent
-on the layout, so p-values are somewhat smaller than they should be. Read
-borderline genes with that in mind
+**Data.** The normalised counts from the same reanalysis, *without* the
+library-layout correction (`full_omics_expression_data_normalized_counts.csv`).
+The boxplots above use the corrected matrix, but `removeBatchEffect` output is
+meant for plotting, not for testing: the fit would not know that degrees of
+freedom were spent on the layout, so p-values would come out too small
 ([limma `removeBatchEffect` help page](https://rdrr.io/bioc/limma/man/removebatcheffect.html)).
+The library layout (`library_layout` in `metadata_table_wStage.xlsx`) is put in
+the model instead.
 
 **Model.** [limma](https://doi.org/10.1093/nar/gkv007) on log2(normalised
 counts + 1). It uses the "limma-trend" approach of
 [Law et al. 2014](https://doi.org/10.1186/gb-2014-15-2-r29) for log-counts:
 an empirical Bayes variance trend on mean expression, with robust hyperparameters.
-The design is `~ 0 + group`, plus the sample category (Tum dx, Tum TRE, DTC dx,
-…) in the combined analysis. Where one patient contributes several samples (always in the
+The design is `~ 0 + group + layout`, plus the sample category (Tum dx, Tum TRE,
+DTC dx, …) in the combined analysis. A covariate is dropped in an analysis
+where it has a single level. Where one patient contributes several samples (always in the
 combined analysis), the patient is a blocking factor, with the within-patient
 correlation estimated by `duplicateCorrelation`
 ([Smyth et al. 2005](https://doi.org/10.1093/bioinformatics/bti270)). Each
@@ -1959,8 +1966,9 @@ CSVs under `tables/`. Both sit in one folder per analysis (`all_combined`,
 
 ```{r patient-de, results = "asis"}
 # ── Comparisons ──────────────────────────────────────────────────────────────
-NB_GROUPS <- c("ATRX DEL", "MNA", "nMNA")
-NB_PAIRS  <- list(c("ATRX DEL", "MNA"), c("ATRX DEL", "nMNA"), c("MNA", "nMNA"))
+NB_GROUPS <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt")
+NB_PAIRS  <- list(c("ATRXdel", "MYCNamp"), c("ATRXdel", "ATRXwtMYCNwt"),
+                  c("MYCNamp", "ATRXwtMYCNwt"))
 # EDIT: the four analyses. categories = NULL takes every tumour category.
 NB_SETS <- list(
   all_combined = list(title = "All tumour samples",           categories = NULL),
@@ -1972,28 +1980,41 @@ NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samp
 nbde <- NULL
 pkgs <- c("limma", "fgsea", "msigdbr")
 pkgs_ok <- vapply(pkgs, requireNamespace, logical(1), quietly = TRUE)
-counts10 <- read_param(params$nb_expression, stringsAsFactors = FALSE)
-meta10   <- read_param(params$nb_metadata, colClasses = "character")
+counts10 <- read_param(params$nb_counts, stringsAsFactors = FALSE)
+meta10   <- read_nb_meta()
 if (!all(pkgs_ok)) {
   cat("\n> **Not available.** R package(s)", paste(pkgs[!pkgs_ok], collapse = ", "),
       "missing; see `workflow/envs/report.yaml`.\n\n")
 } else if (is.null(counts10) || is.null(meta10)) {
-  cat("\n> **Not available.** `params$nb_expression` or `params$nb_metadata` was not",
+  cat("\n> **Not available.** `params$nb_counts` or `params$nb_metadata` was not",
       "found; this section is skipped.\n\n")
 } else {
-  # ── Samples: the previous section's selection, minus BMn ───────────────────
+  # ── Samples: the previous section's selection, minus the controls ──────────
   samples10 <- setdiff(colnames(counts10), c("GeneID", "gene_name"))
   s10 <- nb_select(meta10, samples10)
   s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
-
+  if (any(!nzchar(s10$layout))) {
+    cat("\nNo `library_layout`, left out:",
+        paste(sort(s10$omics_id[!nzchar(s10$layout)]), collapse = ", "), "\n\n")
+    s10 <- s10[nzchar(s10$layout), ]
+  }
 
   # ── Expression: log2, one row per gene symbol ──────────────────────────────
   raw <- as.matrix(counts10[, s10$omics_id, drop = FALSE])
   storage.mode(raw) <- "double"
-  # Same transform as the boxplots in the previous section.
-  cat(sprintf("\n%s: %s genes, %d samples; %s negative values set to 0 before log2(value + 1).\n\n",
-              basename(params$nb_expression), format(nrow(raw), big.mark = ","), ncol(raw),
-              format(sum(raw < 0, na.rm = TRUE), big.mark = ",")))
+  # Expected linear (normalised counts or CPM), so log2(value + 1). The
+  # sentence below gives the range, so a file already on a log scale shows up.
+  cat(sprintf(paste0("\n%s: %s genes, %d samples, values %s to %s; ",
+                     "log2(value + 1) taken%s.\n\n"),
+              basename(params$nb_counts), format(nrow(raw), big.mark = ","), ncol(raw),
+              format(signif(min(raw, na.rm = TRUE), 3)),
+              format(signif(max(raw, na.rm = TRUE), 3), big.mark = ","),
+              if (any(raw < 0, na.rm = TRUE)) sprintf(
+                ", after setting %s negative values to 0",
+                format(sum(raw < 0, na.rm = TRUE), big.mark = ",")) else ""))
+  if (max(raw, na.rm = TRUE) < 30)
+    cat("\n> **Check the input scale:** no value above 30, so this file may",
+        "already be on a log scale, in which case log2(value + 1) is wrong.\n\n")
   lx <- log2(pmax(raw, 0) + 1)
   sym <- ifelse(is.na(counts10$gene_name) | !nzchar(counts10$gene_name),
                 counts10$GeneID, counts10$gene_name)
@@ -2030,7 +2051,7 @@ if (!all(pkgs_ok)) {
     X <- model.matrix(~ 0 + grp)
     colnames(X) <- make.names(levels(grp))
     terms <- "~ 0 + group"
-    for (v in "category") {
+    for (v in c("category", "layout")) {
       f <- factor(d[[v]])
       if (nlevels(f) > 1) {
         X <- cbind(X, model.matrix(~ f)[, -1, drop = FALSE])
@@ -2074,7 +2095,8 @@ if (!all(pkgs_ok)) {
       })
       res[[paste(pr, collapse = " vs ")]] <- list(num = pr[1], den = pr[2], de = de, gsea = gs)
     }
-    list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res)
+    list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res,
+         layouts = table(factor(d$status, NB_GROUPS), d$layout))
   }
 
   nbde <- lapply(NB_SETS, function(set) {
@@ -2135,6 +2157,8 @@ nb_show <- function(key) {
               format(x$n_genes, big.mark = ","),
               if (is.na(x$corr)) "" else sprintf(
                 "; patients blocked, within-patient correlation %.2f", x$corr)))
+  print(kable(as.data.frame.matrix(x$layouts), caption = "Samples per library layout"))
+  cat("\n\n")
   for (pr in names(x$res)) {
     r <- x$res[[pr]]
     base <- file.path(key, gsub(" ", "_", pr))
