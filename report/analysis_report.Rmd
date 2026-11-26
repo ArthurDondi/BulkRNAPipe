@@ -1667,7 +1667,7 @@ NB_MIN_N    <- 2  # a category is drawn only with more patients than this
 # A sample whose classification is blank or not one of NB_STATUS is left out
 # with that value as its reason; the rules below catch the rest.
 NB_REASONS <- c(
-  removed   = "dropped in preprocessing (low depth)",
+  removed   = "not in the expression matrix (e.g. dropped for low depth)",
   tissue    = "tumour classification, but tissue not TUM or DTC",
   timepoint = "no timepoint (not DX, TRE or REL)",
   small     = sprintf("not shown, category with ≤ %d patients", NB_MIN_N))
