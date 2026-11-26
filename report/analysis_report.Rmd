@@ -278,12 +278,27 @@ show_plot <- function(p, width, height, scroll = FALSE, name = NULL) {
 }
 
 # Enrichment dot plot sized to its labels and number of rows.
-show_enrich <- function(p, labels, n_rows) {
-  # 8.4 in (~810 px) fits the report column; only long labels need scrolling.
-  # At least 4 in tall so the legends fit; titles start at the left edge, not
-  # over the panel, which long labels push far right.
-  show_plot(p + theme(plot.title.position = "plot"),
-            width = max(8.4, 5.5 + 0.07 * max(nchar(as.character(labels)))),
+# The dot panel always gets panel_width inches: everything around it (pathway
+# names, facet strips, legends) is measured on the built plot and added on top,
+# so long names widen the image, and the scroll box, instead of squeezing the
+# panel. 8.4 in (~810 px) fits the report column; only wider plots scroll. At
+# least 4 in tall so the legends fit; titles start at the left edge, not over
+# the panel, which long labels push far right. `labels` is kept for callers
+# but no longer used: the measurement covers it.
+show_enrich <- function(p, labels, n_rows, panel_width = 3.5) {
+  p <- p + theme(plot.title.position = "plot")
+  # Text widths need a device: a null PDF, closed straight away, then the
+  # device knitr draws on made current again (dev.off() would otherwise pick
+  # whichever device comes next).
+  prev <- grDevices::dev.cur()
+  grDevices::pdf(NULL)
+  dev <- grDevices::dev.cur()
+  g <- ggplotGrob(p)
+  panel_cols <- unique(unlist(g$layout[grepl("^panel", g$layout$name), c("l", "r")]))
+  around <- grid::convertWidth(sum(g$widths[-panel_cols]), "in", valueOnly = TRUE)
+  grDevices::dev.off(dev)
+  if (prev > 1) grDevices::dev.set(prev)
+  show_plot(p, width = max(8.4, around + panel_width),
             height = max(4, 1.8 + 0.26 * n_rows), scroll = TRUE)
 }
 
@@ -1187,7 +1202,10 @@ gsea_dot <- function(df, title, top = 12) {
   p <- ggplot(df, aes(NES, pathway, colour = padj, size = size)) +
     geom_point() +
     geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.3) +
-    facet_grid(side ~ ., scales = "free_y", space = "free_y") +
+    # Strip labels wrapped onto two lines: on one, the strip takes more
+    # width than the dots.
+    facet_grid(side ~ ., scales = "free_y", space = "free_y",
+               labeller = label_wrap_gen(width = 22)) +
     scale_colour_padj() +
     labs(title = title,
          subtitle = sprintf("enrichment of the %s / %s ranking", num, den),
