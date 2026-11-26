@@ -2141,7 +2141,9 @@ if (!all(pkgs_ok)) {
       out[[paste("diff", lab)]] <- tk$logFC
       out[[paste("padj", lab)]] <- tk$adj.P.Val
     }
-    out[order(out$pvalue), ]
+    out <- out[order(out$pvalue), ]
+    rownames(out) <- NULL  # else the CSV repeats the pathway as a row-name column
+    out
   }
 
   # ── One limma fit per analysis, the three pairs as contrasts ───────────────
