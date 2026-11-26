@@ -277,12 +277,16 @@ show_plot <- function(p, width, height, scroll = FALSE, name = NULL) {
     return(print(p))
   }
   export_plot(p, width, height, name)
+  # The PNG is referenced by path and pandoc embeds it (self_contained), rather
+  # than inlined here as base64: pandoc parsing ~100 inlined images in raw HTML
+  # took ~7x the memory (3.5 vs 0.5 GB on a 16 MB page) and got the cluster
+  # job killed. The file lives in R's session tempdir, which outlasts pandoc.
   f <- tempfile(fileext = ".png")
   ggsave(f, p, width = width, height = height, dpi = 150)
   # Tag built with paste0, not a sprintf template: rmarkdown scans the whole
   # page, folded source code included, for img src attributes and warns on a
   # literal "%s" there.
-  img <- paste0('<img src="', knitr::image_uri(f), '" style="width: ', round(width * 96),
+  img <- paste0('<img src="', f, '" style="width: ', round(width * 96),
                 'px; max-width: ', if (scroll) "none" else "100%", ';">')
   cat("\n", if (scroll) sprintf('<div style="overflow-x: auto;">%s</div>', img) else img, "\n\n")
 }
