@@ -59,6 +59,10 @@ params:
   nb_counts: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/full_omics_expression_data_normalized_counts.csv"
   nb_metadata: "/nobackup/lab_taschner-mandl/arthurdondi/data/reanalysis.NB.bulkRNA/metadata_table_wStage.xlsx"
   nb_metadata_sheet: 1
+  # omics_id prefixes that differ between the sample sheet and the expression
+  # matrices: sheet prefix = matrix prefix. The sheet calls the controls
+  # control_060_REL where the matrices have BMn_060_REL.
+  nb_id_prefix_alias: !r c(control = "BMn")
   # Interactor list; "" = analysis/atrx_interactors/atrx_interactors.tsv in
   # this repository.
   atrx_interactors: ""
@@ -1648,7 +1652,19 @@ read_nb_meta <- function() {
         paste(setdiff(need, names(m)), collapse = ", "), ".\n\n", sep = "")
     return(NULL)
   }
-  m[!is.na(m$omics_id) & nzchar(trimws(m$omics_id)), , drop = FALSE]
+  m <- m[!is.na(m$omics_id) & nzchar(trimws(m$omics_id)), , drop = FALSE]
+  # Rename sheet IDs to the matrices' names (params$nb_id_prefix_alias).
+  m$omics_id <- trimws(m$omics_id)
+  for (from in names(params$nb_id_prefix_alias)) {
+    hit <- startsWith(tolower(m$omics_id), paste0(tolower(from), "_"))
+    if (any(hit)) {
+      m$omics_id[hit] <- paste0(params$nb_id_prefix_alias[[from]],
+                                substring(m$omics_id[hit], nchar(from) + 1))
+      cat(sprintf("\n%d sample IDs in `%s` renamed from `%s_…` to `%s_…` to match the expression matrices.\n\n",
+                  sum(hit), basename(f), from, params$nb_id_prefix_alias[[from]]))
+    }
+  }
+  m
 }
 nb_expr <- read_param(params$nb_expression, stringsAsFactors = FALSE)
 nb_meta <- read_nb_meta()
@@ -1683,9 +1699,15 @@ nb_select <- function(meta, samples) {
   m$tissue  <- piece(1)
   m$patient <- piece(2)
   m$tp      <- piece(3)
-  # MNCs and cell lines are not part of this comparison: left out silently.
-  m <- m[!m$tissue %in% c("MNC", "CL"), ]
-  m$status <- ifelse(m$classification %in% NB_STATUS, m$classification, NA_character_)
+  # Classification matched ignoring case, spaces and punctuation, so
+  # "Control" or "ATRXwt MYCNwt" still count; anything else is left out with
+  # its value as the reason.
+  norm <- function(x) tolower(gsub("[^A-Za-z0-9]", "", x))
+  m$status <- NB_STATUS[match(norm(m$classification), norm(NB_STATUS))]
+  # MNCs and cell lines without one of these classifications are not part of
+  # this comparison: left out silently. Classified ones stay (a control may
+  # well be an MNC sample).
+  m <- m[!(m$tissue %in% c("MNC", "CL") & is.na(m$status)), ]
   type <- c(TUM = "Tum", DTC = "DTC")[m$tissue]
   m$category <- ifelse(
     m$status %in% "control", "control",
@@ -2043,13 +2065,36 @@ if (!all(pkgs_ok)) {
 
   # ── Samples: the previous section's selection ──────────────────────────────
   samples10 <- if (length(annot_i)) colnames(counts10)[-annot_i] else colnames(counts10)
-  s10 <- nb_select(meta10, samples10)
-  s10 <- s10[(is.na(s10$reason) | s10$small) & s10$status %in% NB_GROUPS, ]
+  s_all <- nb_select(meta10, samples10)
+  s10 <- s_all[(is.na(s_all$reason) | s_all$small) & s_all$status %in% NB_GROUPS, ]
   if (any(!nzchar(s10$layout))) {
     cat("\nNo `library_layout`, left out:",
         paste(sort(s10$omics_id[!nzchar(s10$layout)]), collapse = ", "), "\n\n")
     s10 <- s10[nzchar(s10$layout), ]
   }
+  # Where each group's samples go, so a group that ends up empty (or a
+  # comparison that is skipped below) can be traced to its cause.
+  grp_of <- function(x) factor(x$status, NB_GROUPS)
+  flow <- rbind(
+    `in the sample sheet`  = table(grp_of(s_all)),
+    `in the counts matrix` = table(grp_of(s_all[s_all$omics_id %in% samples10, ])),
+    `used here`            = table(grp_of(s10)))
+  print(kable(flow, caption = "Samples per group in this section, step by step"))
+  cat("\n\n")
+  lost <- s_all[s_all$status %in% NB_GROUPS & !s_all$omics_id %in% s10$omics_id, ]
+  if (nrow(lost)) {
+    why <- ifelse(is.na(lost$reason), "no library_layout", lost$reason)
+    print(kable(aggregate(list(samples = lost$omics_id),
+                          list(group = lost$status, reason = why),
+                          function(x) paste(sort(x), collapse = ", ")),
+                caption = "Classified samples not used here, and why"))
+    cat("\n\n")
+  }
+  unknown <- table(s_all$classification[is.na(s_all$status) & nzchar(s_all$classification)])
+  if (length(unknown))
+    cat("\nClassifications not recognised (expected ", paste(NB_STATUS, collapse = ", "),
+        "): ", paste(sprintf("`%s` (%d)", names(unknown), unknown), collapse = ", "),
+        ".\n\n", sep = "")
 
   # ── Expression: log2, one row per gene symbol ──────────────────────────────
   raw <- as.matrix(counts10[, s10$omics_id, drop = FALSE])
@@ -2188,9 +2233,14 @@ if (!all(pkgs_ok)) {
       fit <- limma::lmFit(E, X)
     }
     res <- list()
+    skipped <- character()
     for (pr in NB_PAIRS) {
       a <- make.names(pr[1]); b <- make.names(pr[2])
-      if (any(n_grp[pr] < 2) || !all(c(a, b) %in% colnames(X))) next
+      if (any(n_grp[pr] < 2) || !all(c(a, b) %in% colnames(X))) {
+        skipped <- c(skipped, sprintf("%s vs %s (%s)", pr[1], pr[2], paste(
+          sprintf("%s: %d", pr, as.integer(n_grp[pr])), collapse = ", ")))
+        next
+      }
       cm <- matrix(0, ncol(X), 1, dimnames = list(colnames(X), NULL))
       cm[a, 1] <- 1; cm[b, 1] <- -1
       f2 <- limma::eBayes(limma::contrasts.fit(fit, cm), trend = TRUE, robust = TRUE)
@@ -2215,7 +2265,7 @@ if (!all(pkgs_ok)) {
     anova <- if (length(tum) >= 2)
       lapply(NB_COLLECTIONS, function(sets) nb_pathway_anova(E, sets, X, d, tum))
     list(n = n_grp, terms = terms, corr = corr, n_genes = nrow(E), res = res,
-         anova = anova, anova_groups = tum,
+         skipped = skipped, anova = anova, anova_groups = tum,
          layouts = table(factor(d$status, NB_GROUPS), d$layout))
   }
 
@@ -2328,6 +2378,9 @@ nb_show <- function(key) {
                 "; patients blocked, within-patient correlation %.2f", x$corr)))
   print(kable(as.data.frame.matrix(x$layouts), caption = "Samples per library layout"))
   cat("\n\n")
+  if (length(x$skipped))
+    cat("\n> **Skipped, fewer than 2 samples in a group:**",
+        paste(x$skipped, collapse = "; "), "\n\n")
   if (!is.null(x$anova)) {
     cat("\n\n### Pathways across the tumour groups\n\n")
     cat(sprintf(paste0("\nGSVA score per pathway and sample; moderated F-test across %s ",
