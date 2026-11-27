@@ -541,8 +541,7 @@ using AlphaFold2. The interactors are listed per construct: `ATRX_FL` only,
 (`analysis/atrx_interactors/atrx_interactors.tsv`).
 Here, we investigate the expression of the genes encoding these interactors, first in our
 SK-N-SH lines, then in the [patient cohort](#patient-cohort), grouped by ATRX and MYCN status
-and by the five [sample sets](#sample-sets) of the differential expression. 
-**The current list of interactors is temporary, a final list will be established, therefore interpretation is on hold**
+and by the five [sample sets](#sample-sets) of the differential expression.
 
 Each row is one gene: the four E6-derived SK-N-SH conditions on the left
 (log2 normalised counts + 1), the patient groups on the right (log2 of the
