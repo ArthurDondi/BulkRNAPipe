@@ -536,8 +536,9 @@ A proteomics co-immunoprecipitation experiment and an analysis
 by Celine Prakash identified proteins interacting with `ATRX_FL` or `ATRX_IFF`. 
 To identify direct interactors (as opposed to indirect binding through complexes),  
 Magdalena Rados tested the interactions of the top hits with ATRX FL/IFF in-silico
-using AlfaFold2, and proteins that came out as ATRX FL/IFF interactors 
-were calssified as *Yes* or *Maybe?* depending on the interaction score.
+using AlphaFold2. The interactors are listed per construct: `ATRX_FL` only,
+`ATRX_IFF` only, or shared by both
+(`analysis/atrx_interactors/atrx_interactors.tsv`).
 Here, we investigate the expression of the genes encoding these interactors, first in our
 SK-N-SH lines, then in the [patient cohort](#patient-cohort), grouped by ATRX and MYCN status
 and by the five [sample sets](#sample-sets) of the differential expression. 
@@ -697,7 +698,7 @@ atrx_rows <- function(list_name) {
     g  <- genes$gene[i]
     dc <- cell[cell$gene == g, ]
     dp <- pat[pat$gene == g, ]
-    title <- sprintf("%s  (%s)", g, genes$call[i])
+    title <- g
     if (!is.null(cell) && !nrow(dc)) title <- paste0(title, "   ·   below the count filter in SK-N-SH")
     if (!is.null(pat) && !nrow(dp))  title <- paste0(title, "   ·   not in the patient matrix")
     left  <- if (!is.null(cell))
@@ -727,6 +728,14 @@ atrx_rows("FL")
 
 ```{r atrx-iff, fig.width = 9.5, fig.height = 2.7, fig.retina = 1, results = "asis"}
 atrx_rows("IFF")
+```
+
+## Shared interactors
+
+Interactors of both `ATRX_FL` and `ATRX_IFF`.
+
+```{r atrx-shared, fig.width = 9.5, fig.height = 2.7, fig.retina = 1, results = "asis"}
+atrx_rows("Shared")
 ```
 
 

@@ -13,15 +13,21 @@ script_dir <- function() {
   dirname(normalizePath(f[1]))
 }
 
-# Gene table: gene, uniprot, list (FL/IFF), call (Yes/Maybe?),
-# ensembl_gene_id, previous_symbols (";"-separated, may be empty).
+# Gene table: gene, uniprot, list (FL, IFF or Shared), ensembl_gene_id,
+# previous_symbols (";"-separated, may be empty).
 read_gene_table <- function(path) {
   g <- read.delim(path, stringsAsFactors = FALSE, colClasses = "character")
-  need <- c("gene", "uniprot", "list", "call", "ensembl_gene_id", "previous_symbols")
+  need <- c("gene", "uniprot", "list", "ensembl_gene_id", "previous_symbols")
   miss <- setdiff(need, colnames(g))
   if (length(miss) > 0) stop("Gene table is missing columns: ", paste(miss, collapse = ", "))
-  g$label <- sprintf("%s\n%s interactor: %s", g$gene, g$list, g$call)
+  g$label <- sprintf("%s\n%s interactor", g$gene, list_label(g$list))
   g
+}
+
+# The interactor list as words: FL / IFF / Shared (both constructs).
+list_label <- function(l) {
+  lab <- c(FL = "ATRX FL", IFF = "ATRX IFF", Shared = "ATRX FL and IFF")[l]
+  ifelse(is.na(lab), l, lab)
 }
 
 # Two-sided Wilcoxon rank-sum test; NA when a group has < 2 values.

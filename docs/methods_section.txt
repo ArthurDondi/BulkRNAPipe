@@ -105,7 +105,7 @@ DTC at diagnosis and DTC at relapse. PCA was performed on the 2,000 most
 variable genes among those with log2 expression > 1 in at least two samples.
 
 Expression of candidate ATRX interactors
-Candidate direct interactors of each ATRX construct were selected from
+Candidate direct interactors of one or both ATRX constructs were selected from
 co-IP/MS-enriched proteins by AlphaFold2 interaction modelling (Jumper et al.,
 2021; <reference to methods>). Expression of the corresponding genes was
 examined as log2(normalised counts + 1) in the E6-derived samples and as

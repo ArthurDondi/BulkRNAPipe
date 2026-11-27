@@ -1,10 +1,10 @@
 # ATRX-interactor expression boxplots
 
-Expression of the predicted ATRX FL / IFF interactors (`atrx_interactors.tsv`),
+Expression of the predicted ATRX FL / IFF / shared interactors (`atrx_interactors.tsv`),
 in two places:
 
 - **The patient report** (`report/patients_report.Rmd`, section "ATRX
-  interactors"): one row per gene, the five SK-N-SH conditions next to the
+  interactors"): one row per gene, the four E6-derived SK-N-SH conditions next to the
   internal neuroblastoma cohort (`reanalysis.NB.bulkRNA`) split by ATRX / MYCN
   status. Point the report's `nb_expression`, `nb_counts` and `nb_metadata`
   params at the cohort files; the sample selection and every exclusion are
@@ -28,7 +28,7 @@ is the default; `--help` lists every option.
 
 | File | Purpose |
 |------|---------|
-| `atrx_interactors.tsv` | gene, UniProt accession, list (FL/IFF), call (Yes/Maybe?), Ensembl gene ID (matches the patient matrix), previous HGNC symbols (fallback for the epicode GTF and the patient matrix) |
+| `atrx_interactors.tsv` | gene, UniProt accession, list (FL, IFF, or Shared for both), Ensembl gene ID (matches the patient matrix), previous HGNC symbols (fallback for the epicode GTF and the patient matrix); UniProt, Ensembl and previous symbols from HGNC |
 | `01_plot_epicode.R` | epicode boxplots, 5 conditions |
 | `run_atrx_interactors.sh` | runs `01_plot_epicode.R` |
 | `boxplot_helpers.R` | plotting and test helpers for `01_plot_epicode.R` |

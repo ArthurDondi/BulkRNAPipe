@@ -188,7 +188,6 @@ stats <- do.call(rbind, lapply(seq_len(nrow(genes)), function(i) {
     d  <- deseq_res[[contrasts$contrast[j]]]
     data.frame(gene          = genes$gene[i],
                list          = genes$list[i],
-               call          = genes$call[i],
                contrast      = contrasts$contrast[j],
                group1        = c1,
                group2        = c2,
@@ -209,7 +208,7 @@ ylab    <- expression(log[2] ~ "(normalised counts + 1)")
 pdf(file.path(outdir, "overview.pdf"), width = 11, height = 8.5)
 for (l in unique(genes$list)) {
   print(overview_page(droplevels(expr[expr$list == l, ]),
-                      title = sprintf("ATRX %s interactors - epicode (SK-N-SH)", l),
+                      title = sprintf("%s interactors - epicode (SK-N-SH)", list_label(l)),
                       ylab = ylab, colours = colours))
 }
 invisible(dev.off())
@@ -226,8 +225,8 @@ for (i in seq_len(nrow(genes))) {
   df <- expr[expr$gene == g, ]
   print(gene_page(df,
                   title    = g,
-                  subtitle = sprintf("ATRX %s interactor: %s (UniProt %s)%s",
-                                     genes$list[i], genes$call[i], genes$uniprot[i],
+                  subtitle = sprintf("%s interactor (UniProt %s)%s",
+                                     list_label(genes$list[i]), genes$uniprot[i],
                                      if (genes$matrix_id[i] != g) paste0("; matrix ID ", genes$matrix_id[i]) else ""),
                   ylab     = ylab, colours = colours,
                   pairs    = st[, c("group1", "group2", "label")],
