@@ -29,12 +29,20 @@ rule Report:
         # inside the repo's report/ folder and failed with
         # "The directory 'report' does not exist". Passing output_dir and a bare
         # filename is the documented way to control the destination.
+        # The per-plot PDFs and per-table CSVs go next to the HTML:
+        # report/figures/<section>/ and report/tables/<section>/.
         report_dir = "report",
         html_name  = "analysis_report.html",
     threads: 1
     resources:
-        mem_mb        = 8000,
-        runtime       = 30,
+        # 64 GB: 8 GB ran out in the patient section (MSigDB through msigdbr,
+        # GSVA on GO:BP per analysis, 24 comparisons kept in memory) on the
+        # ~250-sample cohort.
+        mem_mb        = 64000,
+        # The patient section fits 4 limma models and runs 72 fgsea analyses
+        # (24 comparisons x 3 collections; GO:BP is the slow one). 120 min is
+        # also the tinyq limit (profile/slurm/config.yaml).
+        runtime       = 120,
         cpus_per_task = 1,
     conda:
         "../envs/report.yaml"
@@ -49,12 +57,17 @@ rule Report:
         export LC_ALL=C.UTF-8
         export LANG=C.UTF-8
         mkdir -p {params.report_dir}
-        Rscript -e 'rmarkdown::render(
+        # report_dir is resolved before render(): render() evaluates params
+        # lazily, after it has moved to knit_root_dir, where a relative path
+        # would land the exported figures/ and tables/ in a temporary folder.
+        Rscript -e 'report_dir <- normalizePath("{params.report_dir}")
+          rmarkdown::render(
             "{params.rmd}",
             params = list(outdir = "{params.outdir}",
                           padj   = {params.padj},
-                          lfc    = {params.lfc}),
-            output_dir  = normalizePath("{params.report_dir}"),
+                          lfc    = {params.lfc},
+                          export_dir = report_dir),
+            output_dir  = report_dir,
             output_file = "{params.html_name}",
             intermediates_dir = tempdir(), knit_root_dir = tempdir())'
         """

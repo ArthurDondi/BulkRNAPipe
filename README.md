@@ -831,7 +831,28 @@ hand, and rebuilding it on every run would overwrite that work.
 Sections: experimental design → QC (library metrics, sample correlation, ATRX
 and vector markers) → PCA → differential expression (headline contrast first,
 then genes of interest, then the rest) → GSEA → rescue assessment (signature
-reversal and interaction contrasts) → summary.
+reversal and interaction contrasts) → ATRX interactors → patient cohort.
+
+The last section compares the patient groups ATRXdel, MYCNamp and
+ATRXwtMYCNwt pairwise (limma-trend on the uncorrected normalised counts with
+library layout as a covariate, fgsea on Hallmark, KEGG and GO:BP), in five
+analyses: all tumour samples, primary tumour at diagnosis, all bone-marrow
+DTCs pooled, DTCs at diagnosis and DTCs at relapse. The control bone marrow is
+shown in the ATRX-interactor section but not tested. An overview PCA comes
+first; each analysis opens with a pathway-level F-test across the three
+groups (GSVA scores, limma moderated F) and a heatmap of the group means, and
+each comparison with a QC line (group sizes), a raw p-value histogram and a
+PCA of its two groups. Groups come from the `classification` column of
+`metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
+diagnosis, bone marrow at diagnosis and bone marrow at relapse. Its inputs are
+the `nb_*` params, which point at files that stay on the cluster.
+
+**Exports.** Every plot is also written as a PDF to
+`report/figures/<NN_section>/` and every table as a CSV to
+`report/tables/<NN_section>/`. Each section folder is named after its numbered
+top-level heading. Both folders are emptied and rewritten at each render. Set
+`params$export: FALSE` to turn this off, or `params$export_dir` (an absolute
+path) to write them elsewhere.
 
 Two things worth knowing when you edit it:
 
