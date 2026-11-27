@@ -133,6 +133,56 @@ def get_contrast_effective_condition(sample, contrast_entry):
             return combined_name
     return orig
 
+# ─── Sample sets: fit a contrast on a subset of the samples ──────────────────
+# A contrast may name a sample set as a fourth element,
+#   - [name, numerator, denominator, sample_set]
+# and DESeq2 then fits only the samples whose condition is in that set:
+# size factors, dispersions and the low-count filter are estimated without the
+# other groups. Contrasts with three elements fit every sample, as before.
+# DesignQC is re-run for each set as well (design_qc/{sample_set}/).
+DESEQ2_SAMPLE_SETS = {
+    str(_k): [str(_c) for _c in (_v or [])]
+    for _k, _v in (config['DESeq2'].get('sample_sets') or {}).items()
+}
+for _set, _conds in DESEQ2_SAMPLE_SETS.items():
+    if not _set.isidentifier():
+        raise ValueError(
+            f"DESeq2.sample_sets: '{_set}' must contain only letters, digits and "
+            "underscores (it becomes a directory name)."
+        )
+    _unknown = [_c for _c in _conds if _c not in _existing_conditions]
+    if not _conds or _unknown:
+        raise ValueError(
+            f"DESeq2.sample_sets '{_set}': condition(s) {_unknown or '(none listed)'} "
+            "match no sample's condition."
+        )
+
+for _c in config['DESeq2']['contrasts']:
+    if len(_c) not in (3, 4):
+        raise ValueError(
+            f"Contrast {_c}: expected [name, numerator, denominator] or "
+            "[name, numerator, denominator, sample_set]."
+        )
+    if len(_c) == 4:
+        if _c[3] not in DESEQ2_SAMPLE_SETS:
+            raise ValueError(
+                f"Contrast '{_c[0]}': sample set '{_c[3]}' is not defined under "
+                "DESeq2.sample_sets."
+            )
+        for _side in (_c[1], _c[2]):
+            # A side may be a combined group: it needs at least one source in the set.
+            if not set(_combine_conditions.get(_side, [_side])) & set(DESEQ2_SAMPLE_SETS[_c[3]]):
+                raise ValueError(
+                    f"Contrast '{_c[0]}': '{_side}' has no samples in sample set '{_c[3]}'."
+                )
+
+def get_contrast_samples(contrast_entry):
+    """Samples DESeq2 fits for a contrast: all of them, or those of its sample set."""
+    if len(contrast_entry) < 4:
+        return SAMPLES
+    conds = set(DESEQ2_SAMPLE_SETS[contrast_entry[3]])
+    return [s for s in SAMPLES if config['samples'][s]['condition'] in conds]
+
 # ─── Helper functions ─────────────────────────────────────────────────────────
 
 def get_raw_fastq_r1(wildcards):

@@ -139,6 +139,7 @@ Key fields to update:
 | `samples` | Sample names, paths to R1/R2 FASTQs, and conditions |
 | `DESeq2.contrasts` | Pairwise comparisons to run |
 | `DESeq2.combine_conditions` | *(Optional)* Merge existing conditions into a new label for DESeq2 |
+| `DESeq2.sample_sets` | *(Optional)* Fit a contrast on a subset of the samples only |
 | `Proteomics` | *(Optional)* Generate a separate proteomics-filtered DESeq2 volcano plot per contrast |
 
 #### Combining conditions for DESeq2
@@ -174,6 +175,29 @@ replicates as usual.
 
 Omit `combine_conditions` (or set it to `{}`) to use conditions exactly as
 defined in `samples`, which is the default behaviour.
+
+#### Fitting a contrast on a subset of the samples
+
+By default every contrast is extracted from one model fitted to all samples.
+A contrast with a fourth element names a sample set, and DESeq2 then fits only
+the samples whose condition is in it: size factors, dispersions and the
+low-count filter no longer see the other groups.
+
+```yaml
+DESeq2:
+  sample_sets:
+    E6only: [E6, EmptyVector, ATRX_FL, ATRX_IFF]
+  contrasts:
+    - [ATRX_IFF_vs_ATRX_FL, ATRX_IFF, ATRX_FL]                 # all samples
+    - [ATRX_IFF_vs_ATRX_FL_E6only, ATRX_IFF, ATRX_FL, E6only]  # E6-derived only
+```
+
+Give the subset contrast its own name: everything downstream (GSEA, category
+panels, GO, shared genes, proteomics overlay) is keyed on the contrast name,
+so both versions are run and kept side by side. Design QC is also re-run on
+each sample set, under `design_qc/{set}/`. Startup fails if a set names an
+unknown condition, or a contrast's numerator or denominator has no samples in
+its set.
 
 ### 2. Dry run
 
@@ -841,7 +865,10 @@ every run would overwrite that work.
 **Cell lines.** Experimental design → QC (library metrics, ATRX and vector
 markers, sample correlation) → PCA → how TP53 differs from the E6 lineage →
 rescue assessment → the E6 lineage alone → GSEA → genes and pathways shared by
-ATRX_FL and ATRX_IFF.
+ATRX_FL and ATRX_IFF. Up to the rescue assessment, everything uses the
+15-sample fit; from "The E6 lineage alone" on, the QC and every contrast come
+from the fit on the 12 E6-derived samples (sample set `E6only`, contrasts
+`*_E6only`, report param `e6_set`).
 
 **Patients.** Three sections:
 

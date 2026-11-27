@@ -543,7 +543,7 @@ SK-N-SH lines, then in the [patient cohort](#patient-cohort), grouped by ATRX an
 and by the five [sample sets](#sample-sets) of the differential expression. 
 **The current list of interactors is temporary, a final list will be established, therefore interpretation is on hold**
 
-Each row is one gene: the five SK-N-SH conditions on the left
+Each row is one gene: the four E6-derived SK-N-SH conditions on the left
 (log2 normalised counts + 1), the patient groups on the right (log2 of the
 layout-corrected values + 1). Each group has one box per sample set (All
 tumour, Tum dx, DTC all, DTC dx, DTC rel) and the control one box; the sets
@@ -562,9 +562,11 @@ atrx_tsv <- if (nzchar(params$atrx_interactors)) params$atrx_interactors else
 ai <- if (file.exists(atrx_tsv)) read.delim(atrx_tsv, colClasses = "character") else NULL
 if (is.null(ai)) cat("\n> **Not available.** `", atrx_tsv, "` was not found.\n\n", sep = "")
 
-# SK-N-SH: the normalised counts of the cell-line report's "Genes of interest".
-nc <- grab("deseq2", "E6_vs_TP53", "normalized_counts.csv")
-if (is.null(nc)) missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
+# SK-N-SH: the normalised counts of the cell-line report's "Genes of interest",
+# from the fit on the 12 E6-derived samples (DESeq2.sample_sets E6only), so
+# TP53 is neither plotted nor part of the normalisation.
+nc <- grab("deseq2", "ATRX_IFF_vs_ATRX_FL_E6only", "normalized_counts.csv")
+if (is.null(nc)) missing_note("deseq2", "ATRX_IFF_vs_ATRX_FL_E6only", "normalized_counts.csv")
 
 # Patients: the samples selected in "Patient cohort" (box_samples), on the
 # layout-corrected matrix.

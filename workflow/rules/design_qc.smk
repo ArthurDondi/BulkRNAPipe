@@ -233,3 +233,74 @@ rule DesignQC:
             --tag_name     "{params.tag_name}" \
             --gene_labels  "{params.gene_labels}"
         """
+
+
+# ─── The same QC on each DESeq2 sample set ───────────────────────────────────
+# A contrast fitted on a sample set (DESeq2.sample_sets) is normalised without
+# the other groups, so its QC is re-run on the same samples: size factors, the
+# marker panel and the VST correlations then match that fit. Library size,
+# assignment rate and genes detected are per sample and do not change.
+if DESEQ2_SAMPLE_SETS:
+    rule DesignQCSampleSet:
+        """Design QC on the samples of one DESeq2 sample set."""
+        input:
+            counts  = "quantify/counts.txt",
+            summary = "quantify/counts.txt.summary",
+            total   = "design_qc/total_feature_counts.txt" if DESIGN_QC_TOTAL_GENES else [],
+            tag     = "design_qc/tag_counts.txt" if DESIGN_QC_TAG_REGIONS else [],
+        output:
+            library_size = "design_qc/{qc_set}/library_size.pdf",
+            genes_det    = "design_qc/{qc_set}/genes_detected.pdf",
+            markers      = "design_qc/{qc_set}/marker_expression.pdf",
+            markers_lin  = "design_qc/{qc_set}/marker_expression_linear.pdf",
+            markers_csv  = "design_qc/{qc_set}/marker_expression.csv",
+            goi          = "design_qc/{qc_set}/goi_expression.pdf",
+            goi_csv      = "design_qc/{qc_set}/goi_expression.csv",
+            correlation  = "design_qc/{qc_set}/sample_correlation.pdf",
+            correlation_csv = "design_qc/{qc_set}/sample_correlation.csv",
+            distance     = "design_qc/{qc_set}/sample_distance.pdf",
+            summary_csv  = "design_qc/{qc_set}/design_qc_summary.csv",
+        wildcard_constraints:
+            qc_set = "|".join(DESEQ2_SAMPLE_SETS),
+        params:
+            script  = f"{workflow.basedir}/scripts/design_qc.R",
+            outdir  = "design_qc/{qc_set}",
+            samples = lambda wildcards: ",".join(
+                f"{s}:{config['samples'][s]['condition']}" for s in SAMPLES
+                if config['samples'][s]['condition'] in DESEQ2_SAMPLE_SETS[wildcards.qc_set]
+            ),
+            marker_genes = ",".join(DESIGN_QC_GENES),
+            goi_genes    = ",".join(DESIGN_QC_GOI),
+            total_counts = "design_qc/total_feature_counts.txt" if DESIGN_QC_TOTAL_GENES else "",
+            total_name   = DESIGN_QC_TOTAL_NAME,
+            tag_counts   = "design_qc/tag_counts.txt" if DESIGN_QC_TAG_REGIONS else "",
+            tag_name     = DESIGN_QC_TAG_NAME,
+            gene_labels  = DESIGN_QC_LABELS,
+        threads: 1
+        resources:
+            mem_mb        = 4000,
+            runtime       = 30,
+            cpus_per_task = 1,
+        conda:
+            "../envs/deseq2.yaml"
+        log:
+            "logs/DesignQC/design_qc_{qc_set}.log"
+        benchmark:
+            "benchmark/DesignQC/design_qc_{qc_set}.benchmark.txt"
+        shell:
+            r"""
+            exec > {log} 2>&1
+            mkdir -p {params.outdir}
+            Rscript {params.script} \
+                --counts       {input.counts} \
+                --summary      {input.summary} \
+                --outdir       {params.outdir} \
+                --samples      {params.samples} \
+                --marker_genes "{params.marker_genes}" \
+                --goi_genes    "{params.goi_genes}" \
+                --total_counts "{params.total_counts}" \
+                --total_name   "{params.total_name}" \
+                --tag_counts   "{params.tag_counts}" \
+                --tag_name     "{params.tag_name}" \
+                --gene_labels  "{params.gene_labels}"
+            """

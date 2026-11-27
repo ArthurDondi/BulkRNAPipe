@@ -80,6 +80,16 @@ samples:
 DESeq2:
   contrasts:
     - [treatment_vs_control, treatment, control]
+    # Optional fourth element: fit only the samples of a sample set (below).
+    #   - [treatment_vs_control_subset, treatment, control, my_subset]
+
+  # ─── Sample sets (optional) ────────────────────────────────────────────────
+  # Conditions a contrast with a fourth element is fitted on: size factors,
+  # dispersions and the low-count filter then ignore every other group.
+  # DesignQC is re-run on each set, under design_qc/{set}/.
+  #
+  #   sample_sets:
+  #     my_subset: [treatment, control]
 
   # ─── Combined / derived conditions (optional) ──────────────────────────────
   # Merge two or more existing condition labels into one new label for DESeq2

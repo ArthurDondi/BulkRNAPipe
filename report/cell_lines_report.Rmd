@@ -12,6 +12,10 @@ params:
   condition_levels: !r c("TP53", "E6", "EmptyVector", "ATRX_FL", "ATRX_IFF")
   # The contrast the report leads with.
   headline_contrast: "ATRX_IFF_vs_ATRX_FL"
+  # From "The E6 lineage alone" on, the E6-derived samples are re-analysed on
+  # their own: DESeq2.sample_sets in config_epicode.yaml. The contrasts fitted
+  # on it are named <contrast>_<e6_set>, its design QC is design_qc/<e6_set>/.
+  e6_set: "E6only"
   # ATRX_FL, ATRX_IFF, EGFP and mCherry are NOT listed here even though they
   # are constructs, not biology: with DesignQC.total_feature.substitute_as and
   # downstream_exclude_genes set (see config_epicode.yaml), the pipeline
@@ -145,14 +149,16 @@ data.frame(
 ## Library-level metrics
 
 ```{r qc-lib, fig.height = 6}
-if (is.null(qc)) missing_note("design_qc", "design_qc_summary.csv") else {
+# The QC panels are functions: they are drawn again on the E6-derived samples
+# alone (design_qc/<e6_set>/) in "The E6 lineage alone".
+qc_library_plot <- function(qc_tab) {
   # "Reads assigned" alone has no denominator - a low bar could mean a small
   # library or a poor assignment rate. featureCounts' own total is recovered
   # from assigned_reads and pct_assigned so both are on the page.
-  d <- qc %>% mutate(condition = cond_factor(condition),
-                     sample = factor(sample, levels = meta$sample),
-                     total_reads = if ("pct_assigned" %in% names(qc))
-                       assigned_reads / (pct_assigned / 100) else NA_real_)
+  d <- qc_tab %>% mutate(condition = cond_factor(condition),
+                         sample = factor(sample, levels = meta$sample),
+                         total_reads = if ("pct_assigned" %in% names(qc_tab))
+                           assigned_reads / (pct_assigned / 100) else NA_real_)
   lvls <- c("Total reads (featureCounts input)", "Reads assigned to genes",
             "% reads assigned", "Genes detected")
   print(
@@ -176,6 +182,7 @@ if (is.null(qc)) missing_note("design_qc", "design_qc_summary.csv") else {
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
 }
+if (is.null(qc)) missing_note("design_qc", "design_qc_summary.csv") else qc_library_plot(qc)
 ```
 
 > No group-linked shift in either depth, complexity or assignment rate. The libraries
@@ -207,8 +214,8 @@ reads:
   `ATRX_FL` expression comparison.
 
 ```{r qc-markers, fig.height = 11}
-mk <- gene_long(grab("design_qc", "marker_expression.csv"), meta)
-if (is.null(mk)) missing_note("design_qc", "marker_expression.csv") else {
+qc_markers_plot <- function(mk_csv) {
+  mk <- gene_long(mk_csv, meta)
   # Keep the CSV's row order (ATRX_Total and Tag first) instead of letting
   # ggplot sort the facets alphabetically, and match the pipeline's ATRX_wt
   # label. The CSV itself keeps the real feature IDs.
@@ -224,19 +231,24 @@ if (is.null(mk)) missing_note("design_qc", "marker_expression.csv") else {
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
 }
+mk2 <- grab("design_qc", "marker_expression.csv")
+if (is.null(mk2)) missing_note("design_qc", "marker_expression.csv") else qc_markers_plot(mk2)
 ```
 
 ```{r qc-atrx-table}
-mk2 <- grab("design_qc", "marker_expression.csv")
-if (!is.null(mk2) && "ATRX" %in% mk2$gene_id && !is.null(meta)) {
-  gene_long(mk2, meta) %>% filter(gene_id == "ATRX") %>%
+# ref: the condition the "% of" column is relative to (NULL: no such column).
+qc_atrx_table <- function(mk_csv, ref = NULL) {
+  if (is.null(mk_csv) || !"ATRX" %in% mk_csv$gene_id || is.null(meta)) return(invisible())
+  t <- gene_long(mk_csv, meta) %>% filter(gene_id == "ATRX") %>%
     group_by(condition) %>%
     summarise(mean = round(mean(value)), min = round(min(value)),
-              max = round(max(value)), .groups = "drop") %>%
-    mutate(`% of TP53` = round(100 * mean / mean[condition == "TP53"]),
-           `fold spread` = sprintf("%.1fx", max / pmax(min, 1))) %>%
-    kable(caption = "ATRX_wt (endogenous locus), normalised counts")
+              max = round(max(value)), .groups = "drop")
+  if (!is.null(ref) && ref %in% t$condition)
+    t[[paste("% of", ref)]] <- round(100 * t$mean / t$mean[t$condition == ref])
+  t$`fold spread` <- sprintf("%.1fx", t$max / pmax(t$min, 1))
+  kable(t, caption = "ATRX_wt (endogenous locus), normalised counts")
 }
+qc_atrx_table(mk2, ref = "TP53")
 ```
 
 > `EGFP`/`mCherry` are present only in the transduced groups, although with large
@@ -251,24 +263,28 @@ if (!is.null(mk2) && "ATRX" %in% mk2$gene_id && !is.null(meta)) {
 ## Sample–sample correlation
 
 ```{r qc-cor, fig.height = 6}
-cm <- grab("design_qc", "sample_correlation.csv")
-if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
+# values = TRUE prints rho in each tile.
+qc_cor_plot <- function(cm, title, subtitle = NULL, values = FALSE) {
   m <- as.matrix(cm[, -1]); rownames(m) <- cm$sample
   ord <- meta$sample[meta$sample %in% rownames(m)]
   m <- m[ord, ord]
-  print(
-    as.data.frame(as.table(m)) %>%
-      setNames(c("x", "y", "rho")) %>%
-      mutate(x = factor(x, ord), y = factor(y, rev(ord))) %>%
-      ggplot(aes(x, y, fill = rho)) +
-      geom_tile(colour = "white", linewidth = 0.3) +
-      scale_fill_gradient(low = "white", high = "#2166AC") +
-      coord_fixed() +
-      labs(title = "Spearman correlation (VST)", x = NULL, y = NULL) +
-      theme(axis.text.x = element_text(angle = 45, hjust = 1),
-            panel.grid = element_blank())
-  )
+  p <- as.data.frame(as.table(m)) %>%
+    setNames(c("x", "y", "rho")) %>%
+    mutate(x = factor(x, ord), y = factor(y, rev(ord))) %>%
+    ggplot(aes(x, y, fill = rho)) +
+    geom_tile(colour = "white", linewidth = 0.3) +
+    scale_fill_gradient(low = "white", high = "#2166AC") +
+    coord_fixed() +
+    labs(title = title, subtitle = subtitle, x = NULL, y = NULL) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1),
+          panel.grid = element_blank())
+  if (values) p <- p + geom_text(aes(label = sprintf("%.3f", rho)), size = 2.1,
+                                 colour = "grey20")
+  print(p)
 }
+cm <- grab("design_qc", "sample_correlation.csv")
+if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else
+  qc_cor_plot(cm, "Spearman correlation (VST)")
 ```
 
 > Replicates should form tight blocks on the diagonal. There is a very strong clonal effect between TP53 and E6 samples, that almost obfuscate the replicates correlation.
@@ -507,6 +523,55 @@ transduction step. Differences here are attributable to the construct — the tw
 effects we could not separate above are now held constant by design rather than
 corrected for.
 
+From here to the end of the report, the 12 E6-derived samples are analysed on
+their own: the design QC and DESeq2 are re-fitted without `TP53` (sample set
+`E6only` in `config_epicode.yaml`; contrasts named `<contrast>_E6only`), so
+size factors, dispersions and the low-count filter no longer see the TP53
+clone. The sections above keep the 15-sample fit.
+
+```{r e6-setup}
+# Output name of a contrast (or shared-genes comparison) fitted on the
+# E6-derived samples only.
+E6FIT <- function(name) paste0(name, "_", params$e6_set)
+```
+
+## Quality control, E6-derived only
+
+### Library-level metrics
+
+Per-sample values: the same as above, without `TP53`.
+
+```{r e6-qc-lib, fig.height = 6}
+qc_e6 <- grab("design_qc", params$e6_set, "design_qc_summary.csv")
+if (is.null(qc_e6)) missing_note("design_qc", params$e6_set, "design_qc_summary.csv") else
+  qc_library_plot(qc_e6)
+```
+
+### ATRX and vector markers
+
+Normalised with size factors estimated on the 12 E6-derived samples.
+
+```{r e6-qc-markers, fig.height = 9}
+mk_e6 <- grab("design_qc", params$e6_set, "marker_expression.csv")
+if (is.null(mk_e6)) missing_note("design_qc", params$e6_set, "marker_expression.csv") else
+  qc_markers_plot(mk_e6)
+```
+
+```{r e6-qc-atrx-table}
+qc_atrx_table(mk_e6)
+```
+
+### Sample–sample correlation
+
+Variance-stabilised on the 12 E6-derived samples.
+
+```{r e6-qc-cor, fig.height = 5.5}
+cm_e6 <- grab("design_qc", params$e6_set, "sample_correlation.csv")
+if (is.null(cm_e6)) missing_note("design_qc", params$e6_set, "sample_correlation.csv") else
+  qc_cor_plot(cm_e6, "Spearman correlation (VST), E6-derived samples only",
+              values = TRUE)
+```
+
 ## PCA, E6-derived samples only
 
 ```{r e6-pca, fig.height = 5}
@@ -531,39 +596,6 @@ if (is.null(co)) {
 }
 ```
 
-## Sample–sample correlation, E6-derived only
-
-Pairwise correlations are unchanged by dropping TP53 — but the colour scale
-rescales to the range that remains, so differences compressed by the clonal
-outlier become visible.
-
-```{r e6-cor, fig.height = 5.5}
-if (is.null(cm)) missing_note("design_qc", "sample_correlation.csv") else {
-  m <- as.matrix(cm[, -1]); rownames(m) <- cm$sample
-  keep <- meta$sample[meta$condition != "TP53" & meta$sample %in% rownames(m)]
-  if (length(keep) < 3) {
-    cat("\n> Fewer than 3 non-TP53 samples — nothing to plot.\n\n")
-  } else {
-    m <- m[keep, keep]
-    print(
-      as.data.frame(as.table(m)) %>%
-        setNames(c("x", "y", "rho")) %>%
-        mutate(x = factor(x, keep), y = factor(y, rev(keep))) %>%
-        ggplot(aes(x, y, fill = rho)) +
-        geom_tile(colour = "white", linewidth = 0.3) +
-        geom_text(aes(label = sprintf("%.3f", rho)), size = 2.1, colour = "grey20") +
-        scale_fill_gradient(low = "white", high = "#2166AC") +
-        coord_fixed() +
-        labs(title = "Spearman correlation (VST), TP53 excluded",
-             subtitle = "scale rescaled to the E6 lineage",
-             x = NULL, y = NULL) +
-        theme(axis.text.x = element_text(angle = 45, hjust = 1),
-              panel.grid = element_blank())
-    )
-  }
-}
-```
-
 ## The three construct comparisons
 
 ```{r e6-three, fig.height = 4.5, results = "asis"}
@@ -575,9 +607,9 @@ trio <- list(
 )
 trio_tally <- list()
 for (t4 in trio) {
-  r <- de_results("deseq2", t4[1], "results.csv")
+  r <- de_results("deseq2", E6FIT(t4[1]), "results.csv")
   cat("\n\n###", t4[4], "\n\n")
-  if (is.null(r)) { missing_note("deseq2", t4[1], "results.csv"); next }
+  if (is.null(r)) { missing_note("deseq2", E6FIT(t4[1]), "results.csv"); next }
   trio_tally[[t4[1]]] <- de_counts(r)
   print(volcano(r, t4[1], num = t4[2], den = t4[3]))
   cat("\n\n")
@@ -589,9 +621,9 @@ for (t4 in trio) {
 ### The two constructs against each other
 
 ```{r e6-three-fl-iff-rna, fig.height = 4.5, results = "asis"}
-r_fl_iff <- de_results("deseq2", "ATRX_IFF_vs_ATRX_FL", "results.csv")
+r_fl_iff <- de_results("deseq2", E6FIT("ATRX_IFF_vs_ATRX_FL"), "results.csv")
 if (is.null(r_fl_iff)) {
-  missing_note("deseq2", "ATRX_IFF_vs_ATRX_FL", "results.csv")
+  missing_note("deseq2", E6FIT("ATRX_IFF_vs_ATRX_FL"), "results.csv")
 } else {
   trio_tally[["ATRX_IFF_vs_ATRX_FL"]] <- de_counts(r_fl_iff)
   print(volcano(r_fl_iff, "ATRX_IFF_vs_ATRX_FL", num = "ATRX_IFF", den = "ATRX_FL"))
@@ -647,15 +679,14 @@ if (length(trio_tally)) {
 ## Genes of interest, E6 lineage only
 
 ```{r e6-goi, fig.height = 4}
-# Size factors (and so normalised counts) are fit from all samples for every
-# contrast, so any contrast's normalized_counts.csv carries the same values —
-# reuse E6_vs_TP53, already grabbed above.
-goi <- gene_long(grab("deseq2", "E6_vs_TP53", "normalized_counts.csv"), meta)
+# Every E6-only contrast is fitted on the same 12 samples, so any of them
+# carries the same normalised counts.
+goi <- gene_long(grab("deseq2", E6FIT("ATRX_IFF_vs_ATRX_FL"), "normalized_counts.csv"), meta)
 if (!is.null(goi)) {
   goi <- goi %>% filter(tolower(gene_id) %in% tolower(params$highlight_genes))
 }
 if (is.null(goi) || nrow(goi) == 0) {
-  missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
+  missing_note("deseq2", E6FIT("ATRX_IFF_vs_ATRX_FL"), "normalized_counts.csv")
 } else {
   print(
     goi %>% filter(condition != "TP53") %>%
@@ -667,7 +698,7 @@ if (is.null(goi) || nrow(goi) == 0) {
                     width = .25, linewidth = .3) +
       facet_wrap(~ gene_id, scales = "free_y", nrow = 1) +
       scale_fill_manual(values = PAL, guide = "none") +
-      labs(title = "Genes of interest, TP53 excluded", x = NULL,
+      labs(title = "Genes of interest, E6-derived samples", x = NULL,
            y = "normalised count") +
       theme(axis.text.x = element_text(angle = 45, hjust = 1))
   )
@@ -693,9 +724,9 @@ and not necessarily individually significant.
 # EDIT: which contrasts to show enrichment for.
 for (cn in c("ATRX_IFF_vs_ATRX_FL", "ATRX_FL_vs_EmptyVector",
              "ATRX_IFF_vs_EmptyVector")) {
-  g <- grab("gsea", cn, "H_results.csv")
+  g <- grab("gsea", E6FIT(cn), "H_results.csv")
   cat("\n\n##", cn, "\n\n")
-  if (is.null(g)) { missing_note("gsea", cn, "H_results.csv"); next }
+  if (is.null(g)) { missing_note("gsea", E6FIT(cn), "H_results.csv"); next }
   gsea_dot(g, paste("Hallmark:", cn))
 }
 ```
@@ -780,9 +811,9 @@ for (slug in names(CATEGORY_LABELS)) {
   cat("\n\n###", label, "\n\n")
 
   cat("\n\n**KEGG** — significant pathways in the category\n\n")
-  gk <- grab("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+  gk <- grab("gsea", E6FIT(cn), "kegg", paste0(slug, "_results.csv"))
   if (is.null(gk)) {
-    missing_note("gsea", cn, "kegg", paste0(slug, "_results.csv"))
+    missing_note("gsea", E6FIT(cn), "kegg", paste0(slug, "_results.csv"))
   } else {
     cat_dot(gk, paste("KEGG:", label))
   }
@@ -790,9 +821,9 @@ for (slug in names(CATEGORY_LABELS)) {
 
   cat("\n\n**GO** — keyword match on term names\n\n")
   cat(sprintf("\n> include: `%s`\n\n", GO_KEYWORDS[[slug]]))
-  gg <- grab("gsea", cn, "go", paste0(slug, "_results.csv"))
+  gg <- grab("gsea", E6FIT(cn), "go", paste0(slug, "_results.csv"))
   if (is.null(gg)) {
-    missing_note("gsea", cn, "go", paste0(slug, "_results.csv"))
+    missing_note("gsea", E6FIT(cn), "go", paste0(slug, "_results.csv"))
   } else {
     gg <- gg[!is.na(gg$padj) & gg$padj < params$padj, , drop = FALSE]
     n_matched <- nrow(gg)
@@ -800,7 +831,7 @@ for (slug in names(CATEGORY_LABELS)) {
     if (n_matched > GO_TOP_N) {
       cat(sprintf(
         "\n> top %d of %d significant terms by padj; all matches are in `gsea/%s/go/%s_results.csv`\n\n",
-        GO_TOP_N, n_matched, cn, slug))
+        GO_TOP_N, n_matched, E6FIT(cn), slug))
       gg <- gg[seq_len(GO_TOP_N), , drop = FALSE]
     }
     gg$pathway <- gsub("^GOBP_", "", gg$pathway)
@@ -828,9 +859,9 @@ genes tested in both contrasts, BH-adjusted), not GSEA.
 ```{r shared-venn, fig.width = 9, fig.height = 3.8, results = "asis"}
 # SharedGenes.comparisons entry in config_epicode.yaml (pipeline outputs under
 # shared_genes/<name>/).
-SHARED_NAME <- "ATRX_FL_and_ATRX_IFF_vs_EmptyVector"
-r_fl  <- de_results("deseq2", "ATRX_FL_vs_EmptyVector", "results.csv")
-r_iff <- de_results("deseq2", "ATRX_IFF_vs_EmptyVector", "results.csv")
+SHARED_NAME <- E6FIT("ATRX_FL_and_ATRX_IFF_vs_EmptyVector")
+r_fl  <- de_results("deseq2", E6FIT("ATRX_FL_vs_EmptyVector"), "results.csv")
+r_iff <- de_results("deseq2", E6FIT("ATRX_IFF_vs_EmptyVector"), "results.csv")
 
 # Same calls as the pipeline's SharedGenes rule and every DE table above.
 sig_genes <- function(r, sign) r$gene_id[!is.na(r$padj) & r$padj < params$padj &
@@ -868,8 +899,8 @@ venn_plot <- function(sets) {
 }
 
 if (is.null(r_fl) || is.null(r_iff)) {
-  if (is.null(r_fl))  missing_note("deseq2", "ATRX_FL_vs_EmptyVector", "results.csv")
-  if (is.null(r_iff)) missing_note("deseq2", "ATRX_IFF_vs_EmptyVector", "results.csv")
+  if (is.null(r_fl))  missing_note("deseq2", E6FIT("ATRX_FL_vs_EmptyVector"), "results.csv")
+  if (is.null(r_iff)) missing_note("deseq2", E6FIT("ATRX_IFF_vs_EmptyVector"), "results.csv")
 } else {
   sets <- list(
     "Higher in the construct" = list(ATRX_FL = sig_genes(r_fl, 1), ATRX_IFF = sig_genes(r_iff, 1)),
@@ -911,7 +942,7 @@ survive multiple-testing correction, so the plots show gene sets with a
 collection); hollow points pass the nominal threshold only and are leads to
 follow up, not results. Fold enrichment is the observed overlap over the
 overlap expected by chance;
-`shared_genes/ATRX_FL_and_ATRX_IFF_vs_EmptyVector/ora_*.csv` keeps every set
+`shared_genes/ATRX_FL_and_ATRX_IFF_vs_EmptyVector_E6only/ora_*.csv` keeps every set
 tested, with both `pvalue` and `padj`.
 
 ```{r shared-ora, fig.height = 4.5, results = "asis"}
@@ -985,11 +1016,11 @@ short_name <- function(x, n = 45) {
 for (slug in names(GSEA_SHARED)) {
   cat("\n\n###", GSEA_SHARED[[slug]], "\n\n")
   f <- paste0(slug, "_results.csv")
-  fl  <- grab("gsea", "ATRX_FL_vs_EmptyVector", f)
-  iff <- grab("gsea", "ATRX_IFF_vs_EmptyVector", f)
+  fl  <- grab("gsea", E6FIT("ATRX_FL_vs_EmptyVector"), f)
+  iff <- grab("gsea", E6FIT("ATRX_IFF_vs_EmptyVector"), f)
   if (is.null(fl) || is.null(iff)) {
-    if (is.null(fl))  missing_note("gsea", "ATRX_FL_vs_EmptyVector", f)
-    if (is.null(iff)) missing_note("gsea", "ATRX_IFF_vs_EmptyVector", f)
+    if (is.null(fl))  missing_note("gsea", E6FIT("ATRX_FL_vs_EmptyVector"), f)
+    if (is.null(iff)) missing_note("gsea", E6FIT("ATRX_IFF_vs_EmptyVector"), f)
     next
   }
   cols <- c("pathway", "NES", "padj", "size", "leadingEdge")

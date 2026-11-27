@@ -21,9 +21,12 @@ rule DESeq2:
         # get_contrast_effective_condition() applies only the combine_conditions
         # groups that are referenced by this specific contrast, allowing the
         # same source condition to participate in different groups across contrasts.
+        # get_contrast_samples() restricts the fit to the contrast's sample set,
+        # when it names one (DESeq2.sample_sets).
         sample_conditions = lambda wildcards: (
             lambda ce: ",".join(
-                f"{s}:{get_contrast_effective_condition(s, ce)}" for s in SAMPLES
+                f"{s}:{get_contrast_effective_condition(s, ce)}"
+                for s in get_contrast_samples(ce)
             )
         )(next(c for c in config['DESeq2']['contrasts'] if c[0] == wildcards.contrast)),
     threads: 2

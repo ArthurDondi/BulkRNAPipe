@@ -50,6 +50,9 @@ rule BulkRNAPipe_output:
         # requested by name rather than only as a side effect of that one file.
         "design_qc/marker_expression.pdf" if DESEQ2 else [],
         "design_qc/goi_expression.pdf" if DESEQ2 else [],
+        # The same QC on each DESeq2 sample set (DESeq2.sample_sets).
+        expand("design_qc/{qc_set}/design_qc_summary.csv",
+               qc_set=list(DESEQ2_SAMPLE_SETS)) if DESEQ2 else [],
         # ── Interaction contrasts (difference of differences) ─────────────────
         expand("deseq2_interaction/{interaction}/results.csv",
                interaction=INTERACTIONS) if DESEQ2 else [],

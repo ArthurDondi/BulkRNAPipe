@@ -15,8 +15,9 @@
 # Run the whole BulkRNAPipe Snakemake workflow on the SLURM cluster, then
 # re-render the two analysis reports (cell lines, patients).
 #
-# Two Snakemake calls, in order: (1) the default target, i.e. every pipeline
-# output; (2) the reports, forced. The Report rule only declares
+# Three Snakemake calls, in order: (0) a dry run that logs which jobs will
+# run; (1) the default target, i.e. every pipeline output; (2) the reports,
+# forced. The Report rule only declares
 # design_qc/design_qc_summary.csv as input, so in a single call it could
 # render before the GSEA / SharedGenes outputs exist, and an existing report
 # would count as up to date even after its Rmd changed.
@@ -40,6 +41,12 @@
 # holds /path/to/... placeholders, so it is never the default.
 #
 # Edit the #SBATCH log paths / --mail-user above for your account.
+#
+# Rerunning after a config change (e.g. new contrasts or DESeq2.sample_sets):
+# only the missing or outdated outputs are built; existing ones are kept unless
+# their inputs, params or conda env changed (rerun-triggers in the profile).
+# If a previous controller was killed, unlock the output directory first:
+#   snakemake -s workflow/Snakefile --configfile config/config_epicode.yaml --unlock
 
 set -euo pipefail
 
@@ -72,11 +79,25 @@ echo "config     : $CONFIG"
 echo "======================"
 
 # Rerun triggers (mtime, params, software-env) come from the profile.
-# 1. The whole workflow: the default target, BulkRNAPipe_output.
+# 0. What will run, per rule, into this job's log (nothing is submitted).
 snakemake \
     -s workflow/Snakefile \
     --configfile "$CONFIG" \
-    --workflow-profile profile/slurm
+    --workflow-profile profile/slurm \
+    --rerun-incomplete \
+    --dry-run --quiet rules
+
+# 1. The whole workflow: the default target, BulkRNAPipe_output.
+#    --rerun-incomplete: rebuild outputs left half-written by a killed job.
+#    --keep-going: one failing job does not stop the independent ones; the
+#    exit status is still non-zero, so step 2 is skipped (set -e) and the
+#    reports are never rendered from an incomplete run.
+snakemake \
+    -s workflow/Snakefile \
+    --configfile "$CONFIG" \
+    --workflow-profile profile/slurm \
+    --rerun-incomplete \
+    --keep-going
 
 # 2. The reports, always re-rendered, now that every output above exists.
 #    --forcerun Report re-runs both (the rule renders one report per target).

@@ -150,6 +150,26 @@ DESeq2:
     # Compare ATRX+ cell line vs. ATRX FL (rescue experiment)
     - [ATRX_FL_vs_TP53, ATRX_FL, TP53]
 
+    # The within-E6 contrasts again, fitted on the 12 E6-derived samples only
+    # (sample set E6only below): TP53 no longer enters the size factors,
+    # dispersions or low-count filter. The report uses these from "The E6
+    # lineage alone" onwards; the contrasts above (15-sample fit) stay for the
+    # TP53 sections and the signature reversal.
+    - [EmptyVector_vs_E6_E6only, EmptyVector, E6, E6only]
+    - [ATRX_FL_vs_EmptyVector_E6only, ATRX_FL, EmptyVector, E6only]
+    - [ATRX_IFF_vs_EmptyVector_E6only, ATRX_IFF, EmptyVector, E6only]
+    - [ATRX_IFF_vs_ATRX_FL_E6only, ATRX_IFF, ATRX_FL, E6only]
+
+  # ─── Sample sets ────────────────────────────────────────────────────────────
+  # A contrast with a fourth element fits only the samples of that set (see
+  # above). DesignQC is re-run for each set, under design_qc/{set}/.
+  sample_sets:
+    E6only:
+      - E6
+      - EmptyVector
+      - ATRX_FL
+      - ATRX_IFF
+
 
   # ─── Combined / derived conditions ─────────────────────────────────────────
   # Optional: merge two or more existing condition labels into one new label
@@ -370,6 +390,9 @@ Proteomics:
     ATRX_IFF_vs_ATRX_FL:                "S1744_vs_S1011"
     ATRX_FL_vs_TP53:               "S1011_vs_control"
     ATRX_IFF_vs_TP53:              "S1744_vs_control"
+    # The same comparisons on the E6-only fit.
+    EmptyVector_vs_E6_E6only:      "S1760_vs_SE6"
+    ATRX_IFF_vs_ATRX_FL_E6only:    "S1744_vs_S1011"
 
 # ─── GSEA parameters ─────────────────────────────────────────────────────────
 GSEA:
@@ -544,6 +567,10 @@ SharedGenes:
     - name: ATRX_FL_and_ATRX_IFF_vs_EmptyVector
       contrast_A: ATRX_FL_vs_EmptyVector
       contrast_B: ATRX_IFF_vs_EmptyVector
+    # The same on the E6-only fit (used by the report).
+    - name: ATRX_FL_and_ATRX_IFF_vs_EmptyVector_E6only
+      contrast_A: ATRX_FL_vs_EmptyVector_E6only
+      contrast_B: ATRX_IFF_vs_EmptyVector_E6only
 
 # ─── Tool parameters ─────────────────────────────────────────────────────────
 TrimGalore:
