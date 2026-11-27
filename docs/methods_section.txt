@@ -100,24 +100,57 @@ proteins differentially enriched between the constructs in the co-IP/MS analysis
 RNA and protein changes were considered concordant when their log2 fold-changes
 had the same sign.
 
+Neuroblastoma patient cohort
+Bulk RNA-seq data from an in-house neuroblastoma cohort (<reference; ethics
+approval>) had previously been trimmed with fastp (Chen et al., 2018),
+quantified with Salmon (Patro et al., 2017), summarised to genes with tximeta
+(Love et al., 2020) and filtered with edgeR filterByExpr (Robinson et al., 2010;
+Chen et al., 2016), retaining 14,604 of 38,269 genes. Normalised counts were
+used without correction for statistical testing, and after removal of the
+library layout effect (single-end unstranded, single-end stranded, paired-end)
+with limma removeBatchEffect (Ritchie et al., 2015), with sample material
+retained in the design, for visualisation only. Values were log2(x +
+1)-transformed after setting negative values to zero. Tumour samples were
+classified as ATRX-deleted, MYCN-amplified (ATRX wild type) or ATRX and MYCN
+wild type, and assigned to primary tumour or bone marrow disseminated tumour
+cells (DTC) at diagnosis, treatment or relapse; tumour-free bone marrow served
+as control. Samples lacking a classification, tissue, time point or library
+layout annotation, or absent from either expression matrix, were excluded (<N>
+samples from <N> patients included). Analyses were performed on five overlapping
+sample sets: all tumour samples, primary tumours at diagnosis, all DTC samples,
+DTC at diagnosis and DTC at relapse. PCA was performed on the 2,000 most
+variable genes among those with log2 expression > 1 in at least two samples.
+
 Expression of candidate ATRX interactors
 Candidate direct interactors of each ATRX construct were selected from
 co-IP/MS-enriched proteins by AlphaFold2 interaction modelling (Jumper et al.,
 2021; <reference to methods>). Expression of the corresponding genes was
-examined as log2(normalised counts + 1) in the RNA-seq samples described above
-and in an in-house neuroblastoma bulk RNA-seq cohort (<reference; ethics
-approval>). Cohort data were previously trimmed with fastp (Chen et al., 2018),
-quantified with Salmon (Patro et al., 2017) and summarised to genes with tximeta
-(Love et al., 2020), filtered with edgeR filterByExpr (Robinson et al., 2010;
-Chen et al., 2016), and corrected for library layout with limma
-removeBatchEffect (Ritchie et al., 2015), with sample material retained in the
-design. Primary tumour and disseminated tumour cell samples were grouped by ATRX
-deletion and, for ATRX wild-type samples, by MYCN amplification status, and by
-time point (diagnosis, treatment, relapse), with tumour-free bone marrow as
-control. Samples with ambiguous ATRX or MYCN status (ATRX gain, Xq loss,
-heterogeneous MYCN amplification) or missing annotation were excluded, samples
-from the same patient were averaged, and groups with two or fewer patients were
-not shown (<N> samples from <N> patients included).
+examined as log2(normalised counts + 1) in the SK-N-SH samples and as
+layout-corrected log2 expression in the patient cohort, for each tumour group
+and sample set, with control bone marrow shown for reference. Samples from the
+same patient within a sample set were averaged.
+
+Differential expression and pathway analysis in patients
+Differential expression between the three tumour groups was analysed separately
+in each sample set with limma (v3.62.1; Ritchie et al., 2015) on uncorrected
+log2(normalised counts + 1), using limma-trend (Law et al., 2014) with robust
+empirical Bayes moderation (Phipson et al., 2016). The design included tumour
+group and library layout and, in the pooled sample sets, sample category
+(sum-to-zero coding). Where patients contributed several samples, patient was
+treated as a blocking factor, with the within-patient correlation estimated
+using duplicateCorrelation (Smyth et al., 2005). Genes with log2 expression > 1
+in at least as many samples as the smallest group were tested. Pairwise
+comparisons between groups with at least two samples each were extracted as
+contrasts, P values were adjusted using the Benjamini–Hochberg method, and genes
+with FDR < 0.05 and |log2 fold-change| ≥ 1 were considered differentially
+expressed. Control bone marrow was not tested.
+For each comparison, pre-ranked GSEA was performed with fgsea on genes ranked by
+the moderated t-statistic, using the Hallmark, GO-BP and KEGG gene sets and size
+limits described above. In addition, pathway activity was scored per sample with
+GSVA (v2.0.0, Gaussian kernel; Hänzelmann et al., 2013) and the scores were
+fitted with the same limma design. Differences across the three tumour groups
+were tested with a moderated F-test (Smyth, 2004), followed by pairwise
+contrasts with Benjamini–Hochberg correction within each pair.
 
 ---
 
@@ -160,6 +193,9 @@ results for multiple tools and samples in a single report. Bioinformatics.
 Golub GH & Van Loan CF (1980) An analysis of the total least squares problem.
 SIAM Journal on Numerical Analysis. 17(6):883–893.
 
+Hänzelmann S, Castelo R, Guinney J (2013) GSVA: gene set variation analysis for
+microarray and RNA-Seq data. BMC Bioinformatics. 14:7.
+
 Jumper J, Evans R, Pritzel A, Green T, Figurnov M, Ronneberger O,
 Tunyasuvunakool K, Bates R, Žídek A, Potapenko A, et al. (2021) Highly accurate
 protein structure prediction with AlphaFold. Nature. 596(7873):583–589.
@@ -172,6 +208,9 @@ Fast gene set enrichment analysis. bioRxiv. 060012.
 
 Krueger F (2023) Trim Galore (v0.6.10).
 <https://github.com/FelixKrueger/TrimGalore>.
+
+Law CW, Chen Y, Shi W, Smyth GK (2014) voom: precision weights unlock linear
+model analysis tools for RNA-seq read counts. Genome Biology. 15(2):R29.
 
 Liao Y, Smyth GK, Shi W (2014) featureCounts: an efficient general purpose
 program for assigning sequence reads to genomic features. Bioinformatics.
@@ -203,6 +242,11 @@ Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C (2017) Salmon provides fast
 and bias-aware quantification of transcript expression. Nature Methods.
 14(4):417–419.
 
+Phipson B, Lee S, Majewski IJ, Alexander WS, Smyth GK (2016) Robust
+hyperparameter estimation protects against hypervariable genes and improves
+power to detect differential expression. The Annals of Applied Statistics.
+10(2):946–963.
+
 R Core Team (2024) R: A Language and Environment for Statistical Computing. R
 Foundation for Statistical Computing, Vienna, Austria.
 <https://www.R-project.org/>.
@@ -214,6 +258,14 @@ Nucleic Acids Research. 43(7):e47.
 Robinson MD, McCarthy DJ, Smyth GK (2010) edgeR: a Bioconductor package for
 differential expression analysis of digital gene expression data.
 Bioinformatics. 26(1):139–140.
+
+Smyth GK (2004) Linear models and empirical Bayes methods for assessing
+differential expression in microarray experiments. Statistical Applications in
+Genetics and Molecular Biology. 3(1):Article 3.
+
+Smyth GK, Michaud J, Scott HS (2005) Use of within-array replicate spots for
+assessing differential expression in microarray experiments. Bioinformatics.
+21(9):2067–2075.
 
 Subramanian A, Tamayo P, Mootha VK, Mukherjee S, Ebert BL, Gillette MA,
 Paulovich A, Pomeroy SL, Golub TR, Lander ES, Mesirov JP (2005) Gene set
