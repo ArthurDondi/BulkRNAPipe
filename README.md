@@ -848,12 +848,14 @@ ATRX_FL and ATRX_IFF.
 1. *Patient cohort*: the data (layout-corrected matrix for display,
    uncorrected for testing), how samples are grouped and categorised, one
    sample selection for the whole report (samples per group and category,
-   step by step, and every sample left out with its reason), the samples per
-   differential-expression analysis, and an overview PCA. Groups come from the
+   step by step, and every sample left out with its reason), the five sample
+   sets (all tumour, Tum dx, DTC pooled, DTC dx, DTC rel) used both for the
+   boxplots and the differential expression, and an overview PCA. Groups come from the
    `classification` column of `metadata_table_wStage.xlsx`; tissue, patient
    and timepoint from the sample ID.
 2. *ATRX interactors*: one row per interactor gene, the five SK-N-SH
-   conditions next to the patient groups.
+   conditions next to the patient groups, one box per sample set (one point
+   per patient) and one for the control.
 3. *Differential expression*: the patient groups ATRXdel, MYCNamp and
    ATRXwtMYCNwt compared pairwise (limma-trend on the uncorrected normalised
    counts with library layout as a covariate, fgsea on Hallmark, KEGG and

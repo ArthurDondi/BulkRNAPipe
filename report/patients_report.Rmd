@@ -182,19 +182,26 @@ if (is.null(nb_meta)) {
 NB_STATUS    <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt", "control")
 NB_CATEGORY  <- c("Tum dx", "Tum TRE", "Tum rel", "DTC dx", "DTC TRE", "DTC rel", "control")
 NB_TIMEPOINT <- c(DX = "dx", TRE = "TRE", REL = "rel")  # third field of omics_id
-NB_MIN_N     <- 2  # a category gets a boxplot only with more patients than this
 # The control bone marrow is not the same cells: shown in the boxplots, never tested.
 NB_TUMOUR <- c("ATRXdel", "MYCNamp", "ATRXwtMYCNwt")
 NB_GROUPS <- NB_TUMOUR
-# EDIT: the five differential-expression analyses. categories = NULL takes
-# every tumour category.
+# EDIT: the five sample sets, each one differential-expression analysis and
+# one box per group in the ATRX-interactor plots (label = the box's name).
+# categories = NULL takes every tumour category.
 NB_SETS <- list(
-  all_combined = list(title = "All tumour samples",           categories = NULL),
-  tumour_dx    = list(title = "Primary tumour, diagnosis",    categories = "Tum dx"),
-  BM_pooled    = list(title = "Bone marrow (DTC), all timepoints",
+  all_combined = list(title = "All tumour samples",           label = "All tumour",
+                      categories = NULL),
+  tumour_dx    = list(title = "Primary tumour, diagnosis",    label = "Tum dx",
+                      categories = "Tum dx"),
+  BM_pooled    = list(title = "Bone marrow (DTC), all timepoints", label = "DTC all",
                       categories = c("DTC dx", "DTC TRE", "DTC rel")),
-  BM_dx        = list(title = "Bone marrow (DTC), diagnosis", categories = "DTC dx"),
-  BM_relapse   = list(title = "Bone marrow (DTC), relapse",   categories = "DTC rel"))
+  BM_dx        = list(title = "Bone marrow (DTC), diagnosis", label = "DTC dx",
+                      categories = "DTC dx"),
+  BM_relapse   = list(title = "Bone marrow (DTC), relapse",   label = "DTC rel",
+                      categories = "DTC rel"))
+# A set's samples (NULL categories = every tumour category).
+nb_set_samples <- function(d, set)
+  if (is.null(set$categories)) d else d[d$category %in% set$categories, , drop = FALSE]
 NB_EXPR_MIN <- 1  # log2 scale: a gene is tested where above this in enough samples
 # Okabe-Ito colours: distinct from the cell-line condition palette.
 NB_GROUP_COL  <- c(ATRXdel = "#D55E00", MYCNamp = "#0072B2", ATRXwtMYCNwt = "#009E73")
@@ -216,8 +223,7 @@ if (!is.null(nb_counts))
 NB_REASONS <- c(
   tissue    = "tumour classification, but tissue not TUM or DTC",
   timepoint = "no timepoint (not DX, TRE or REL)",
-  layout    = "no library_layout (a covariate of the differential expression)",
-  control   = sprintf("control, %d or fewer patients", NB_MIN_N))
+  layout    = "no library_layout (a covariate of the differential expression)")
 
 nb_select <- function(meta, matrices) {
   clean <- function(x) trimws(ifelse(is.na(x), "", x))
@@ -259,27 +265,16 @@ nb_select <- function(meta, matrices) {
     is.na(m$category)                   ~ NB_REASONS[["timepoint"]],
     m$status != "control" & !nzchar(m$layout) ~ NB_REASONS[["layout"]],
     TRUE                                ~ NA_character_)
-  # Categories with too few patients for a boxplot (counted in patients: the
-  # libraries of one patient become one point). A small tumour category stays
-  # in the differential expression; a small control has nowhere to go.
-  key <- paste(m$status, m$category)
-  ok  <- is.na(m$reason)
-  n_pat <- tapply(m$patient[ok], key[ok], function(p) length(unique(p)))
-  m$n_patients <- as.integer(n_pat[key])
-  m$small <- ok & key %in% names(n_pat)[n_pat <= NB_MIN_N]
-  ctl <- m$small & m$status %in% "control"
-  m$reason[ctl] <- NB_REASONS[["control"]]
-  m$small[ctl] <- FALSE
   m
 }
 
 # cohort: every classified sample, with its reason if left out.
-# box_samples: the ATRX-interactor boxplots (control included, small categories not).
-# nb_de_samples: the differential expression (tumour groups, small categories included).
+# box_samples: the ATRX-interactor boxplots (the tumour samples and the control).
+# nb_de_samples: the differential expression (the same tumour samples).
 cohort <- box_samples <- nb_de_samples <- NULL
 if (!is.null(nb_meta) && length(nb_matrices)) {
   cohort <- nb_select(nb_meta, nb_matrices)
-  box_samples   <- cohort[is.na(cohort$reason) & !cohort$small, ]
+  box_samples   <- cohort[is.na(cohort$reason), ]
   nb_de_samples <- cohort[is.na(cohort$reason) & cohort$status %in% NB_TUMOUR, ]
 }
 ```
@@ -302,34 +297,26 @@ Every sample is placed by three fields:
 
 The same samples are used throughout the report. A sample must be in both
 expression matrices, and a tumour sample needs a `library_layout`, the
-covariate of the differential expression. There are two differences, both by
-design:
-
-- The interactor boxplots average a patient's samples within a category into
-  one point, and leave out categories with `r NB_MIN_N` or fewer patients. The
-  differential expression keeps every sample and every category, with
-  patients blocked.
-- The control bone marrow is shown in the boxplots but never tested.
+covariate of the differential expression. The boxplots and the differential
+expression use the same tumour samples, grouped into the same five sample sets
+(next section); the control bone marrow is shown in the boxplots but never
+tested.
 
 ```{r cohort-groups, results = "asis"}
 if (!is.null(cohort)) {
   used <- cohort[is.na(cohort$reason), ]
   by_cell <- list(factor(used$status, NB_STATUS), factor(used$category, NB_CATEGORY))
 
-  # Patients per group and category; † marks the categories without a boxplot.
+  # Patients per group and category.
   n_tab <- tapply(used$patient, by_cell, function(p) length(unique(p)))
   n_tab[is.na(n_tab)] <- 0L
-  small_tab <- tapply(used$small, by_cell, any)
-  small_tab[is.na(small_tab)] <- FALSE
-  shown <- colSums(n_tab) > 0
-  n_tab <- n_tab[, shown, drop = FALSE]
-  small_tab <- small_tab[, shown, drop = FALSE]
-  cells <- ifelse(n_tab == 0, "", ifelse(small_tab, paste0(n_tab, " †"), n_tab))
+  n_tab <- n_tab[, colSums(n_tab) > 0, drop = FALSE]
+  cells <- ifelse(n_tab == 0, "", n_tab)
   cat("\n\n")
   export_as(table = "patients_per_group_and_category")
-  print(kable(cells, align = "c", caption = sprintf(paste(
-    "Patients per group and category. † %d or fewer patients: no boxplot, used in",
-    "the differential expression only. The control is in the boxplots only."), NB_MIN_N)))
+  print(kable(cells, align = "c", caption = paste(
+    "Patients per group and category (a patient can have samples in several",
+    "categories). The control is in the boxplots only.")))
   cat("\n\n")
 
   # Samples per group, rule by rule, down to what each part of the report uses.
@@ -345,7 +332,7 @@ if (!is.null(cohort)) {
   export_as(table = "samples_per_group_step_by_step")
   print(kable(flow, caption = paste(
     "Samples per group, step by step. The last two rows differ only by the",
-    "control and the † categories of the table above.")))
+    "control.")))
   cat("\n\n")
 
   # Every sample left out, by reason; matrix columns missing from the sheet
@@ -373,35 +360,22 @@ if (!is.null(cohort)) {
               caption = "Samples left out of the whole report",
               table.attr = 'class="table table-bordered table-condensed"'))
   cat("\n\n")
-
-  # The † categories, sample by sample.
-  sm <- cohort[cohort$small, ]
-  if (nrow(sm)) {
-    sm <- sm[order(match(sm$status, NB_STATUS), match(sm$category, NB_CATEGORY),
-                   sm$omics_id), ]
-    k <- paste(sm$status, sm$category, sep = " / ")
-    cat(sprintf("\nIn the differential expression but not the boxplots (%d or fewer patients):\n\n",
-                NB_MIN_N))
-    for (x in unique(k))
-      cat(sprintf("- %s (%d patients): %s\n", x, sm$n_patients[k == x][1],
-                  paste(sm$omics_id[k == x], collapse = ", ")))
-    cat("\n\n")
-  }
 }
 ```
 
-## Differential-expression analyses
+## Sample sets
 
-The three tumour groups are compared pairwise in five analyses, each on a
-subset of the categories above (methods in the
-[differential expression](#differential-expression-atrxdel-mycnamp-and-atrxwtmycnwt)
-section).
+The tumour samples are grouped into five sets, each a subset of the categories
+above. The sets overlap: "All tumour" holds every tumour sample, "DTC all"
+every bone-marrow sample. Each set is one
+[differential-expression](#differential-expression-atrxdel-mycnamp-and-atrxwtmycnwt)
+analysis, in which the three groups are compared pairwise, and one box per
+group in the [ATRX-interactor](#atrx-interactors) plots.
 
 ```{r cohort-analyses, results = "asis"}
 if (!is.null(nb_de_samples)) {
   tab <- t(vapply(NB_SETS, function(set) {
-    d <- if (is.null(set$categories)) nb_de_samples else
-      nb_de_samples[nb_de_samples$category %in% set$categories, ]
+    d <- nb_set_samples(nb_de_samples, set)
     g <- factor(d$status, NB_GROUPS)
     np <- tapply(d$patient, g, function(p) length(unique(p)))
     np[is.na(np)] <- 0
@@ -410,11 +384,12 @@ if (!is.null(nb_de_samples)) {
       sprintf("%d (%d)", as.integer(table(g)), as.integer(np)))
   }, character(length(NB_GROUPS) + 1)))
   colnames(tab) <- c("Categories", NB_GROUPS)
-  rownames(tab) <- vapply(NB_SETS, `[[`, "", "title")
+  rownames(tab) <- sprintf("%s (box: %s)", vapply(NB_SETS, `[[`, "", "title"),
+                           vapply(NB_SETS, `[[`, "", "label"))
   cat("\n\n")
-  export_as(table = "samples_per_analysis")
+  export_as(table = "samples_per_set")
   print(kable(tab, align = "c", caption = paste(
-    "Samples (patients) per analysis. A comparison needs at least 2 samples per group.")))
+    "Samples (patients) per set. A comparison needs at least 2 samples per group.")))
   cat("\n\n")
 }
 ```
@@ -565,12 +540,16 @@ using AlfaFold2, and proteins that came out as ATRX FL/IFF interactors
 were calssified as *Yes* or *Maybe?* depending on the interaction score.
 Here, we investigate the expression of the genes encoding these interactors, first in our
 SK-N-SH lines, then in the [patient cohort](#patient-cohort), grouped by ATRX and MYCN status
-and sample category. 
+and by the five [sample sets](#sample-sets) of the differential expression. 
 **The current list of interactors is temporary, a final list will be established, therefore interpretation is on hold**
 
 Each row is one gene: the five SK-N-SH conditions on the left
 (log2 normalised counts + 1), the patient groups on the right (log2 of the
-layout-corrected values + 1, one point per patient and category).
+layout-corrected values + 1). Each group has one box per sample set (All
+tumour, Tum dx, DTC all, DTC dx, DTC rel) and the control one box; the sets
+overlap, so a patient appears in several boxes. Within a box, a patient's
+samples are averaged into one point (e.g. the Tum dx and DTC samples of one
+patient in "All tumour"); the count under each box is in patients.
 
 
 ```{r atrx-data, results = "asis"}
@@ -591,11 +570,15 @@ if (is.null(nc)) missing_note("deseq2", "E6_vs_TP53", "normalized_counts.csv")
 # layout-corrected matrix.
 pat <- cell <- NULL
 if (!is.null(nb_expr) && !is.null(box_samples) && !is.null(ai)) {
-  keep <- box_samples
-  dup <- keep %>% group_by(status, category, patient) %>% filter(n() > 1) %>%
-    summarise(ids = paste(sort(omics_id), collapse = " + "), .groups = "drop")
-  if (nrow(dup)) cat("\nAveraged into one point per patient:",
-                     paste(dup$ids, collapse = "; "), "\n\n")
+  # One row per sample and box: the tumour samples once per set they belong
+  # to, the control in its own box.
+  in_box <- function(d, label) { d$box <- rep(label, nrow(d)); d }
+  tum <- box_samples[box_samples$status %in% NB_TUMOUR, ]
+  keep <- do.call(rbind, c(
+    lapply(NB_SETS, function(set) in_box(nb_set_samples(tum, set), set$label)),
+    list(in_box(box_samples[box_samples$status %in% "control", ], "control"))))
+  rownames(keep) <- NULL
+  NB_BOX <- c(vapply(NB_SETS, `[[`, "", "label"), "control")
 
   # Interactor rows: Ensembl ID first, then the symbol, then previous symbols.
   ens <- sub("\\.[0-9]+$", "", nb_expr$GeneID)
@@ -606,20 +589,21 @@ if (!is.null(nb_expr) && !is.null(box_samples) && !is.null(ai)) {
              which(nb_expr$gene_name %in% prev[nzchar(prev)]))
     if (length(hit)) hit[1] else NA_integer_
   }, integer(1))
-  vals <- as.matrix(nb_expr[rows[!is.na(rows)], keep$omics_id, drop = FALSE])
+  vals <- as.matrix(nb_expr[rows[!is.na(rows)], box_samples$omics_id, drop = FALSE])
   n_neg <- sum(vals < 0, na.rm = TRUE)
   if (n_neg) cat(sprintf(paste(
     "\nNegative values after the layout correction, set to 0 before",
     "log2(value + 1): %d.\n\n"), n_neg))
   pat <- data.frame(gene = rep(ai$gene[!is.na(rows)], times = ncol(vals)),
-                    omics_id = rep(keep$omics_id, each = nrow(vals)),
+                    omics_id = rep(box_samples$omics_id, each = nrow(vals)),
                     value = log2(pmax(as.vector(vals), 0) + 1)) %>%
-    left_join(keep[, c("omics_id", "status", "category", "patient")], by = "omics_id") %>%
-    group_by(gene, status, category, patient) %>%
+    inner_join(keep[, c("omics_id", "status", "box", "patient")], by = "omics_id",
+               relationship = "many-to-many") %>%
+    group_by(gene, status, box, patient) %>%
     summarise(value = mean(value), .groups = "drop") %>%
-    mutate(key = factor(paste(status, category, sep = "|"),
-                        levels = paste(rep(NB_STATUS, each = length(NB_CATEGORY)),
-                                       NB_CATEGORY, sep = "|")),
+    mutate(key = factor(paste(status, box, sep = "|"),
+                        levels = paste(rep(NB_STATUS, each = length(NB_BOX)),
+                                       NB_BOX, sep = "|")),
            status = factor(status, NB_STATUS))
 }
 
@@ -762,9 +746,7 @@ The control bone marrow is left out: it is not the same cells, so it is not
 compared against. Groups,
 categories and excluded samples are the ones defined in the
 [patient cohort](#patient-cohort), with the samples per analysis in
-[Differential-expression analyses](#differential-expression-analyses). The one
-difference with the interactor boxplots is that categories with too few
-patients to plot there are kept here.
+[Sample sets](#sample-sets); the interactor boxplots use the same five sets.
 
 **Data.** The normalised counts from the same reanalysis, *without* the
 library-layout correction (`full_omics_expression_data_normalized_counts.csv`).
@@ -993,8 +975,7 @@ if (!all(pkgs_ok)) {
   }
 
   nbde <- lapply(NB_SETS, function(set) {
-    d <- if (is.null(set$categories)) nb_de_samples else
-      nb_de_samples[nb_de_samples$category %in% set$categories, ]
+    d <- nb_set_samples(nb_de_samples, set)
     c(set, list(n_patients = tapply(d$patient, factor(d$status, NB_GROUPS),
                                     function(p) length(unique(p)))),
       if (nrow(d)) nb_fit(d))
