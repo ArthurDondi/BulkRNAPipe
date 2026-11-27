@@ -7,14 +7,15 @@ transduced with an empty vector, with ATRX full length, or with an ATRX in-frame
 fusion construct; three replicates each) was sequenced as 150-bp paired-end,
 reverse-stranded reads. Read quality was assessed with FastQC (v0.12.1; Andrews,
 2010) and MultiQC (v1.25.2; Ewels et al., 2016) before and after trimming.
-Adapters and low-quality bases (Phred < 20) were removed with Trim Galore
-(v0.6.10; Krueger, 2023) and Cutadapt (v4.9; Martin, 2011), and reads shorter
-than 20 nt were discarded. Reads were aligned with STAR (v2.7.11b; Dobin et al.,
-2013) in two-pass mode to the human genome (hg38, <annotation source and
-release>) supplemented with the sequences of the two ATRX constructs and of the
-EGFP and mCherry reporters. Read pairs overlapping exons were counted per gene
-with featureCounts (Subread v2.0.6; Liao et al., 2014), retaining uniquely
-mapped reads with mapping quality ≥ 10. The workflow was implemented in
+Adapter sequences and low-quality 3′ ends (Phred < 20) were trimmed with Trim
+Galore (v0.6.10; Krueger et al., 2023), a wrapper around Cutadapt (v4.9; Martin,
+2011), and read pairs in which either read was shorter than 20 nt were
+discarded. Reads were aligned with STAR (v2.7.11b; Dobin et al., 2013) in
+two-pass mode to the human genome (hg38) with the GENCODE v50 gene annotation
+(Mudge et al., 2025), supplemented with the sequences of the two ATRX constructs
+and of the EGFP and mCherry reporters. Read pairs overlapping exons were counted
+per gene with featureCounts (Subread v2.0.6; Liao et al., 2014), retaining
+uniquely mapped reads with mapping quality ≥ 10. The workflow was implemented in
 Snakemake (v8; Mölder et al., 2021), and all downstream analyses were performed
 in R (v4.4.2; R Core Team, 2024), with figures generated using ggplot2 (v3.5.1;
 Wickham, 2016).
@@ -186,8 +187,9 @@ Acids Research. 28(1):27–30.
 Korotkevich G, Sukhov V, Budin N, Shpak B, Artyomov MN, Sergushichev A (2021)
 Fast gene set enrichment analysis. bioRxiv. 060012.
 
-Krueger F (2023) Trim Galore (v0.6.10).
-<https://github.com/FelixKrueger/TrimGalore>.
+Krueger F, James F, Ewels P, Afyounian E, Weinstein M, Schuster-Boeckler B,
+Hulselmans G, Sclamons (2023) FelixKrueger/TrimGalore: v0.6.10. Zenodo.
+doi:10.5281/zenodo.7598955.
 
 Law CW, Chen Y, Shi W, Smyth GK (2014) voom: precision weights unlock linear
 model analysis tools for RNA-seq read counts. Genome Biology. 15(2):R29.
@@ -217,6 +219,10 @@ sequencing reads. EMBnet.journal. 17(1):10–12.
 Mölder F, Jablonski KP, Letcher B, Hall MB, Tomkins-Tinch CH, Sochat V, Forster
 J, Lee S, Twardziok SO, Kanitz A, et al. (2021) Sustainable data analysis with
 Snakemake. F1000Research. 10:33.
+
+Mudge JM, Carbonell-Sala S, Diekhans M, Martinez JG, Hunt T, Jungreis I,
+Loveland JE, Arnan C, Barnes I, Bennett R, et al. (2025) GENCODE 2025: reference
+gene annotation for human and mouse. Nucleic Acids Research. 53(D1):D966–D975.
 
 Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C (2017) Salmon provides fast
 and bias-aware quantification of transcript expression. Nature Methods.
