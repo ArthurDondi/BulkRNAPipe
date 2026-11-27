@@ -2,19 +2,19 @@ BULK RNA-SEQ ANALYSIS
 
 Sequencing and read processing
 <Cell lines, constructs, RNA extraction, library preparation and sequencing to
-be added.> RNA from five conditions (TP53 knockout; TP53/ATRX double knockout
-clone E6; E6 transduced with an empty vector, with ATRX full length, or with an
-ATRX in-frame fusion construct; three replicates each) was sequenced as 150-bp
-paired-end, reverse-stranded reads. Read quality was assessed with FastQC
-(v0.12.1; Andrews, 2010) and MultiQC (v1.25.2; Ewels et al., 2016) before and
-after trimming. Adapters and low-quality bases (Phred < 20) were removed with
-Trim Galore (v0.6.10; Krueger, 2023) and Cutadapt (v4.9; Martin, 2011), and
-reads shorter than 20 nt were discarded. Reads were aligned with STAR (v2.7.11b;
-Dobin et al., 2013) in two-pass mode to the human genome (hg38, <annotation
-source and release>) supplemented with the sequences of the two ATRX constructs
-and of the EGFP and mCherry reporters. Read pairs overlapping exons were counted
-per gene with featureCounts (Subread v2.0.6; Liao et al., 2014), retaining
-uniquely mapped reads with mapping quality ≥ 10. The workflow was implemented in
+be added.> RNA from four conditions (TP53/ATRX double knockout clone E6; E6
+transduced with an empty vector, with ATRX full length, or with an ATRX in-frame
+fusion construct; three replicates each) was sequenced as 150-bp paired-end,
+reverse-stranded reads. Read quality was assessed with FastQC (v0.12.1; Andrews,
+2010) and MultiQC (v1.25.2; Ewels et al., 2016) before and after trimming.
+Adapters and low-quality bases (Phred < 20) were removed with Trim Galore
+(v0.6.10; Krueger, 2023) and Cutadapt (v4.9; Martin, 2011), and reads shorter
+than 20 nt were discarded. Reads were aligned with STAR (v2.7.11b; Dobin et al.,
+2013) in two-pass mode to the human genome (hg38, <annotation source and
+release>) supplemented with the sequences of the two ATRX constructs and of the
+EGFP and mCherry reporters. Read pairs overlapping exons were counted per gene
+with featureCounts (Subread v2.0.6; Liao et al., 2014), retaining uniquely
+mapped reads with mapping quality ≥ 10. The workflow was implemented in
 Snakemake (v8; Mölder et al., 2021), and all downstream analyses were performed
 in R (v4.4.2; R Core Team, 2024), with figures generated using ggplot2 (v3.5.1;
 Wickham, 2016).
@@ -34,38 +34,21 @@ expression results.
 
 Differential expression analysis
 Differential expression analysis was performed with DESeq2 (v1.46.0; Love et
-al., 2014) using a single model fitted to all 15 samples (~ condition), after
-removing genes with fewer than 10 reads across samples (<N> of <N> genes
-retained). Contrasts compared E6 with the TP53 knockout, the empty vector
-control with E6, each ATRX construct with the empty vector control and with the
-TP53 knockout, and the two ATRX constructs with each other. Significance was
+al., 2014) using a single model (~ condition) fitted to all sequenced samples,
+which also included a TP53 knockout line not analysed here, after removing genes
+with fewer than 10 reads across samples (<N> of <N> genes retained). Contrasts
+compared the empty vector control with E6, each ATRX construct with the empty
+vector control, and the two ATRX constructs with each other. Significance was
 assessed with Wald tests, P values were adjusted using the Benjamini–Hochberg
 method (Benjamini & Hochberg, 1995), and genes with an adjusted P value (FDR) <
-0.05 and |log2 fold-change| ≥ 1 were considered differentially expressed. As the
-TP53 knockout line and the E6 lineage derive from different clones, ATRX status
-is confounded with clonal background in comparisons against the TP53 knockout;
-comparisons within the E6 lineage were therefore used as primary readouts.
+0.05 and |log2 fold-change| ≥ 1 were considered differentially expressed.
 
 Principal component analysis (PCA)
 Counts were variance-stabilised with DESeq2 (blind to the experimental design),
 and PCA was performed on the 500 most variable genes (centred but not scaled)
-after removal of ATRX, for all samples and for the 12 E6-derived samples
-separately. Sample similarity was assessed by Spearman correlation of
-variance-stabilised counts, excluding ATRX, construct and reporter features.
-
-Signature reversal
-Rescue by each ATRX construct was quantified as the reversal of the ATRX
-knockout signature, using only comparisons within a single genetic background.
-The knockout signature comprised genes with FDR < 0.05 and |log2 fold-change| ≥
-1 in E6 vs TP53 knockout (<N> genes), or with FDR < 0.05 alone in a sensitivity
-analysis. For these genes, log2 fold-changes of each construct vs the empty
-vector control were compared with those of the knockout using the total least
-squares regression slope (Golub & Van Loan, 1980; −1 indicating complete
-reversal), the Spearman correlation, and the fraction of genes changing in the
-opposite direction. The latter was tested against a null distribution obtained
-by permuting the construct log2 fold-changes across signature genes (1,000
-permutations). As a negative control, the vector transduction signature (empty
-vector vs E6) was scored against the in-frame fusion vs full length comparison.
+after removal of ATRX, for the 12 E6-derived samples. Sample similarity was
+assessed by Spearman correlation of variance-stabilised counts, excluding ATRX,
+construct and reporter features.
 
 Gene set enrichment analysis (GSEA)
 Pre-ranked GSEA (Subramanian et al., 2005) was performed with fgsea (v1.32.0,
@@ -125,7 +108,7 @@ Expression of candidate ATRX interactors
 Candidate direct interactors of each ATRX construct were selected from
 co-IP/MS-enriched proteins by AlphaFold2 interaction modelling (Jumper et al.,
 2021; <reference to methods>). Expression of the corresponding genes was
-examined as log2(normalised counts + 1) in the SK-N-SH samples and as
+examined as log2(normalised counts + 1) in the E6-derived samples and as
 layout-corrected log2 expression in the patient cohort, for each tumour group
 and sample set, with control bone marrow shown for reference. Samples from the
 same patient within a sample set were averaged.
@@ -189,9 +172,6 @@ data format. R package version 7.5.1.
 Ewels P, Magnusson M, Lundin S, Käller M (2016) MultiQC: summarize analysis
 results for multiple tools and samples in a single report. Bioinformatics.
 32(19):3047–3048.
-
-Golub GH & Van Loan CF (1980) An analysis of the total least squares problem.
-SIAM Journal on Numerical Analysis. 17(6):883–893.
 
 Hänzelmann S, Castelo R, Guinney J (2013) GSVA: gene set variation analysis for
 microarray and RNA-Seq data. BMC Bioinformatics. 14:7.
