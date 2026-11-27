@@ -97,7 +97,7 @@ overview_page <- function(df, title, ylab, colours, ncol = 5, subtitle = NULL) {
 }
 
 # Condition colours from the lab colour sheet (20261021_Colors.pdf), the same
-# as COND_COLOURS in report/analysis_report.Rmd - keep the two in sync.
+# as COND_COLOURS in report/report_common.R - keep the two in sync.
 condition_colours <- c(TP53 = "#ABAB50", E6 = "#46184E", EmptyVector = "#D16530",
                        ATRX_FL = "#19468C", ATRX_IFF = "#B72656")
 

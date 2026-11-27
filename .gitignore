@@ -34,3 +34,4 @@ Thumbs.db
 analysis/**/*.xlsx
 # Patient metadata for the report's ATRX-interactor section (cluster only)
 metadata_table.csv
+metadata_table_wStage.xlsx
