@@ -73,7 +73,9 @@ BulkRNAPipe/
 │       ├── gsea_compare.R          # ΔNES + residual-rank comparison
 │       └── shared_genes.R          # Genes shared by two contrasts + over-representation
 ├── report/
-│   └── analysis_report.Rmd         # Rendered analysis report template
+│   ├── cell_lines_report.Rmd       # Report 1: SK-N-SH ATRX-rescue analysis
+│   ├── patients_report.Rmd         # Report 2: patient cohort, ATRX interactors, patient DE
+│   └── report_common.R             # Setup and helpers shared by both reports
 ├── run_BulkRNAPipe.sh              # Local (non-SLURM) run script
 └── run_BulkRNAPipe_slurm.sh        # SLURM cluster run script
 ```
@@ -804,53 +806,73 @@ both write to the same `design_qc/counts_substituted.txt`. `quantify/counts.txt`
 is still never modified, and `design_qc` still plots these genes if they are
 also listed in `DesignQC.genes`.
 
-## Analysis report
+## Analysis reports
 
-`report/analysis_report.Rmd` renders a single self-contained HTML (or PDF)
-summarising a whole run, for people who will not open the pipeline directory.
-It reads the CSV files the pipeline writes and **rebuilds every figure**, rather
-than embedding the PDFs — so the styling is consistent, the HTML needs no
-external assets, and any plot can be edited in one place.
+Two reports, each a single self-contained HTML (or PDF), summarise a run for
+people who will not open the pipeline directory:
+
+- `report/cell_lines_report.Rmd`: the SK-N-SH ATRX-rescue experiment.
+- `report/patients_report.Rmd`: the internal neuroblastoma patient cohort.
+
+Both source `report/report_common.R` (setup, palettes, export machinery and the
+plotting helpers they share). They read the CSV files the pipeline writes and
+**rebuild every figure**, rather than embedding the PDFs, so the styling is
+consistent, the HTML needs no external assets, and any plot can be edited in
+one place.
 
 ```bash
 snakemake -s workflow/Snakefile --configfile config/config_epicode.yaml \
-    --use-conda --conda-frontend conda --cores 1 report/analysis_report.html
+    --use-conda --conda-frontend conda --cores 1 \
+    report/cell_lines_report.html report/patients_report.html
 ```
 
 or directly, which is usually easier while editing:
 
 ```bash
-Rscript -e 'rmarkdown::render("report/analysis_report.Rmd",
+Rscript -e 'rmarkdown::render("report/cell_lines_report.Rmd",
             params = list(outdir = "/path/to/output_dir"),
-            output_file = "analysis_report.html")'
+            output_file = "cell_lines_report.html")'
 ```
 
-It is **not** part of the default target. The report is a document you edit by
-hand, and rebuilding it on every run would overwrite that work.
+(the same with `patients_report`). They are **not** part of the default
+target. The reports are documents you edit by hand, and rebuilding them on
+every run would overwrite that work.
 
-Sections: experimental design → QC (library metrics, sample correlation, ATRX
-and vector markers) → PCA → differential expression (headline contrast first,
-then genes of interest, then the rest) → GSEA → rescue assessment (signature
-reversal and interaction contrasts) → ATRX interactors → patient cohort.
+**Cell lines.** Experimental design → QC (library metrics, ATRX and vector
+markers, sample correlation) → PCA → how TP53 differs from the E6 lineage →
+rescue assessment → the E6 lineage alone → GSEA → genes and pathways shared by
+ATRX_FL and ATRX_IFF.
 
-The last section compares the patient groups ATRXdel, MYCNamp and
-ATRXwtMYCNwt pairwise (limma-trend on the uncorrected normalised counts with
-library layout as a covariate, fgsea on Hallmark, KEGG and GO:BP), in five
-analyses: all tumour samples, primary tumour at diagnosis, all bone-marrow
-DTCs pooled, DTCs at diagnosis and DTCs at relapse. The control bone marrow is
-shown in the ATRX-interactor section but not tested. An overview PCA comes
-first; each analysis opens with a pathway-level F-test across the three
-groups (GSVA scores, limma moderated F) and a heatmap of the group means, and
-each comparison with a QC line (group sizes), a raw p-value histogram and a
-PCA of its two groups. Groups come from the `classification` column of
-`metadata_table_wStage.xlsx`. It runs on all tumour samples together, then on primary tumour at
-diagnosis, bone marrow at diagnosis and bone marrow at relapse. Its inputs are
-the `nb_*` params, which point at files that stay on the cluster.
+**Patients.** Three sections:
+
+1. *Patient cohort*: the data (layout-corrected matrix for display,
+   uncorrected for testing), how samples are grouped and categorised, one
+   sample selection for the whole report (samples per group and category,
+   step by step, and every sample left out with its reason), the samples per
+   differential-expression analysis, and an overview PCA. Groups come from the
+   `classification` column of `metadata_table_wStage.xlsx`; tissue, patient
+   and timepoint from the sample ID.
+2. *ATRX interactors*: one row per interactor gene, the five SK-N-SH
+   conditions next to the patient groups.
+3. *Differential expression*: the patient groups ATRXdel, MYCNamp and
+   ATRXwtMYCNwt compared pairwise (limma-trend on the uncorrected normalised
+   counts with library layout as a covariate, fgsea on Hallmark, KEGG and
+   GO:BP), in five analyses: all tumour samples, primary tumour at diagnosis,
+   all bone-marrow DTCs pooled, DTCs at diagnosis and DTCs at relapse. Each
+   analysis opens with a pathway-level F-test across the three groups (GSVA
+   scores, limma moderated F) and a heatmap of the group means, and each
+   comparison with a QC line (group sizes), a raw p-value histogram and a PCA
+   of its two groups. The control bone marrow is shown with the interactors
+   but not tested.
+
+Its inputs are the `nb_*` params, which point at files that stay on the
+cluster; `outdir` is still needed for the SK-N-SH boxplots.
 
 **Exports.** Every plot is also written as a PDF to
-`report/figures/<NN_section>/` and every table as a CSV to
-`report/tables/<NN_section>/`. Each section folder is named after its numbered
-top-level heading. Both folders are emptied and rewritten at each render. Set
+`report/figures/<report>/<NN_section>/` and every table as a CSV to
+`report/tables/<report>/<NN_section>/`, where `<report>` is `cell_lines` or
+`patients`. Each section folder is named after its numbered top-level heading.
+A render empties and rewrites its own report's folders only. Set
 `params$export: FALSE` to turn this off, or `params$export_dir` (an absolute
 path) to write them elsewhere.
 

@@ -3,11 +3,12 @@
 Expression of the predicted ATRX FL / IFF interactors (`atrx_interactors.tsv`),
 in two places:
 
-- **The report** (`report/analysis_report.Rmd`, section "ATRX interactors"):
-  one row per gene, the five SK-N-SH conditions next to the internal
-  neuroblastoma cohort (`reanalysis.NB.bulkRNA`) split by ATRX / MYCN status.
-  Point the report's `nb_expression` and `nb_metadata` params at the cohort
-  files; the sample selection and every exclusion are listed in that section.
+- **The patient report** (`report/patients_report.Rmd`, section "ATRX
+  interactors"): one row per gene, the five SK-N-SH conditions next to the
+  internal neuroblastoma cohort (`reanalysis.NB.bulkRNA`) split by ATRX / MYCN
+  status. Point the report's `nb_expression`, `nb_counts` and `nb_metadata`
+  params at the cohort files; the sample selection and every exclusion are
+  listed in its "Patient cohort" section.
 - **`01_plot_epicode.R`**: standalone epicode PDFs with statistics, not part of
   the Snakemake workflow.
 
