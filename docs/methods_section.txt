@@ -1,27 +1,25 @@
-BULK RNA-SEQ ANALYSIS
+Bulk RNA-seq Analysis
 
 Sequencing and read processing
+
 <Cell lines, constructs, RNA extraction, library preparation and sequencing to
-be added.> RNA from four conditions (TP53/ATRX double knockout clone E6; E6
-transduced with an empty vector, with ATRX full length, or with an ATRX in-frame
-fusion construct; three replicates each) was sequenced as 150-bp paired-end,
-reverse-stranded reads. Read quality was assessed with FastQC (v0.12.1; Andrews,
-2010) and MultiQC (v1.25.2; Ewels et al., 2016) before and after trimming.
-Adapter sequences and low-quality 3′ ends (Phred < 20) were trimmed with Trim
-Galore (v0.6.10; Krueger et al., 2023), a wrapper around Cutadapt (v4.9; Martin,
-2011), and read pairs in which either read was shorter than 20 nt were
-discarded. Reads were aligned with STAR (v2.7.11b; Dobin et al., 2013) in
-two-pass mode to the human reference genome hg38 from the UCSC Genome Browser
-(Kent et al., 2002), with the NCBI RefSeq gene annotation (O'Leary et al., 2016)
-from the UCSC refGene table (release of 10 January 2020), supplemented with the
-sequences of the two ATRX constructs and of the EGFP and mCherry reporters. Read
-pairs overlapping exons were counted per gene with featureCounts (Subread
-v2.0.6; Liao et al., 2014), retaining uniquely mapped reads with mapping quality
-≥ 10. The workflow was implemented in Snakemake (v8; Mölder et al., 2021), and
-all downstream analyses were performed in R (v4.4.2; R Core Team, 2024), with
-figures generated using ggplot2 (v3.5.1; Wickham, 2016).
+be added.>. Read quality was assessed with FastQC (v0.12.1; Andrews, 2010) and
+MultiQC (v1.25.2; Ewels et al., 2016) before and after trimming. Adapter
+sequences and low-quality 3′ ends (Phred < 20) were trimmed with Trim Galore
+(v0.6.10; Krueger et al., 2023), a wrapper around Cutadapt (v4.9; Martin, 2011),
+and read pairs in which either read was shorter than 20 nt were discarded. Reads
+were aligned with STAR (v2.7.11b; Dobin et al., 2013) in two-pass mode to the
+human reference genome hg38 from the UCSC Genome Browser, with the UCSC RefSeq
+gene annotation (10 January 2020), supplemented with the sequences of the two
+ATRX constructs and of the EGFP and mCherry reporters. Read pairs overlapping
+exons were counted per gene with featureCounts (Subread v2.0.6; Liao et al.,
+2014), retaining uniquely mapped reads with mapping quality ≥ 10. The workflow
+was implemented in Snakemake (v8; Mölder et al., 2021), and all downstream
+analyses were performed in R (v4.4.2; R Core Team, 2024), with figures generated
+using ggplot2 (v3.5.1).
 
 Quantification of ATRX expression
+
 Reads from the ATRX constructs map equally well to the endogenous ATRX locus and
 are therefore discarded as multi-mapping reads by unique counting. Total ATRX
 expression was quantified by pooling the exons of endogenous ATRX and of both
@@ -35,40 +33,40 @@ reporter features were removed. ATRX was excluded from all reported differential
 expression results.
 
 Differential expression analysis
+
 Differential expression analysis was performed with DESeq2 (v1.46.0; Love et
 al., 2014) using a single model (~ condition) fitted to the 12 E6-derived
 samples, after removing genes with fewer than 10 reads across samples (18,729 of
-28,278 genes retained; 66.2%). Contrasts compared the empty vector control with
-E6, each ATRX construct with the empty vector control, and the two ATRX
-constructs with each other. Significance was assessed with Wald tests, P values
-were adjusted using the Benjamini–Hochberg method (Benjamini & Hochberg, 1995),
-and genes with an adjusted P value (FDR) < 0.05 and |log2 fold-change| ≥ 1 were
-considered differentially expressed.
+28,278 genes retained; 66.2%). Significance was assessed with Wald tests, P
+values were adjusted using the Benjamini–Hochberg method (Benjamini & Hochberg,
+1995), and genes with an adjusted P value (FDR) < 0.05 and |log₂ fold-change| ≥
+1 were considered differentially expressed.
 
 Principal component analysis (PCA)
-Counts were variance-stabilised with DESeq2 (blind to the experimental design),
-and PCA was performed on the 500 most variable genes (centred but not scaled)
-after removal of ATRX, for the 12 E6-derived samples. Sample similarity was
-assessed by Spearman correlation of variance-stabilised counts, excluding ATRX,
-construct and reporter features.
+
+Counts were variance-stabilised with DESeq2, and PCA was performed on the 500
+most variable genes (centered but not scaled) after removal of ATRX. Sample
+similarity was assessed by Spearman correlation of variance-stabilized counts,
+excluding ATRX, construct and reporter features.
 
 Gene set enrichment analysis (GSEA)
+
 Pre-ranked GSEA (Subramanian et al., 2005) was performed with fgsea (v1.32.0,
 fgseaMultilevel; Korotkevich et al., 2021) on genes ranked by the DESeq2 Wald
 statistic. Hallmark (Liberzon et al., 2015) and Gene Ontology Biological Process
 (GO-BP; Ashburner et al., 2000) gene sets were obtained from MSigDB (v7.5.1;
 Liberzon et al., 2011) using msigdbr (v7.5.1; Dolgalev, 2022). Current human
-KEGG pathways (Kanehisa & Goto, 2000) were retrieved using KEGGREST (<version>;
-Tenenbaum, 2017; retrieved <date>) and mapped to gene symbols with org.Hs.eg.db
-(v3.20.0; Carlson, 2017). Two custom gene sets (all HOX genes; HOXB genes) were
-added. Gene sets with 9–500 detected genes were tested and considered
-significantly enriched at FDR < 0.05. For the comparison between the two ATRX
-constructs, KEGG and GO-BP results were further grouped into five functional
+KEGG pathways (Kanehisa & Goto, 2000) were retrieved using KEGGREST (v1.46.0;
+Tenenbaum, 2017) and mapped to gene symbols with org.Hs.eg.db (v3.20.0; Carlson,
+2017). Two custom gene sets (all HOX genes; HOXB genes) were added. Gene sets
+with 9–500 detected genes were tested and considered significantly enriched at
+FDR < 0.05. KEGG and GO-BP results were further grouped into five functional
 categories (replication and repair, chromosome, cell growth and death, nervous
 system, development and regeneration), defined by the KEGG pathway
 classification and, for GO-BP, by keyword matching of term names.
 
 Genes and pathways shared by both ATRX constructs
+
 Genes differentially expressed in the same direction in both construct vs empty
 vector comparisons were tested for over-representation in Hallmark, KEGG and
 GO-BP gene sets (gene set size range: 10–500) using one-sided hypergeometric
@@ -79,65 +77,51 @@ considered shared when significantly enriched (FDR < 0.05) with the same sign of
 the normalised enrichment score in the GSEA of both comparisons.
 
 Integration with co-IP proteomics
+
 Transcriptomic differences between the two ATRX constructs were compared with
 proteins differentially enriched between the constructs in the co-IP/MS analysis
-(S1744 vs S1011; FDR ≤ 0.05 and |log2 fold-change| > 1), matched by gene symbol.
-RNA and protein changes were considered concordant when their log2 fold-changes
+(S1744 vs S1011; FDR ≤ 0.05 and |log₂ fold-change| > 1), matched by gene symbol.
+RNA and protein changes were considered concordant when their log₂ fold-changes
 had the same sign.
 
 Neuroblastoma patient cohort
-Bulk RNA-seq data from an in-house neuroblastoma cohort (<reference; ethics
-approval>) had previously been trimmed with fastp (Chen et al., 2018),
-quantified with Salmon (Patro et al., 2017), summarised to genes with tximeta
+
+Bulk RNA-seq data from Rifatbegovic et al. (2018) (see “Data availability”) were
+trimmed with fastp (Chen et al., 2018), mapped and quantified to GRCh38.p13
+transcriptome with Salmon (Patro et al., 2017), summarised to genes with tximeta
 (Love et al., 2020) and filtered with edgeR filterByExpr (Robinson et al., 2010;
-Chen et al., 2016), retaining 14,604 of 38,269 genes. Normalised counts were
-used without correction for statistical testing, and after removal of the
-library layout effect (single-end unstranded, single-end stranded, paired-end)
-with limma removeBatchEffect (Ritchie et al., 2015), with sample material
-retained in the design, for visualisation only. Values were log2(x +
-1)-transformed after setting negative values to zero. Tumour samples were
-classified as ATRX-deleted, MYCN-amplified (ATRX wild type) or ATRX and MYCN
-wild type, and assigned to primary tumour or bone marrow disseminated tumour
-cells (DTC) at diagnosis, treatment or relapse; tumour-free bone marrow served
-as control. Samples lacking a classification, tissue, time point or library
-layout annotation, or absent from either expression matrix, were excluded (<N>
-samples from <N> patients included). Analyses were performed on five overlapping
-sample sets: all tumour samples, primary tumours at diagnosis, all DTC samples,
-DTC at diagnosis and DTC at relapse. PCA was performed on the 2,000 most
-variable genes among those with log2 expression > 1 in at least two samples.
+Chen et al., 2016), retaining 14,604 of 38,269 genes. PCA was performed on the
+2,000 most variable genes among those with log₂ expression > 1 in at least two
+samples.
 
 Expression of candidate ATRX interactors
+
 Candidate direct interactors of one or both ATRX constructs were selected from
 co-IP/MS-enriched proteins by AlphaFold2 interaction modelling (Jumper et al.,
-2021; <reference to methods>). Expression of the corresponding genes was
-examined as log2(normalised counts + 1) in the E6-derived samples and as
-layout-corrected log2 expression in the patient cohort, for each tumour group
-and sample set, with control bone marrow shown for reference. Samples from the
-same patient within a sample set were averaged.
+2021). Expression of the corresponding genes was examined as log₂(normalised
+counts + 1) in the E6-derived samples and as limma removeBatchEffect (Ritchie et
+al., 2015) corrected log₂ expression in the patient cohort, for each tumour
+group and sample set, with control bone marrow shown for reference. Samples from
+the same patient within a sample set were averaged.
 
 Differential expression and pathway analysis in patients
+
 Differential expression between the three tumour groups was analysed separately
 in each sample set with limma (v3.62.1; Ritchie et al., 2015) on uncorrected
-log2(normalised counts + 1), using limma-trend (Law et al., 2014) with robust
+log₂(normalised counts + 1), using limma-trend (Law et al., 2014) with robust
 empirical Bayes moderation (Phipson et al., 2016). The design included tumour
-group and library layout and, in the pooled sample sets, sample category
-(sum-to-zero coding). Where patients contributed several samples, patient was
-treated as a blocking factor, with the within-patient correlation estimated
-using duplicateCorrelation (Smyth et al., 2005). Genes with log2 expression > 1
+group and library layout. Where patients contributed several samples, patient
+was treated as a blocking factor, with the within-patient correlation estimated
+using duplicateCorrelation (Smyth et al., 2005). Genes with log₂ expression > 1
 in at least as many samples as the smallest group were tested. Pairwise
 comparisons between groups with at least two samples each were extracted as
 contrasts, P values were adjusted using the Benjamini–Hochberg method, and genes
-with FDR < 0.05 and |log2 fold-change| ≥ 1 were considered differentially
-expressed. Control bone marrow was not tested.
+with FDR < 0.05 and |log₂ fold-change| ≥ 1 were considered differentially
+expressed.
+
 For each comparison, pre-ranked GSEA was performed with fgsea on genes ranked by
 the moderated t-statistic, using the Hallmark, GO-BP and KEGG gene sets and size
-limits described above. In addition, pathway activity was scored per sample with
-GSVA (v2.0.0, Gaussian kernel; Hänzelmann et al., 2013) and the scores were
-fitted with the same limma design. Differences across the three tumour groups
-were tested with a moderated F-test (Smyth, 2004), followed by pairwise
-contrasts with Benjamini–Hochberg correction within each pair.
-
----
+limits described above.
 
 References
 
@@ -175,18 +159,12 @@ Ewels P, Magnusson M, Lundin S, Käller M (2016) MultiQC: summarize analysis
 results for multiple tools and samples in a single report. Bioinformatics.
 32(19):3047–3048.
 
-Hänzelmann S, Castelo R, Guinney J (2013) GSVA: gene set variation analysis for
-microarray and RNA-Seq data. BMC Bioinformatics. 14:7.
-
 Jumper J, Evans R, Pritzel A, Green T, Figurnov M, Ronneberger O,
 Tunyasuvunakool K, Bates R, Žídek A, Potapenko A, et al. (2021) Highly accurate
 protein structure prediction with AlphaFold. Nature. 596(7873):583–589.
 
 Kanehisa M, Goto S (2000) KEGG: Kyoto Encyclopedia of Genes and Genomes. Nucleic
 Acids Research. 28(1):27–30.
-
-Kent WJ, Sugnet CW, Furey TS, Roskin KM, Pringle TH, Zahler AM, Haussler D
-(2002) The human genome browser at UCSC. Genome Research. 12(6):996–1006.
 
 Korotkevich G, Sukhov V, Budin N, Shpak B, Artyomov MN, Sergushichev A (2021)
 Fast gene set enrichment analysis. bioRxiv. 060012.
@@ -224,11 +202,6 @@ Mölder F, Jablonski KP, Letcher B, Hall MB, Tomkins-Tinch CH, Sochat V, Forster
 J, Lee S, Twardziok SO, Kanitz A, et al. (2021) Sustainable data analysis with
 Snakemake. F1000Research. 10:33.
 
-O'Leary NA, Wright MW, Brister JR, Ciufo S, Haddad D, McVeigh R, Rajput B,
-Robbertse B, Smith-White B, Ako-Adjei D, et al. (2016) Reference sequence
-(RefSeq) database at NCBI: current status, taxonomic expansion, and functional
-annotation. Nucleic Acids Research. 44(D1):D733–D745.
-
 Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C (2017) Salmon provides fast
 and bias-aware quantification of transcript expression. Nature Methods.
 14(4):417–419.
@@ -242,6 +215,11 @@ R Core Team (2024) R: A Language and Environment for Statistical Computing. R
 Foundation for Statistical Computing, Vienna, Austria.
 <https://www.R-project.org/>.
 
+Rifatbegovic F, Frech C, Abbasi MR, Taschner-Mandl S, Weiss T, Schmidt WM,
+Schmidt I, Ladenstein R, Ambros IM, Ambros PF (2018) Neuroblastoma cells undergo
+transcriptomic alterations upon dissemination into the bone marrow and
+subsequent tumor progression. International Journal of Cancer. 142(2):297–307.
+
 Ritchie ME, Phipson B, Wu D, Hu Y, Law CW, Shi W, Smyth GK (2015) limma powers
 differential expression analyses for RNA-sequencing and microarray studies.
 Nucleic Acids Research. 43(7):e47.
@@ -249,10 +227,6 @@ Nucleic Acids Research. 43(7):e47.
 Robinson MD, McCarthy DJ, Smyth GK (2010) edgeR: a Bioconductor package for
 differential expression analysis of digital gene expression data.
 Bioinformatics. 26(1):139–140.
-
-Smyth GK (2004) Linear models and empirical Bayes methods for assessing
-differential expression in microarray experiments. Statistical Applications in
-Genetics and Molecular Biology. 3(1):Article 3.
 
 Smyth GK, Michaud J, Scott HS (2005) Use of within-array replicate spots for
 assessing differential expression in microarray experiments. Bioinformatics.
@@ -266,6 +240,3 @@ expression profiles. Proceedings of the National Academy of Sciences of the USA.
 
 Tenenbaum D (2017) KEGGREST: Client-side REST access to the Kyoto Encyclopedia
 of Genes and Genomes (KEGG). R package, Bioconductor.
-
-Wickham H (2016) ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag,
-New York.
