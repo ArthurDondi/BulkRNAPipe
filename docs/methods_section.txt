@@ -15,8 +15,8 @@ ATRX constructs and of the EGFP and mCherry reporters. Read pairs overlapping
 exons were counted per gene with featureCounts (Subread v2.0.6; Liao et al.,
 2014), retaining uniquely mapped reads with mapping quality ≥ 10. The workflow
 was implemented in Snakemake (v8; Mölder et al., 2021), and all downstream
-analyses were performed in R (v4.4.2; R Core Team, 2024), with figures generated
-using ggplot2 (v3.5.1).
+analyses were performed in R (v4.4.2), with figures generated using ggplot2
+(v3.5.1).
 
 Quantification of ATRX expression
 
@@ -51,19 +51,19 @@ excluding ATRX, construct and reporter features.
 
 Gene set enrichment analysis (GSEA)
 
-Pre-ranked GSEA (Subramanian et al., 2005) was performed with fgsea (v1.32.0,
-fgseaMultilevel; Korotkevich et al., 2021) on genes ranked by the DESeq2 Wald
-statistic. Hallmark (Liberzon et al., 2015) and Gene Ontology Biological Process
-(GO-BP; Ashburner et al., 2000) gene sets were obtained from MSigDB (v7.5.1;
-Liberzon et al., 2011) using msigdbr (v7.5.1; Dolgalev, 2022). Current human
-KEGG pathways (Kanehisa & Goto, 2000) were retrieved using KEGGREST (v1.46.0;
-Tenenbaum, 2017) and mapped to gene symbols with org.Hs.eg.db (v3.20.0; Carlson,
-2017). Two custom gene sets (all HOX genes; HOXB genes) were added. Gene sets
-with 9–500 detected genes were tested and considered significantly enriched at
-FDR < 0.05. KEGG and GO-BP results were further grouped into five functional
-categories (replication and repair, chromosome, cell growth and death, nervous
-system, development and regeneration), defined by the KEGG pathway
-classification and, for GO-BP, by keyword matching of term names.
+Pre-ranked GSEA was performed with fgsea (v1.32.0, fgseaMultilevel; Korotkevich
+et al., 2021) on genes ranked by the DESeq2 Wald statistic. Hallmark (Liberzon
+et al., 2015) and Gene Ontology Biological Process (GO-BP; Ashburner et al.,
+2000) gene sets were obtained from MSigDB (v7.5.1; Liberzon et al., 2011) using
+msigdbr (v7.5.1; Dolgalev, 2022). Current human KEGG pathways (Kanehisa & Goto,
+2000) were retrieved using KEGGREST (v1.46.0; Tenenbaum, 2017) and mapped to
+gene symbols with org.Hs.eg.db (v3.20.0; Carlson, 2017). Two custom gene sets
+(all HOX genes; HOXB genes) were added. Gene sets with 9–500 detected genes were
+tested and considered significantly enriched at FDR < 0.05. KEGG and GO-BP
+results were further grouped into five functional categories (replication and
+repair, chromosome, cell growth and death, nervous system, development and
+regeneration), defined by the KEGG pathway classification and, for GO-BP, by
+keyword matching of term names.
 
 Genes and pathways shared by both ATRX constructs
 
@@ -120,8 +120,8 @@ with FDR < 0.05 and |log₂ fold-change| ≥ 1 were considered differentially
 expressed.
 
 For each comparison, pre-ranked GSEA was performed with fgsea on genes ranked by
-the moderated t-statistic, using the Hallmark, GO-BP and KEGG gene sets and size
-limits described above.
+the limma moderated t-statistic, using the Hallmark, GO-BP and KEGG gene sets
+and size limits described above.
 
 References
 
@@ -211,10 +211,6 @@ hyperparameter estimation protects against hypervariable genes and improves
 power to detect differential expression. The Annals of Applied Statistics.
 10(2):946–963.
 
-R Core Team (2024) R: A Language and Environment for Statistical Computing. R
-Foundation for Statistical Computing, Vienna, Austria.
-<https://www.R-project.org/>.
-
 Rifatbegovic F, Frech C, Abbasi MR, Taschner-Mandl S, Weiss T, Schmidt WM,
 Schmidt I, Ladenstein R, Ambros IM, Ambros PF (2018) Neuroblastoma cells undergo
 transcriptomic alterations upon dissemination into the bone marrow and
@@ -231,12 +227,6 @@ Bioinformatics. 26(1):139–140.
 Smyth GK, Michaud J, Scott HS (2005) Use of within-array replicate spots for
 assessing differential expression in microarray experiments. Bioinformatics.
 21(9):2067–2075.
-
-Subramanian A, Tamayo P, Mootha VK, Mukherjee S, Ebert BL, Gillette MA,
-Paulovich A, Pomeroy SL, Golub TR, Lander ES, Mesirov JP (2005) Gene set
-enrichment analysis: a knowledge-based approach for interpreting genome-wide
-expression profiles. Proceedings of the National Academy of Sciences of the USA.
-102(43):15545–15550.
 
 Tenenbaum D (2017) KEGGREST: Client-side REST access to the Kyoto Encyclopedia
 of Genes and Genomes (KEGG). R package, Bioconductor.
