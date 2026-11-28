@@ -36,13 +36,13 @@ expression results.
 Differential expression analysis
 Differential expression analysis was performed with DESeq2 (v1.46.0; Love et
 al., 2014) using a single model (~ condition) fitted to the 12 E6-derived
-samples, after removing genes with fewer than 10 reads across samples (<N> of
-<N> genes retained). Contrasts compared the empty vector control with E6, each
-ATRX construct with the empty vector control, and the two ATRX constructs with
-each other. Significance was assessed with Wald tests, P values were adjusted
-using the Benjamini–Hochberg method (Benjamini & Hochberg, 1995), and genes with
-an adjusted P value (FDR) < 0.05 and |log2 fold-change| ≥ 1 were considered
-differentially expressed.
+samples, after removing genes with fewer than 10 reads across samples (18,729 of
+28,278 genes retained; 66.2%). Contrasts compared the empty vector control with
+E6, each ATRX construct with the empty vector control, and the two ATRX
+constructs with each other. Significance was assessed with Wald tests, P values
+were adjusted using the Benjamini–Hochberg method (Benjamini & Hochberg, 1995),
+and genes with an adjusted P value (FDR) < 0.05 and |log2 fold-change| ≥ 1 were
+considered differentially expressed.
 
 Principal component analysis (PCA)
 Counts were variance-stabilised with DESeq2 (blind to the experimental design),
