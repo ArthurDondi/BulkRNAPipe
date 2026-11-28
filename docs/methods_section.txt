@@ -11,14 +11,15 @@ Adapter sequences and low-quality 3′ ends (Phred < 20) were trimmed with Trim
 Galore (v0.6.10; Krueger et al., 2023), a wrapper around Cutadapt (v4.9; Martin,
 2011), and read pairs in which either read was shorter than 20 nt were
 discarded. Reads were aligned with STAR (v2.7.11b; Dobin et al., 2013) in
-two-pass mode to the human genome (hg38) with the GENCODE v50 gene annotation
-(Mudge et al., 2025), supplemented with the sequences of the two ATRX constructs
-and of the EGFP and mCherry reporters. Read pairs overlapping exons were counted
-per gene with featureCounts (Subread v2.0.6; Liao et al., 2014), retaining
-uniquely mapped reads with mapping quality ≥ 10. The workflow was implemented in
-Snakemake (v8; Mölder et al., 2021), and all downstream analyses were performed
-in R (v4.4.2; R Core Team, 2024), with figures generated using ggplot2 (v3.5.1;
-Wickham, 2016).
+two-pass mode to the human reference genome hg38 from the UCSC Genome Browser
+(Kent et al., 2002), with the NCBI RefSeq gene annotation (O'Leary et al., 2016)
+from the UCSC refGene table (release of 10 January 2020), supplemented with the
+sequences of the two ATRX constructs and of the EGFP and mCherry reporters. Read
+pairs overlapping exons were counted per gene with featureCounts (Subread
+v2.0.6; Liao et al., 2014), retaining uniquely mapped reads with mapping quality
+≥ 10. The workflow was implemented in Snakemake (v8; Mölder et al., 2021), and
+all downstream analyses were performed in R (v4.4.2; R Core Team, 2024), with
+figures generated using ggplot2 (v3.5.1; Wickham, 2016).
 
 Quantification of ATRX expression
 Reads from the ATRX constructs map equally well to the endogenous ATRX locus and
@@ -184,6 +185,9 @@ protein structure prediction with AlphaFold. Nature. 596(7873):583–589.
 Kanehisa M, Goto S (2000) KEGG: Kyoto Encyclopedia of Genes and Genomes. Nucleic
 Acids Research. 28(1):27–30.
 
+Kent WJ, Sugnet CW, Furey TS, Roskin KM, Pringle TH, Zahler AM, Haussler D
+(2002) The human genome browser at UCSC. Genome Research. 12(6):996–1006.
+
 Korotkevich G, Sukhov V, Budin N, Shpak B, Artyomov MN, Sergushichev A (2021)
 Fast gene set enrichment analysis. bioRxiv. 060012.
 
@@ -220,9 +224,10 @@ Mölder F, Jablonski KP, Letcher B, Hall MB, Tomkins-Tinch CH, Sochat V, Forster
 J, Lee S, Twardziok SO, Kanitz A, et al. (2021) Sustainable data analysis with
 Snakemake. F1000Research. 10:33.
 
-Mudge JM, Carbonell-Sala S, Diekhans M, Martinez JG, Hunt T, Jungreis I,
-Loveland JE, Arnan C, Barnes I, Bennett R, et al. (2025) GENCODE 2025: reference
-gene annotation for human and mouse. Nucleic Acids Research. 53(D1):D966–D975.
+O'Leary NA, Wright MW, Brister JR, Ciufo S, Haddad D, McVeigh R, Rajput B,
+Robbertse B, Smith-White B, Ako-Adjei D, et al. (2016) Reference sequence
+(RefSeq) database at NCBI: current status, taxonomic expansion, and functional
+annotation. Nucleic Acids Research. 44(D1):D733–D745.
 
 Patro R, Duggal G, Love MI, Irizarry RA, Kingsford C (2017) Salmon provides fast
 and bias-aware quantification of transcript expression. Nature Methods.
